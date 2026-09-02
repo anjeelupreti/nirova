@@ -1278,6 +1278,8 @@ rather than redesigning around it.
 - [x] Licence expiry blocks ordering, re-checked at approval
 - [x] Supplier performance measured from receipts — lead time variance, fill
       rate, rejection rate, overdue orders
+- [x] Procurement screens: work queue, requisitions, orders,
+      deliveries, suppliers
 - [ ] RFQ issued to suppliers
 - [ ] Supplier contracts
 - [ ] Supplier invoice and payment posting

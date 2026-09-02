@@ -2417,3 +2417,48 @@ serializer is added.
 `apps/pharmacy/`, `apps/prescriptions/`, `apps/procurement/`,
 `apps/scheduling/`.
 
+---
+
+## 096 - The procurement screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Procurement.tsx`. The backend has been complete since log
+085 with no way in, which meant a whole module the customer had paid for was
+invisible.
+
+**The first tab is a work queue, not a list.** The chain is long — reorder,
+requisition, approval, quotations, comparison, order, approval, delivery,
+quality check, stock — and a screen that displayed all of it at once would
+make the buyer find their own next action. The queue answers one question:
+what is waiting on somebody. Sorted by who is being blocked, not by document
+type. When nothing is waiting it says so, rather than showing an empty table.
+
+**The comparison sorts on cost per unit and shows the total anyway.** Both
+columns are on screen because the buyer has a budget as well as a rate, but
+the sort is on the only figure that is comparable when free units differ. The
+cheapest row is tinted and labelled *cheapest per unit* — never just
+"cheapest", because on total spend it is not, and a buyer who notices the
+discrepancy should be able to see immediately which question is being
+answered.
+
+**Rules are stated before they are hit, not after.** That a rejection needs a
+reason, that an approver cannot be the requester, that a lapsed drug licence
+is re-checked at approval rather than only at drafting — each appears next to
+the control it constrains. A rule discovered by being refused is a rule the
+user experiences as a bug.
+
+**The seed now leaves work in the queue.** A seed that runs every chain to
+completion produces the one state a work queue must not be tested in: empty.
+`seed_procurement_demo` now leaves a requisition awaiting approval and a
+delivery awaiting inspection — both ordinary Monday-morning states.
+
+**A query bug the rewrite surfaced.** The step first looked for an
+un-received order with `.exclude(receipts__isnull=False)`. That joins across
+the reverse relation and drops orders with *any* receipt row, which is a
+different question from "has no receipt" once an order can be partially
+received. `filter(receipts__isnull=True)` asks the intended question.
+
+**Affects.** `frontend/src/pages/Procurement.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`,
+`apps/procurement/management/commands/seed_procurement_demo.py`.
+

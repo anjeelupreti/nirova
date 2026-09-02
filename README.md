@@ -381,7 +381,6 @@ Built:
 
 Next, in dependency order:
 
-- [ ] Procurement screens
 - [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement

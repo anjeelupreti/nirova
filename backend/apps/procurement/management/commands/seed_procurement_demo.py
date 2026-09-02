@@ -98,6 +98,9 @@ class Command(BaseCommand):
 
             self._ensure_module(organization)
             self._suppliers()
+            # Stashed so `_work_in_progress` can approve the order it raises
+            # without threading the approver through every call in between.
+            self._approver = approver
             requisition = self._requisition(organization, facility, location,
                                             buyer, approver)
             quotation = self._quotations(requisition, buyer)
@@ -105,6 +108,7 @@ class Command(BaseCommand):
             order = self._order(organization, facility, requisition, quotation,
                                 location, buyer, approver)
             self._receive(order, location, buyer, approver)
+            self._work_in_progress(organization, facility, location, buyer)
             self._performance(facility)
 
     # -- setup -----------------------------------------------------------
@@ -393,8 +397,97 @@ class Command(BaseCommand):
 
     # -- 6. performance --------------------------------------------------
 
+    def _work_in_progress(self, organization, facility, location, buyer):
+        """Leave real work sitting in the queue.
+
+        A seed that runs every chain to completion produces a screen with
+        nothing on it, which is the one state a work queue must not be tested
+        in. Two documents are deliberately left mid-flight: one waiting on an
+        approver, one waiting on an inspector. Both are ordinary states that a
+        buyer opening the screen on a Monday morning would actually see.
+        """
+        self.stdout.write(self.style.MIGRATE_HEADING("\n6. Left in the queue"))
+
+        product = Product.objects.filter(is_active=True).first()
+        if product is None:
+            return
+
+        pending = create_requisition(
+            organization=organization,
+            facility=facility,
+            items=[{
+                "product": product,
+                "quantity": Decimal("300"),
+                "estimated_unit_price": Decimal("8.80"),
+                "notes": "Winter demand; last two months ran short.",
+            }],
+            actor=buyer,
+            location=location,
+            is_urgent=True,
+            required_by=timezone.localdate() + timedelta(days=14),
+            justification=(
+                "Consumption has run ahead of the reorder level for two "
+                "consecutive months and the current cover is under three weeks."
+            ),
+        )
+        submit_requisition(pending, actor=buyer)
+        pending.refresh_from_db()
+        self.stdout.write(
+            f"   {pending.reference} is {pending.status} — waiting on an "
+            "approver, and the approver cannot be the requester")
+
+        # A second delivery, received but not yet inspected. Stock is on the
+        # premises and deliberately not on the shelf: nothing may be dispensed
+        # until somebody has looked at it.
+        # A second delivery, received but not yet inspected. Stock is on the
+        # premises and deliberately not on the shelf: nothing may be dispensed
+        # until somebody has looked at it. Raised directly rather than reusing
+        # an existing order, because every order in the demo has already been
+        # received — and an order that is already partially received is not
+        # the state a first inspection happens in.
+        supplier = Supplier.objects.filter(status=SupplierStatus.ACTIVE).first()
+        order = create_order(
+            organization=organization,
+            facility=facility,
+            supplier=supplier,
+            lines=[{
+                "product": product,
+                "quantity": Decimal("400"),
+                "unit_price": Decimal("1.15"),
+                "free_quantity": Decimal("0"),
+            }],
+            actor=buyer,
+            deliver_to=location,
+            expected_delivery=timezone.localdate() + timedelta(days=4),
+            notes="Top-up order, seeded to leave a delivery for inspection.",
+        )
+        approve_order(order, actor=self._approver)
+        order.refresh_from_db()
+
+        order_line = order.lines.first()
+        receipt = create_receipt(
+            order, location,
+            lines=[{
+                "product": order_line.product,
+                "batch_number": "PCM-2026-E",
+                "expires_on": timezone.localdate() + timedelta(days=420),
+                "received_quantity": order_line.quantity,
+                "free_quantity": order_line.free_quantity,
+                "unit_cost": order_line.unit_price,
+                "selling_price": Decimal("2.20"),
+                "mrp": Decimal("2.50"),
+                "order_line": order_line,
+            }],
+            actor=buyer,
+            delivery_note_number="DN-90117",
+        )
+        self.stdout.write(
+            f"   {receipt.reference} is {receipt.status} — on the premises, "
+            "not on the shelf, until somebody inspects it")
+
+
     def _performance(self, facility):
-        self.stdout.write(self.style.MIGRATE_HEADING("\n6. Position"))
+        self.stdout.write(self.style.MIGRATE_HEADING("\n7. Position"))
         for supplier in Supplier.objects.all():
             stats = supplier_performance(supplier)
             if not stats["orders"]:

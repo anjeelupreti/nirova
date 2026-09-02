@@ -1002,3 +1002,266 @@ export interface SalesSummary {
   margin_percent: string;
   top_products: { product_name: string; quantity: string; total: string }[];
 }
+
+// ---------------------------------------------------------------------------
+// Procurement
+// ---------------------------------------------------------------------------
+
+export interface Supplier {
+  uuid: string;
+  code: string;
+  name: string;
+  legal_name: string;
+  pan_number: string;
+  vat_number: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  address: string;
+  district: string;
+  agreed_lead_time_days: number;
+  credit_days: number;
+  credit_limit: string;
+  product_categories: string;
+  drug_licence_number: string;
+  drug_licence_expires_on: string | null;
+  licence_expired: boolean;
+  status: string;
+  status_reason: string;
+  can_order_from: boolean;
+  bank_name: string;
+  notes: string;
+}
+
+export interface SupplierPerformance {
+  supplier: string;
+  receipts: number;
+  agreed_lead_time_days: number;
+  measured_lead_time_days: number | null;
+  /** Positive means slower than promised. */
+  lead_time_variance: number | null;
+  expected_units: string;
+  received_units: string;
+  fill_rate_percent: number | null;
+  rejection_rate_percent: number | null;
+  orders_late: number;
+  currently_overdue: {
+    reference: string;
+    expected: string;
+    days_late: number;
+    value: string;
+  }[];
+}
+
+export interface RequisitionLine {
+  uuid: string;
+  product: string;
+  product_name: string;
+  quantity: string;
+  ordered_quantity: string;
+  outstanding_quantity: string;
+  is_fully_ordered: boolean;
+  estimated_unit_price: string;
+  /** Frozen when the requisition was raised, so an approver sees what the
+   *  requester saw rather than today's figure. */
+  stock_on_hand: string;
+  reorder_level: string;
+  notes: string;
+}
+
+export interface PurchaseRequisition {
+  uuid: string;
+  reference: string;
+  facility: string;
+  facility_name: string;
+  department: string | null;
+  location: string | null;
+  status: string;
+  is_open: boolean;
+  is_urgent: boolean;
+  required_by: string | null;
+  justification: string;
+  requested_by_name: string;
+  decided_by_name: string;
+  decided_at: string | null;
+  decision_notes: string;
+  created_at: string;
+  lines: RequisitionLine[];
+}
+
+export interface QuotationLine {
+  uuid: string;
+  product: string;
+  product_name: string;
+  quantity: string;
+  unit_price: string;
+  free_quantity: string;
+  discount_percent: string;
+  tax_percent: string;
+  effective_unit_cost: string;
+  total: string;
+}
+
+export interface Quotation {
+  uuid: string;
+  reference: string;
+  requisition: string;
+  supplier: string;
+  supplier_name: string;
+  status: string;
+  quoted_on: string;
+  valid_until: string | null;
+  is_expired: boolean;
+  quoted_lead_time_days: number | null;
+  payment_terms: string;
+  total_value: string;
+  notes: string;
+  lines: QuotationLine[];
+}
+
+/** Quotations ranked on blended cost per unit, never on total spend. */
+export interface QuotationComparison {
+  count: number;
+  quotations: {
+    uuid: string;
+    reference: string;
+    supplier: string;
+    supplier_uuid: string;
+    total_value: string;
+    total_units: string;
+    cost_per_unit: string;
+    quoted_lead_time_days: number | null;
+    agreed_lead_time_days: number;
+    is_expired: boolean;
+    can_order_from: boolean;
+    valid_until: string | null;
+    lines: {
+      product: string;
+      quantity: string;
+      free_quantity: string;
+      unit_price: string;
+      effective_unit_cost: string;
+      total: string;
+    }[];
+  }[];
+  cheapest: string | null;
+  cheapest_cost_per_unit: string | null;
+  cheapest_total: string | null;
+  ineligible: string[];
+}
+
+export interface PurchaseOrderLine {
+  uuid: string;
+  product: string;
+  product_code: string;
+  product_name: string;
+  quantity: string;
+  free_quantity: string;
+  received_quantity: string;
+  outstanding_quantity: string;
+  unit_price: string;
+  discount_percent: string;
+  tax_percent: string;
+  total: string;
+}
+
+export interface PurchaseOrder {
+  uuid: string;
+  reference: string;
+  facility: string;
+  facility_name: string;
+  supplier: string;
+  supplier_name: string;
+  requisition: string | null;
+  requisition_reference: string;
+  quotation: string | null;
+  deliver_to: string | null;
+  status: string;
+  is_open: boolean;
+  is_overdue: boolean;
+  days_late: number;
+  ordered_on: string | null;
+  expected_delivery: string | null;
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  total: string;
+  currency: string;
+  created_by_name: string;
+  approved_by_name: string;
+  approved_at: string | null;
+  payment_terms: string;
+  delivery_terms: string;
+  notes: string;
+  lines: PurchaseOrderLine[];
+}
+
+export interface ReceiptLine {
+  uuid: string;
+  product: string;
+  product_name: string;
+  batch: string | null;
+  batch_number: string;
+  expires_on: string;
+  manufactured_on: string | null;
+  received_quantity: string;
+  free_quantity: string;
+  rejected_quantity: string;
+  accepted_quantity: string;
+  total_units: string;
+  unit_cost: string;
+  effective_unit_cost: string;
+  selling_price: string;
+  mrp: string;
+  rejection_reason: string;
+  total: string;
+}
+
+export interface GoodsReceipt {
+  uuid: string;
+  reference: string;
+  order: string;
+  order_reference: string;
+  supplier: string;
+  supplier_name: string;
+  facility: string;
+  location: string;
+  location_code: string;
+  status: string;
+  is_posted: boolean;
+  received_on: string;
+  received_by_name: string;
+  delivery_note_number: string;
+  supplier_invoice_number: string;
+  supplier_invoice_date: string | null;
+  supplier_invoice_amount: string | null;
+  /** Null when no supplier invoice has been recorded to match against. */
+  invoice_matches: boolean | null;
+  quality_checked_at: string | null;
+  quality_notes: string;
+  posted_at: string | null;
+  total_value: string;
+  notes: string;
+  lines: ReceiptLine[];
+}
+
+export interface ProcurementDashboard {
+  facility: string;
+  requisitions_awaiting_approval: number;
+  requisitions_approved_unordered: number;
+  orders_awaiting_approval: number;
+  orders_open: number;
+  orders_overdue: number;
+  open_order_value: string;
+  receipts_awaiting_check: number;
+  receipts_awaiting_posting: number;
+  suppliers_blocked: number;
+  licences_expiring: number;
+  overdue_orders: {
+    reference: string;
+    supplier: string;
+    expected: string;
+    days_late: number;
+    value: string;
+  }[];
+}
