@@ -486,3 +486,116 @@ export interface SafetyReport {
   has_critical: boolean;
   is_blocking: false;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Billing                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export interface ServiceItem {
+  uuid: string;
+  code: string;
+  name: string;
+  category: string;
+  default_price: string;
+  tax_treatment: string;
+  effective_tax_rate: string;
+  max_discount_percent: string;
+  is_active: boolean;
+}
+
+export interface Charge {
+  uuid: string;
+  patient_mrn: string;
+  service_code: string;
+  service_name: string;
+  quantity: string;
+  unit_price: string;
+  discount_amount: string;
+  tax_amount: string;
+  total: string;
+  /** Which price list produced the price. Shown when a patient disputes it. */
+  price_source: string;
+  status: string;
+  is_billable: boolean;
+  charged_at: string;
+}
+
+export interface InvoiceLine {
+  uuid: string;
+  service_code: string;
+  description: string;
+  quantity: string;
+  unit_price: string;
+  discount_amount: string;
+  tax_amount: string;
+  total: string;
+}
+
+export interface Payment {
+  uuid: string;
+  receipt_number: string | null;
+  amount: string;
+  method: string;
+  method_display: string;
+  status: string;
+  reference: string;
+  received_at: string;
+  received_by_name: string;
+  is_refund: boolean;
+}
+
+export interface Invoice {
+  uuid: string;
+  number: string | null;
+  fiscal_year: string;
+  patient_mrn: string;
+  bill_to_name: string;
+  status: string;
+  issued_at: string | null;
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  rounding_adjustment: string;
+  total: string;
+  amount_paid: string;
+  balance_due: string;
+  is_settled: boolean;
+  is_credit_note: boolean;
+  credit_reason: string;
+  lines: InvoiceLine[];
+  payments: Payment[];
+}
+
+export interface PatientAccount {
+  patient_uuid: string;
+  patient_mrn: string;
+  total_billed: string;
+  total_paid: string;
+  outstanding: string;
+  /** Money owed *to* the patient, reported separately from what they owe. */
+  credit_balance: string;
+  uninvoiced_charges: string;
+  uninvoiced_count: number;
+  invoices: {
+    number: string | null;
+    issued_at: string | null;
+    total: string;
+    paid: string;
+    balance: string;
+    status: string;
+    is_credit_note: boolean;
+  }[];
+}
+
+export interface DailyCollection {
+  date: string;
+  facility: string;
+  gross_collected: string;
+  refunded: string;
+  net_collected: string;
+  by_method: Record<string, { label: string; total: string }>;
+  invoices_issued: number;
+  credit_notes_issued: number;
+  invoiced_total: string;
+  payment_count: number;
+}

@@ -12,7 +12,7 @@ This is the map of what exists, what is next, and what has not been started.
 | ⬜ | Not started |
 | 🔷 | Architecturally provided for — the seam exists, the module does not |
 
-**Progress:** 19 of 132 sections complete, 11 partial.
+**Progress:** 21 of 132 sections complete, 13 partial.
 The completed set is deliberately the platform core: every remaining module
 depends on tenancy, identity, RBAC and entitlements, and building a vertical
 first would mean rewriting it.
@@ -57,7 +57,7 @@ the patient and encounter models, so these come before any vertical.*
 
 | § | Section | Status | Notes |
 |---|---|---|---|
-| 18 | Clinic OS | 🟡 | Registration, patients, appointments, queue, EMR and prescribing done. Billing, lab/radiology orders and referrals outstanding |
+| 18 | Clinic OS | 🟡 | Registration, patients, appointments, queue, EMR, prescribing and billing done. Lab/radiology orders and referrals outstanding |
 | 19 | Patient management | ✅ | Demographics, identifiers, allergies, conditions, duplicate detection, merge. All patient types supported including walk-in with no documents |
 | 20 | Appointment management | ✅ | Provider schedules, slots, overbooking capacity, walk-in reserve, exceptions, cancellation, no-show, follow-up chains |
 | 21 | Queue management | ✅ | Tokens per facility-day, triage priority, call / recall / skip, the four timestamps that make waiting time measurable |
@@ -98,15 +98,15 @@ customers, and the module a hospital needs first.*
 
 ## Phase 3 — Finance and revenue cycle  ⬜
 
-| § | Section | Status |
-|---|---|---|
-| 53 | Procurement management | ⬜ |
-| 54 | Contract management | ⬜ |
-| 55 | Finance / accounting | ⬜ |
-| 56 | Revenue cycle management | ⬜ |
-| 57 | Insurance / TPA | ⬜ |
-| 58 | Hospital billing | ⬜ |
-| 70 | Expense / claim management | ⬜ |
+| § | Section | Status | Notes |
+|---|---|---|---|
+| 53 | Procurement management | ⬜ | |
+| 54 | Contract management | ⬜ | |
+| 55 | Finance / accounting | 🟡 | Charges, invoices, payments, credit notes, gapless statutory numbering, Nepali fiscal year. Chart of accounts, ledger and AR/AP ageing outstanding |
+| 56 | Revenue cycle management | ✅ | Service → charge → invoice → payment → settlement, with credit notes, refunds under segregation of duties, and layered price resolution by payer category |
+| 57 | Insurance / TPA | 🟡 | Insurance as a payer category with its own price list. Policies, pre-authorisation and claims outstanding |
+| 58 | Hospital billing | 🟡 | Outpatient billing complete. Bed, theatre and package billing await the inpatient modules |
+| 70 | Expense / claim management | ⬜ | |
 
 ---
 
@@ -266,6 +266,10 @@ enforced in the core; breaking one in a new module breaks the platform.
       the survivor — so an unresolved read reports a dangerous *clean*
       (development log 054).
 - [ ] Every error uses the standard envelope, with a stable `code`.
+- [ ] Money is `Decimal` everywhere — never `float` — and rounds half-up.
+- [ ] Where a reversal is recorded both as a status change *and* as a
+      compensating row, exactly one of the two feeds any total (development
+      log 064).
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 
 ---

@@ -14,6 +14,7 @@ import {
   GaugeCircle,
   LogOut,
   ListOrdered,
+  Receipt,
   ScrollText,
   Users,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import CapacityPage from "@/pages/Capacity";
 import FacilitiesPage from "@/pages/Facilities";
 import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
+import BillingPage from "@/pages/Billing";
 import ConsultationPage from "@/pages/Consultation";
 import PatientsPage from "@/pages/Patients";
 import QueuePage from "@/pages/Queue";
@@ -39,6 +41,7 @@ import {
 const NAV = [
   { to: "/patients", label: "Patients", icon: Users },
   { to: "/queue", label: "Queue", icon: ListOrdered },
+  { to: "/billing", label: "Billing", icon: Receipt },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
   { to: "/facility-requests", label: "Change requests", icon: ScrollText },
@@ -173,6 +176,7 @@ export default function App() {
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
+          <Route path="/billing" element={<BillingPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

@@ -1386,3 +1386,205 @@ reached from the queue.
 **Affects.** `frontend/src/pages/Consultation.tsx`,
 `frontend/src/pages/Queue.tsx`, `frontend/src/types/index.ts`,
 `apps/scheduling/serializers.py`.
+
+---
+
+## 058 — Billing: charges and invoices are separate things
+2026-09-02 · Billing · feature
+
+**What.** `apps.billing`: `ServiceItem`, `PriceList`, `PriceListItem`,
+`Charge`, `Invoice`, `InvoiceLine`, `Payment`, `NumberSequence`.
+
+**Why the split.** A charge records that something billable happened; an
+invoice collects charges and asks for money. For an outpatient the two happen
+minutes apart, so the distinction looks like overhead — until an inpatient
+accumulates three weeks of charges before anyone bills them. Building the
+invoice as the *only* record of a charge would make that impossible, and
+retrofitting the split later would mean rewriting everything that touches
+money.
+
+**Prices are captured onto the charge.** The price list may change tomorrow;
+what the patient was quoted today is what they are billed. The charge also
+stores the service's name and code as text, so an invoice raised last year
+still reads correctly after a service is renamed or retired.
+
+**Affects.** `apps/billing/`.
+
+---
+
+## 059 — Every amount is a Decimal
+2026-09-02 · Billing · decision
+
+**What.** `DecimalField` throughout, `Decimal` arithmetic in the service
+layer, and a `money()` helper that quantises to paisa with `ROUND_HALF_UP`.
+
+**Why.** `0.1 + 0.2` is not `0.3` in binary floating point. A drift of one
+paisa per line is invisible on one invoice and a reconciliation failure at the
+end of a month.
+
+**Why half-up rather than Python's default.** Banker's rounding is
+statistically fairer but indefensible at a counter: a patient told that their
+total rounds in their favour half the time and against them the other half
+will not find the explanation satisfying, and neither will an auditor.
+
+**Affects.** `apps/billing/models.py`, `apps/billing/services.py`.
+
+---
+
+## 060 — Invoice numbers come from a sequence table
+2026-09-02 · Billing · decision
+
+**What.** `NumberSequence`, one row per facility per fiscal year per document
+type, incremented under `select_for_update`.
+
+**Why not `MAX(number) + 1`.** It is not concurrency-safe — two counters
+issuing at the same moment take the same number — and it is wrong the moment a
+row is deleted. Nepal requires sequential, gapless invoice numbering per
+fiscal year, and an audit that finds a missing number will ask why.
+
+**The number is allocated at issue, not at creation.** An abandoned draft
+would otherwise consume a number and leave exactly the gap the requirement
+exists to prevent.
+
+**Affects.** `apps/billing/models.py`, `apps/billing/services.py`.
+
+---
+
+## 061 — Issued invoices are reversed, never edited
+2026-09-02 · Billing · decision
+
+**What.** A credit note is a second `Invoice` row with `is_credit_note=True`
+and negative quantities, sharing the numbering sequence.
+
+**Why the same table.** A credit note is an invoice with negative intent. It
+needs a number from the same statutory sequence, and every report that lists
+invoices must list it. A separate model would mean duplicating the line
+structure, the numbering and every query.
+
+**Why negative quantities rather than negative prices.** The unit price is
+what was charged, and a report grouping by service should still show the right
+rate against a reversed quantity.
+
+**Affects.** `apps/billing/models.py`, `apps/billing/services.py`.
+
+---
+
+## 062 — Nepali fiscal year, and an approximation stated openly
+2026-09-02 · Billing · decision
+
+**What.** `apps/billing/fiscal.py` pins the fiscal year boundary at 16 July
+and derives the Bikram Sambat label by offset — producing "2083/84".
+
+**Why an approximation.** Shrawan 1 drifts between 16 and 17 July, because BS
+is lunisolar and its month lengths are published annually rather than
+computed. Bundling a conversion table is a real dependency with its own
+maintenance burden.
+
+**Why it is written down rather than hidden.** The error is at most one day
+per year, affecting only documents issued on that day — but this drives
+statutory invoice numbering. The module docstring says plainly that it must be
+replaced with a proper BS calendar before any statutory VAT filing, and names
+`fiscal_year_for()` as the single seam to swap. An approximation someone knows
+about is a manageable risk; one they discover during an audit is not.
+
+**Affects.** `apps/billing/fiscal.py`.
+
+---
+
+## 063 — Price resolution is layered, and reports its source
+2026-09-02 · Billing · feature
+
+**What.** `resolve_price()` walks category-and-facility → category →
+facility → the service's own default, breaking ties on `priority`, and returns
+the chosen source alongside the number.
+
+**Why.** The same consultation costs a general patient NPR 800 and a Nepal
+Telecom employee NPR 650. Modelled as separate price lists rather than a
+blanket discount, because negotiated rates differ per service — a scheme may
+get 20% off consultations and nothing off laboratory work.
+
+The source is returned for the same reason entitlements carry provenance:
+"why was I charged this?" is a question a clerk has to answer with a patient
+standing in front of them.
+
+**Affects.** `apps/billing/services.py`.
+
+---
+
+## 064 — Refunds were double-counted in every total
+2026-09-02 · Billing · fix · **important**
+
+**What.** Every query that sums payments now includes both `COMPLETED` and
+`REFUNDED` statuses, via a named `BANKED_STATUSES` constant.
+
+**Why.** Found by reading the seeded cash-up: **cash showed −500 when 1000 was
+genuinely in the drawer**, and a credited patient showed as having paid
+−1500 rather than nothing.
+
+A refund is recorded two ways at once, and only one of them may be counted:
+
+* the original payment is marked `REFUNDED`, **and**
+* a second payment row is created carrying the negative amount.
+
+Summing only `COMPLETED` excluded the original while keeping its reversal, so
+the refund was subtracted a second time. On one invoice the error is obvious;
+across a day's takings it is a till that does not balance and nobody knows
+why.
+
+**How.** Include both. A refunded payment *did* happen — the money arrived and
+was banked — and its reversal is the separate negative row. Together they net
+to zero, which is the truth.
+
+The alternative (drop the negative row, rely on the status alone) was
+rejected: two rows is the honest record of two real movements of cash, and a
+till reconciliation needs to see both.
+
+**Also fixed alongside.** A credited invoice was flipping back to `issued`
+when the refund landed, making a settled document look like an open demand for
+money that no longer existed. `CREDITED` is now terminal.
+
+**Lesson.** When a reversal is recorded both as a status change *and* as a
+compensating row, exactly one of them may feed a total. Worth checking
+wherever this pattern recurs — stock adjustments and payroll corrections will
+both have it.
+
+**Affects.** `apps/billing/services.py`.
+
+---
+
+## 065 — Outstanding is floored at zero
+2026-09-02 · Billing · decision
+
+**What.** `patient_account()` reports `outstanding` as never negative, and
+reports money owed *to* a patient separately as `credit_balance`.
+
+**Why.** A negative amount owed is not something a patient or a clerk can act
+on, and "outstanding: −1500" reads as a bug even when the arithmetic is right.
+They are two different concepts and deserve two fields.
+
+**Affects.** `apps/billing/services.py`.
+
+---
+
+## 066 — Billing counter screen
+2026-09-02 · Frontend · feature
+
+**What.** `Billing.tsx` — patient search, charge capture, invoice, payment and
+account history on one screen.
+
+**Specific decisions.**
+
+- *One screen, running total always visible.* The first question every patient
+  asks is "how much?", and the clerk should never navigate to answer it.
+- *The payment amount pre-fills with the full balance.* Settling in full is
+  the common case, and retyping a number already on screen invites a typo.
+- *The reference field only appears for non-cash methods.* A cash payment has
+  no transaction id, and an empty box invites someone to put something in it.
+- *Wallets are named individually* — eSewa, Khalti, Fonepay — because
+  reconciliation is per provider; each settles separately and on its own
+  schedule.
+- *Amounts render with no decimals.* Nepali counters rarely deal in paisa, and
+  trailing `.00` on every line is noise.
+
+**Affects.** `frontend/src/pages/Billing.tsx`,
+`frontend/src/types/index.ts`, `frontend/src/App.tsx`.

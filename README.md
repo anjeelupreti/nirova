@@ -8,10 +8,11 @@ multi-branch group.
 > identity, RBAC, the subscription and entitlement engine and the facility
 > lifecycle — together with the clinical core: patients, appointments, the
 > OPD queue, encounters with vitals and SOAP notes, and prescribing with
-> allergy and interaction checking. Pharmacy, laboratory, finance, HR and the
-> hospital inpatient modules are not built yet.
+> allergy and interaction checking, and outpatient billing through to
+> payment. Pharmacy stock, laboratory, HR and the hospital inpatient modules
+> are not built yet.
 >
-> 19 of the specification's 132 sections are complete; see
+> 21 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -53,6 +54,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_demo             # a demo tenant, end to end
 .venv/Scripts/python.exe manage.py seed_clinical_demo    # patients, clinics, a queue
 .venv/Scripts/python.exe manage.py seed_consultation_demo # three consultations
+.venv/Scripts/python.exe manage.py seed_billing_demo     # prices, invoices, a refund
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -107,6 +109,7 @@ backend/
     scheduling/        provider schedules, appointments, OPD queue     [tenant]
     encounters/        episodes of care, vitals, SOAP notes, diagnoses [tenant]
     prescriptions/     prescribing, and the safety checks around it    [tenant]
+    billing/           services, prices, charges, invoices, payments    [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -212,6 +215,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/clinical/prescriptions/preview/` | Safety warnings without writing anything |
 | `POST /api/clinical/prescriptions/` | Prescribe — 409 if a warning needs a reason |
 | `GET /api/clinical/patients/{uuid}/medications/` | Everything the patient is currently taking |
+| `POST /api/billing/charges/` | Capture a charge, priced for the patient's category |
+| `POST /api/billing/invoices/` | Invoice the pending charges and issue it |
+| `POST /api/billing/invoices/{uuid}/pay/` | Take a payment |
+| `POST /api/billing/invoices/{uuid}/credit/` | Reverse with a credit note |
+| `GET /api/billing/collection/?facility=` | End-of-day cash-up by payment method |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -256,11 +264,12 @@ Built:
 - [x] Queue: triage priority, call / recall / skip, waiting-time measurement
 - [x] Encounters: vitals with abnormal flagging, SOAP notes, sign and amend
 - [x] Prescribing: versioned, allergy and interaction checked, overrides captured
+- [x] Billing: layered pricing, gapless statutory numbering, credit notes, refunds
 
 Next, in dependency order:
 
-- [ ] Charge capture and outpatient billing
 - [ ] Laboratory and radiology orders
+- [ ] Pharmacy product master, batches and FEFO
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement
 - [ ] Finance: chart of accounts, ledger, revenue cycle
