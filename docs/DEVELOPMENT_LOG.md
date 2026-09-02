@@ -2462,3 +2462,153 @@ received. `filter(receipts__isnull=True)` asks the intended question.
 `frontend/src/types/index.ts`,
 `apps/procurement/management/commands/seed_procurement_demo.py`.
 
+---
+
+## 097 - People: the employee record and the provider linkage
+2026-09-03 · People · feature
+
+**What.** `apps.hr`: `Position`, `Employee`, `Credential`,
+`EmploymentContract`, `EmploymentEvent`, `EmployeeDocument`, `Experience`,
+`Skill`, with services for hiring, moving, verifying, contracting and
+separating. Implements §59 and the structural half of §60, plus the login
+provisioning of §62.
+
+**An employee is not a user.** Most people a hospital employs never log in --
+cleaners, drivers, kitchen staff, ward attendants. A user account is an
+optional attachment to an employee record, not the same object. Collapsing
+them would mean either inventing dormant logins for people who will never use
+one, or leaving a third of the payroll off the system entirely.
+
+**Employment history is append-only.** A transfer does not overwrite the
+department; it writes an `EmploymentEvent` and moves the current pointer. The
+denormalised pointer is what a roster query needs; the event log is what
+"which ward was this nurse on when that incident happened?" needs. Neither
+can serve both, so both exist.
+
+The `from_*` / `to_*` fields on an event are strings, not foreign keys. A
+department that is later renamed or closed must not rewrite or break the
+history of who worked in it -- the same reason an invoice line stores the
+service name it was billed under.
+
+**A lapsed credential blocks clinical work.** Same shape as the supplier
+drug-licence rule in procurement. Verification is recorded separately from the
+claim: somebody typing "NMC 12345" into a form has *asserted* something,
+somebody checking the council register has *established* it, and the
+difference matters when a patient is harmed. Unverified counts as blocking --
+a registration nobody has checked is a registration that might not exist.
+
+**Nobody verifies their own paperwork.** `verify_credential` runs the
+maker-checker check against the credential holder. Self-verification is the
+entire mechanism by which a forged council registration survives in a
+hospital. A new `medical_director` role holds `credential.verify` and
+deliberately not `employee.manage`, so the person who records a claim is
+never the person who attests it.
+
+**Positions are separate from employees because headcount is planned against
+the job.** "We are two nurses short on the night shift" is a statement about
+positions; asking it of employee rows can only tell you how many nurses there
+are, never how many there should be. `vacancies` floors at zero, because an
+over-filled position is a real and legitimate state -- a handover overlap --
+and a negative vacancy is a nonsense number in front of a manager.
+
+**Salary is behind its own permission.** `employee.read` gets the directory;
+`salary.read` gets what somebody earns. Two different questions, and a great
+many people need the first and none of the second. Contract terms live on
+their own serializer and their own endpoint, never on the employee record.
+
+**Affects.** `apps/hr/`, `apps/rbac/`, `apps/prescriptions/services.py`,
+`apps/tenancy/management/commands/seed_demo.py`.
+
+---
+
+## 098 - The bare provider_uuid finally resolves to somebody
+2026-09-03 · Clinical · feature · **important**
+
+Scheduling, encounters and prescriptions have each carried a
+`provider_uuid` since they were written -- a raw identity-user id with nothing
+behind it. No name to print on a script, no council number, no department to
+report by, and no way to notice that a prescriber's registration had lapsed.
+
+`Employee.for_user()` closes it, and `create_prescription` now uses it:
+
+```
+Prescriber: Prakash Adhikari, registration expired
+  REFUSED: Nepal Medical Council registration expired on 2026-08-14.
+
+Prescriber: Sabina Rana, registration verified
+  written: RX-2026-000005
+  prescriber on the script: Sabina Rana / registration NMC-0001
+```
+
+**A refusal, not a warning.** Prescribing on a lapsed registration is an
+offence under the council's own rules, and a warning somebody can click past
+is not a control. This is the same reasoning as the FEFO override and the
+allergy check: the system refuses, and where an override is legitimate it is
+a named, reasoned, audited act rather than a dismissed dialog.
+
+**The council number is taken from the verified record**, not retyped. Nepali
+law requires the prescriber's registration on a dispensable script, and
+pulling it from the credential that somebody actually checked beats trusting
+a doctor to type it correctly on every prescription.
+
+**The import is inside the function.** `apps.hr` imports nothing from
+`apps.prescriptions`, and a module-level import in both directions would be a
+cycle. Worth stating because the temptation to hoist it will recur.
+
+**Affects.** `apps/prescriptions/services.py`, `apps/hr/services.py`.
+
+---
+
+## 099 - Provisioning a login writes to two databases
+2026-09-03 · People · design
+
+`provision_login` is the second place in the system where one operation has to
+land in both the control plane and a tenant -- the first was opening a
+facility. They cannot be one transaction, because they are different
+connections, so the order is chosen for what survives a failure halfway:
+
+1. **User and membership first**, in the control plane. If the tenant write
+   then fails, the result is a login with no employee record: the person can
+   sign in and see nothing. Inert, and obvious.
+2. **The employee link second.** The reverse order would leave an employee
+   record pointing at a user that does not exist, and every screen resolving a
+   provider would break on it.
+
+Seats are checked against the plan *before* either. A limit only enforced at
+billing time is not a limit.
+
+Both imports of control-plane modules sit inside the function rather than at
+module scope: `apps.hr` is a tenant app, and hoisting them would tie every
+caller of this module to the control plane when only one function crosses.
+
+**Affects.** `apps/hr/services.py`.
+
+---
+
+## 100 - The People screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/People.tsx`.
+
+**A lapsed registration is the headline, not a footnote.** It is a banner on
+the profile, a badge in the directory, and the first card on the overview --
+above headcount, above turnover. The person looking at this screen is usually
+the only one who will notice before an audit does, and a date in a table is
+not noticing.
+
+**History is shown as a timeline, because that is what it is.** A profile that
+displayed only the current posting would throw away the reason the data is
+modelled as events at all.
+
+**Pay is its own tab and its own permission.** A 403 there is an expected
+answer that hides the tab, not an error that breaks the page -- the same
+pattern as the counter's day-margin panel.
+
+**The hire form warns before it refuses.** Picking a position that needs a
+licence says so while the form is open; picking one that is already fully
+staffed says that too, and still allows it, because an over-headcount hire is
+a real decision somebody makes deliberately.
+
+**Affects.** `frontend/src/pages/People.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+

@@ -4,18 +4,23 @@ A multi-tenant healthcare SaaS platform for Nepal: clinics, hospitals,
 pharmacies, laboratories and diagnostic centres, from a single site up to a
 multi-branch group.
 
-> **Status: early.** The platform core is built and running — tenancy,
-> identity, RBAC, the subscription and entitlement engine and the facility
-> lifecycle — together with the clinical core: patients, appointments, the
-> OPD queue, encounters with vitals and SOAP notes, and prescribing with
-> allergy and interaction checking, and outpatient billing through to
-> payment, and laboratory and radiology ordering through to verified results.
-> pharmacy stock with batches, FEFO and expiry control, procurement from
-> requisition through to stock, and a retail counter with till sessions
-> and cash reconciliation. HR and the hospital inpatient modules are not
-> built yet.
+> **Status: early.** Running today:
 >
-> 33 of the specification's 132 sections are complete; see
+> - **Platform core** — tenancy, identity, RBAC, the subscription and
+>   entitlement engine, and the facility lifecycle.
+> - **Clinical** — patients, appointments, the OPD queue, encounters with
+>   vitals and SOAP notes, prescribing with allergy and interaction checking,
+>   and laboratory and radiology ordering through to verified results.
+> - **Money** — outpatient billing through to payment, and a retail counter
+>   with till sessions and blind cash reconciliation.
+> - **Supply** — pharmacy stock with batches, FEFO and expiry control, and
+>   procurement from requisition through to stock.
+> - **People** — positions, the employee record, append-only employment
+>   history, and credential verification that refuses a prescription written
+>   on a lapsed registration.
+>
+> Payroll, attendance and the hospital inpatient modules are not built yet.
+> 36 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -62,6 +67,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_pharmacy_demo    # stock, FEFO, a recall
 .venv/Scripts/python.exe manage.py seed_procurement_demo # order to goods receipt
 .venv/Scripts/python.exe manage.py seed_pos_demo         # a shift at the counter
+.venv/Scripts/python.exe manage.py seed_hr_demo          # a workforce, and its rules
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -121,6 +127,7 @@ backend/
     pharmacy/          products, batches, stock ledger, FEFO, expiry    [tenant]
     procurement/       suppliers, requisitions, orders, goods receipt   [tenant]
     pos/               till sessions, counter sales, returns, cash-up   [tenant]
+    hr/                positions, employees, credentials, contracts     [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -233,6 +240,24 @@ Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
 
+### A lapsed registration refuses the prescription
+
+The prescriber on a script was a bare uuid until the employee record existed.
+Now it resolves to a person, and their council registration is checked at the
+moment they prescribe rather than in an audit afterwards:
+
+```
+Prescriber: Prakash Adhikari, registration expired
+  REFUSED: Nepal Medical Council registration expired on 2026-08-14.
+
+Prescriber: Sabina Rana, registration verified
+  written: RX-2026-000005
+  prescriber on the script: Sabina Rana / registration NMC-0001
+```
+
+Nobody verifies their own registration. Self-verification is the whole
+mechanism by which a forged one survives in a hospital.
+
 ### The till is reconciled, not trusted
 
 A session opens with a counted float and closes with a counted drawer. The
@@ -325,6 +350,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/pos/sales/{ref}/return/` | Raise a return for approval |
 | `POST /api/pos/returns/{ref}/decide/` | Approve - refused for the requester |
 | `POST /api/pos/sessions/{ref}/close/` | Blind count; variance must be explained |
+| `GET /api/hr/employees/me/` | Your own record, without `employee.read` |
+| `POST /api/hr/employees/` | Hire — opens the employment history |
+| `POST /api/hr/employees/{code}/transfer/` | Move, keeping the old posting |
+| `GET /api/hr/employees/{code}/practice-status/` | Why somebody may not treat patients |
+| `POST /api/hr/credentials/{uuid}/verify/` | Attest — refused for the holder |
+| `GET /api/hr/dashboard/` | Headcount, vacancies, what is about to lapse |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -378,9 +409,14 @@ Built:
       comparison, orders, goods receipt with quality check, supplier performance
 - [x] Pharmacy POS: till sessions with blind cash-up, counter sales with split
       tender, FEFO at the counter, approved returns, margin net of returns
+- [x] People: positions with budgeted headcount, the employee record,
+      append-only employment history, credential verification that blocks
+      practice, contracts, and login provisioning
 
 Next, in dependency order:
 
+- [ ] Attendance, leave and roster
+- [ ] Payroll and the Nepal statutory engine
 - [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement

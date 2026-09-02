@@ -20,6 +20,7 @@ import {
   ScrollText,
   ShoppingCart,
   Truck,
+  UserCog,
   Users,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ import ConsultationPage from "@/pages/Consultation";
 import CounterPage from "@/pages/Counter";
 import DiagnosticsPage from "@/pages/Diagnostics";
 import PatientsPage from "@/pages/Patients";
+import PeoplePage from "@/pages/People";
 import PharmacyPage from "@/pages/Pharmacy";
 import ProcurementPage from "@/pages/Procurement";
 import QueuePage from "@/pages/Queue";
@@ -53,6 +55,7 @@ const NAV = [
   { to: "/pharmacy", label: "Pharmacy", icon: Package },
   { to: "/counter", label: "Counter", icon: ShoppingCart },
   { to: "/procurement", label: "Procurement", icon: Truck },
+  { to: "/people", label: "People", icon: UserCog },
   { to: "/billing", label: "Billing", icon: Receipt },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
@@ -193,6 +196,7 @@ export default function App() {
           <Route path="/pharmacy" element={<PharmacyPage />} />
           <Route path="/counter" element={<CounterPage />} />
           <Route path="/procurement" element={<ProcurementPage />} />
+          <Route path="/people" element={<PeoplePage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

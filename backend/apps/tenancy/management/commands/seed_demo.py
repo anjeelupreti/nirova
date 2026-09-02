@@ -230,6 +230,13 @@ class Command(BaseCommand):
             # could not raise the request for the first facility.
             assign_role(requester, "operations_manager", scope="organization",
                         reason="Demo seed")
+            # The same person also runs HR in a clinic this size. Two roles on
+            # one user is the normal case in a small organization, and the
+            # permission set is the union -- which is exactly why the
+            # segregation checks compare *actors* at the moment of the act
+            # rather than trusting that roles were kept apart.
+            assign_role(requester, "hr_manager", scope="organization",
+                        reason="Demo seed")
         self.stdout.write("  roles assigned")
 
     def _assign_counter_roles(self, organization, counter_staff):

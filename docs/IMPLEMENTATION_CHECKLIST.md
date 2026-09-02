@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 33 of 132 | 432 |
-| Outstanding | 99 | 670 |
+| Done | 36 of 132 | 494 |
+| Outstanding | 96 | 654 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -933,49 +933,92 @@ rather than redesigning around it.
 
 # Phase 5 — People `[ ]`
 
-## §59 HRMS `[ ]`
+## §59 HRMS `[~]`
 
 **Employee record**
-- [ ] Employee master and employee code
-- [ ] Photograph
-- [ ] Personal details and next of kin
-- [ ] Position and designation
-- [ ] Department and unit assignment
-- [ ] Grade and level
-- [ ] Facility posting
-- [ ] Reporting manager
-- [ ] Employment type: permanent, contract, locum, visiting
+- [x] Employee master and employee code
+- [x] Photograph (URL; upload pipeline outstanding)
+- [x] Personal details, address and next of kin
+- [x] Emergency contact flagged when missing
+- [x] Position and designation
+- [x] Department assignment
+- [x] Grade and level (on the position)
+- [x] Facility posting
+- [x] Reporting manager, distinct from the position hierarchy
+- [x] Employment type: permanent, probation, contract, locum, visiting,
+      intern, trainee, part-time, daily wage
+- [x] Citizenship, PAN, blood group, bank details
+- [x] Probation end date, confirmation, and an overdue-probation flag
+- [ ] Unit assignment below department
+- [ ] Photograph upload and storage
 
 **Credentials and history**
-- [ ] Contract records with expiry
-- [ ] Document management per employee
-- [ ] Professional licence and council registration
-- [ ] Qualifications and specialities
-- [ ] Prior experience
+- [x] Contract records with expiry, superseded rather than edited
+- [x] Allowances per contract, with a computed gross
+- [x] Document register per employee, with mandatory and expiry flags
+- [x] Professional licence and council registration
+- [x] Credential verification recorded separately from the claim
+- [x] Verification refused for the credential's own holder
+- [x] Unverified registration blocks practice, not only an expired one
+- [x] Qualifications and specialities
+- [x] Prior experience with verification state
+- [x] Skills at an assessed level, distinct from paper
+- [x] Expiring-credential report, including what has already lapsed
+- [x] Expiring-contract report
 - [ ] Training records
 - [ ] Performance history
+- [ ] Document file upload and storage
 
 **Lifecycle**
-- [ ] Transfer
-- [ ] Promotion and demotion
-- [ ] Separation and exit
+- [x] Hire, opening the employment history at the beginning
+- [x] Confirm after probation
+- [x] Transfer between facilities
+- [x] Department change
+- [x] Promotion and demotion
+- [x] Reporting-line change
+- [x] Event type derived from what changed, so a promotion cannot be
+      mislabelled as a transfer
+- [x] Suspend and reinstate
+- [x] Separation: resignation, termination, retirement
+- [x] Separation closes active contracts
+- [x] The record survives separation, because everything they did points at it
+- [ ] Notice-period tracking
+- [ ] Exit interview
 - [ ] Final settlement
+- [ ] Clearance checklist
 
 **Integration**
-- [ ] Employee → user account linkage
-- [ ] Employee → provider linkage for schedules, prescriptions and results
-      (today these hold a bare `provider_uuid` awaiting this) 🔷
+- [x] Employee → user account linkage, one employee per login
+- [x] Login provisioning: account, membership, seat check, role assignment
+- [x] Employee → provider linkage — `Employee.for_user()` resolves the bare
+      `provider_uuid` carried by scheduling, encounters and prescriptions
+- [x] Prescribing refused on a lapsed or unverified registration
+- [x] Council registration printed on the prescription from the verified record
+- [ ] Scheduling refused for a provider who may not practise
+- [ ] Result authorisation checked against the authoriser's registration
+- [ ] Revoking the login on separation (deliberately manual today)
+
+**Reporting**
+- [x] Headcount by employment type and department
+- [x] Vacancies from budgeted positions
+- [x] Turnover from the event log, by separation type
+- [x] Team-of, walking the reporting tree to any depth
+- [ ] Org chart visualisation
+- [ ] Headcount trend over time
 
 ## §60 Organization structure `[~]`
 
 - [x] Organization → facility → department → unit
-- [ ] Position definitions
-- [ ] Employee-to-position assignment
-- [ ] Headcount and vacancies
-- [ ] Position budget
-- [ ] Reporting hierarchy and org chart
-- [ ] Job descriptions
+- [x] Position definitions with code, title, grade and facility
+- [x] Employee-to-position assignment
+- [x] Headcount and vacancies, floored at zero for over-filled posts
+- [x] Position budget (budgeted headcount)
+- [x] Reporting hierarchy on the position, so it survives someone leaving
+- [x] Job descriptions
+- [x] Clinical / provider / requires-a-licence flags per position
+- [ ] Org chart visualisation
 - [ ] Approval authority per position
+- [ ] Position budget in money as well as headcount
 
 ## §61 Recruitment / ATS `[ ]`
 
@@ -992,14 +1035,17 @@ rather than redesigning around it.
 - [ ] Joining
 - [ ] Handoff to onboarding
 
-## §62 Employee onboarding `[ ]`
+## §62 Employee onboarding `[~]`
 
+- [x] Employee record creation
+- [x] Position and facility assignment
+- [x] Login provisioning with a seat check against the plan
+- [x] Role and permission assignment at hire
+- [x] Document register (metadata; upload outstanding)
+- [x] Credential verification
+- [x] Contract issue
 - [ ] Offer acceptance
-- [ ] Document collection
-- [ ] Verification
-- [ ] Employee record creation
-- [ ] Role and permission assignment
-- [ ] Position and facility assignment
+- [ ] Document upload and collection tracking
 - [ ] Shift assignment
 - [ ] Payroll enrolment
 - [ ] Asset assignment
@@ -1598,6 +1644,11 @@ breaking one in a new module breaks the platform.
       facility that issued it (log 088).
 - [ ] A figure reported as revenue or margin is net of returns, with
       write-offs charged to the day that caused them (log 091).
+- [x] A change to somebody's posting writes history, never overwrites it
+      (log 097).
+- [x] A credential that expires is checked at the moment it matters, not
+      in an audit — and unverified counts as blocking (log 097).
+- [x] Nobody verifies, approves or attests their own record (log 097).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

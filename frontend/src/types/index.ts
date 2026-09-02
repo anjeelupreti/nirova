@@ -1265,3 +1265,250 @@ export interface ProcurementDashboard {
     value: string;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+export interface Position {
+  uuid: string;
+  code: string;
+  title: string;
+  title_nepali: string;
+  facility: string | null;
+  facility_name: string;
+  department: string | null;
+  department_name: string;
+  grade: string;
+  reports_to: string | null;
+  budgeted_headcount: number;
+  filled: number;
+  vacancies: number;
+  job_description: string;
+  is_clinical: boolean;
+  /** Takes appointments. A ward nurse is clinical and is not a provider. */
+  is_provider: boolean;
+  requires_licence: boolean;
+  is_active: boolean;
+}
+
+export interface Credential {
+  uuid: string;
+  employee: string;
+  credential_type: string;
+  name: string;
+  issuing_body: string;
+  reference_number: string;
+  issued_on: string | null;
+  expires_on: string | null;
+  is_expired: boolean;
+  days_to_expiry: number | null;
+  /** True when this credential's state stops the person practising. */
+  blocks_practice: boolean;
+  verification_status: "unverified" | "verified" | "failed";
+  verified_by_name: string;
+  verified_at: string | null;
+  verification_notes: string;
+  document_url: string;
+  notes: string;
+}
+
+export interface Experience {
+  uuid: string;
+  employee: string;
+  organization_name: string;
+  job_title: string;
+  department: string;
+  started_on: string;
+  ended_on: string | null;
+  months: number;
+  years: string;
+  responsibilities: string;
+  reference_name: string;
+  reference_contact: string;
+  is_verified: boolean;
+  document_url: string;
+}
+
+export interface EmployeeSkill {
+  uuid: string;
+  employee: string;
+  name: string;
+  level: string;
+  assessed_on: string | null;
+  assessed_by_name: string;
+  notes: string;
+}
+
+export interface EmployeeDocument {
+  uuid: string;
+  employee: string;
+  document_type: string;
+  title: string;
+  file_url: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  expires_on: string | null;
+  is_expired: boolean;
+  is_mandatory: boolean;
+  notes: string;
+}
+
+export interface EmploymentEvent {
+  uuid: string;
+  employee: string;
+  event_type: string;
+  effective_on: string;
+  summary: string;
+  from_position: string;
+  to_position: string;
+  from_facility: string;
+  to_facility: string;
+  from_department: string;
+  to_department: string;
+  from_employment_type: string;
+  to_employment_type: string;
+  reason: string;
+  approved_by_name: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface EmploymentContract {
+  uuid: string;
+  employee: string;
+  reference: string;
+  employment_type: string;
+  starts_on: string;
+  ends_on: string | null;
+  is_expired: boolean;
+  days_to_expiry: number | null;
+  notice_period_days: number;
+  basic_salary: string;
+  rate_basis: string;
+  allowances: Record<string, string>;
+  gross_monthly: string;
+  working_hours_per_week: string;
+  status: string;
+  signed_on: string | null;
+  document_url: string;
+  notes: string;
+}
+
+export interface EmployeeSummary {
+  uuid: string;
+  employee_code: string;
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  position: string | null;
+  position_title: string;
+  facility: string;
+  facility_name: string;
+  department: string | null;
+  department_name: string;
+  employment_type: string;
+  status: string;
+  is_working: boolean;
+  is_provider: boolean;
+  joined_on: string;
+  phone: string;
+  work_email: string;
+  photo_url: string;
+}
+
+export interface Employee extends EmployeeSummary {
+  middle_name: string;
+  name_nepali: string;
+  date_of_birth: string | null;
+  gender: string;
+  citizenship_number: string;
+  pan_number: string;
+  blood_group: string;
+  personal_email: string;
+  address: string;
+  province: string;
+  district: string;
+  municipality: string;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  emergency_contact_relation: string;
+  reports_to: string | null;
+  manager_name: string;
+  on_probation: boolean;
+  /** Probation ended and nobody confirmed or terminated — legally ambiguous. */
+  probation_overdue: boolean;
+  probation_ends_on: string | null;
+  confirmed_on: string | null;
+  separated_on: string | null;
+  separation_reason: string;
+  years_of_service: string;
+  user_id: string | null;
+  bank_name: string;
+  bank_account_number: string;
+  bank_branch: string;
+  notes: string;
+  credentials: Credential[];
+  experience: Experience[];
+  skills: EmployeeSkill[];
+  documents: EmployeeDocument[];
+}
+
+export interface PracticeStatus {
+  employee: string;
+  may_practise: boolean;
+  is_provider: boolean;
+  blockers: { code: string; message: string; credential?: string }[];
+}
+
+export interface HrDashboard {
+  headcount: {
+    total: number;
+    by_employment_type: Record<string, number>;
+    by_department: { "department__name": string | null; count: number }[];
+    budgeted: number;
+    filled: number;
+    vacancies: number;
+    on_probation: number;
+    probation_overdue: number;
+    suspended: number;
+    vacant_positions: {
+      code: string;
+      title: string;
+      budgeted: number;
+      filled: number;
+      vacancies: number;
+    }[];
+  };
+  expiring_credentials: {
+    credential: string;
+    employee_code: string;
+    employee_name: string;
+    position: string;
+    type: string;
+    name: string;
+    reference_number: string;
+    expires_on: string;
+    days_to_expiry: number;
+    is_expired: boolean;
+    blocks_practice: boolean;
+    verification_status: string;
+  }[];
+  expiring_contracts: {
+    contract: string;
+    employee_code: string;
+    employee_name: string;
+    employment_type: string;
+    ends_on: string;
+    days_to_expiry: number;
+    is_expired: boolean;
+    gross_monthly: string;
+  }[];
+  separations: {
+    since: string;
+    total: number;
+    by_type: Record<string, number>;
+    turnover_percent_of_current_headcount: number;
+  };
+}
