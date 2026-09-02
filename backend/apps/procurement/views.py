@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.organization.models import Department, Facility
 from apps.pharmacy.models import Product, StockLocation
@@ -58,7 +59,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("purchase.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "district"]
+    filterset_fields = ["status", "district"]  # no FKs; plain fields are fine
     search_fields = ["code", "name", "legal_name", "pan_number"]
     ordering_fields = ["name", "code"]
 
@@ -87,7 +88,10 @@ class RequisitionViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseRequisitionSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("purchase.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "facility", "is_urgent"]
+    filterset_class = uuid_filterset(
+        PurchaseRequisition, relations=["facility"],
+        fields=["status", "is_urgent"],
+    )
     ordering_fields = ["created_at", "required_by"]
     http_method_names = ["get", "post", "head", "options"]
 
@@ -243,7 +247,9 @@ class PurchaseOrderViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseOrderSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("purchase.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "supplier", "facility"]
+    filterset_class = uuid_filterset(
+        PurchaseOrder, relations=["supplier", "facility"], fields=["status"]
+    )
     ordering_fields = ["ordered_on", "expected_delivery", "total"]
     http_method_names = ["get", "post", "head", "options"]
 
@@ -404,7 +410,9 @@ class GoodsReceiptViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GoodsReceiptSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("purchase.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "supplier", "facility"]
+    filterset_class = uuid_filterset(
+        GoodsReceipt, relations=["supplier", "facility"], fields=["status"]
+    )
 
     def get_queryset(self):
         queryset = GoodsReceipt.objects.select_related(

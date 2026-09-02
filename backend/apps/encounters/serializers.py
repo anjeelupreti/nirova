@@ -4,6 +4,11 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys are published as the related object's
+# uuid, never as the internal integer id. With a database per tenant,
+# id 42 is a different row in every tenant -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.encounters.models import (
     ClinicalNote,
     Diagnosis,
@@ -151,6 +156,7 @@ class NoteAmendmentSerializer(ClinicalNoteInputSerializer):
 
 
 class DiagnosisSerializer(serializers.ModelSerializer):
+    promoted_to_condition = UUIDRelatedField(read_only=True)
     class Meta:
         model = Diagnosis
         fields = (
@@ -175,6 +181,7 @@ class DiagnosisInputSerializer(serializers.Serializer):
 
 
 class EncounterListSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
@@ -193,6 +200,7 @@ class EncounterListSerializer(serializers.ModelSerializer):
 
 
 class EncounterDetailSerializer(EncounterListSerializer):
+    patient = UUIDRelatedField(read_only=True)
     vitals = VitalSignsSerializer(many=True, read_only=True)
     notes = ClinicalNoteSerializer(many=True, read_only=True)
     diagnoses = DiagnosisSerializer(many=True, read_only=True)

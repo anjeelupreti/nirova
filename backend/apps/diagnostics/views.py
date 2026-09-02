@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.diagnostics.models import (
     AlertStatus,
@@ -56,7 +57,9 @@ class TestDefinitionViewSet(viewsets.ModelViewSet):
     serializer_class = TestDefinitionSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
     lookup_field = "uuid"
-    filterset_fields = ["modality", "is_active", "is_panel", "department"]
+    filterset_class = uuid_filterset(
+        TestDefinition, relations=['department'], fields=['modality', 'is_active', 'is_panel']
+    )
     search_fields = ["code", "name", "short_name"]
     ordering_fields = ["modality", "name"]
 
@@ -81,7 +84,9 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
 
     permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "modality", "priority", "facility"]
+    filterset_class = uuid_filterset(
+        DiagnosticOrder, relations=['facility'], fields=['status', 'modality', 'priority']
+    )
     ordering_fields = ["ordered_at", "due_at"]
     http_method_names = ["get", "post", "head", "options"]
 

@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys are published as the related object's
+# uuid, never as the internal integer id. With a database per tenant,
+# id 42 is a different row in every tenant -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.diagnostics.models import (
     CriticalValueAlert,
     DiagnosticModality,
@@ -26,6 +31,8 @@ class ReferenceRangeSerializer(serializers.ModelSerializer):
 
 
 class TestDefinitionSerializer(serializers.ModelSerializer):
+    department = UUIDRelatedField(read_only=True)
+    parent = UUIDRelatedField(read_only=True)
     reference_ranges = ReferenceRangeSerializer(many=True, read_only=True)
     needs_specimen = serializers.BooleanField(read_only=True)
     component_codes = serializers.SerializerMethodField()
@@ -88,6 +95,7 @@ class CriticalValueAlertSerializer(serializers.ModelSerializer):
 
 
 class DiagnosticOrderListSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     is_open = serializers.BooleanField(read_only=True)
@@ -107,6 +115,7 @@ class DiagnosticOrderListSerializer(serializers.ModelSerializer):
 
 
 class DiagnosticOrderDetailSerializer(DiagnosticOrderListSerializer):
+    patient = UUIDRelatedField(read_only=True)
     results = serializers.SerializerMethodField()
     critical_alerts = CriticalValueAlertSerializer(many=True, read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)

@@ -2387,3 +2387,33 @@ session's own totals are shown instead.
 **Affects.** `frontend/src/pages/Counter.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+---
+
+## 095 - The uuid rule applied to every module
+2026-09-03 · API · refactor
+
+Log 090 fixed the primary-key leak where it was caught. A runtime audit --
+instantiating every `ModelSerializer` in the project and looking for a
+`PrimaryKeyRelatedField` -- found 26 more across billing, diagnostics,
+encounters, prescriptions, procurement and scheduling, plus twelve viewsets
+whose `filterset_fields` still matched foreign keys on the integer id.
+
+All now publish and filter on `uuid`. The audit re-runs clean.
+
+**The frontend had already assumed uuids.** Every foreign key in
+`frontend/src/types/index.ts` was typed `string` before any of this. The
+client was written against the API as it should have been; the backend was
+the inconsistent side, and the mismatch only surfaced on the endpoints a
+screen actually filtered by. Everywhere else it was waiting.
+
+**Why a runtime audit rather than grep.** DRF generates these fields from the
+model, so nothing in the source says `PrimaryKeyRelatedField` -- a serializer
+leaks a primary key by *omission*, by listing `"facility"` in `fields` and
+saying nothing more. Grep cannot see an absence. Instantiating the serializer
+and inspecting `.fields` can, and it is cheap enough to re-run whenever a
+serializer is added.
+
+**Affects.** `apps/billing/`, `apps/diagnostics/`, `apps/encounters/`,
+`apps/pharmacy/`, `apps/prescriptions/`, `apps/procurement/`,
+`apps/scheduling/`.
+

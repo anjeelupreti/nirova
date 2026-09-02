@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.encounters.models import ClinicalNote, Encounter, OPEN_ENCOUNTER_STATUSES
 from apps.encounters.serializers import (
@@ -51,7 +52,9 @@ class EncounterViewSet(viewsets.ModelViewSet):
 
     permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "encounter_type", "facility", "provider_uuid"]
+    filterset_class = uuid_filterset(
+        Encounter, relations=['facility'], fields=['status', 'encounter_type', 'provider_uuid']
+    )
     ordering_fields = ["started_at", "ended_at"]
     http_method_names = ["get", "post", "head", "options"]
 

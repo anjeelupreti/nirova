@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys go out as the related object's uuid, never as
+# the internal integer id — see apps/common/fields.py. A client that receives
+# a uuid from one endpoint cannot filter with it on another otherwise.
+from apps.common.fields import UUIDRelatedField
+
 from apps.procurement.models import (
     GoodsReceipt,
     PurchaseOrder,
@@ -33,6 +38,7 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class RequisitionLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
     outstanding_quantity = serializers.DecimalField(
         max_digits=12, decimal_places=3, read_only=True
     )
@@ -49,6 +55,9 @@ class RequisitionLineSerializer(serializers.ModelSerializer):
 
 
 class PurchaseRequisitionSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    department = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     lines = RequisitionLineSerializer(many=True, read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
     is_open = serializers.BooleanField(read_only=True)
@@ -101,6 +110,7 @@ class DecideRequisitionSerializer(serializers.Serializer):
 
 
 class QuotationLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
     effective_unit_cost = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True
     )
@@ -116,6 +126,8 @@ class QuotationLineSerializer(serializers.ModelSerializer):
 
 
 class QuotationSerializer(serializers.ModelSerializer):
+    requisition = UUIDRelatedField(read_only=True)
+    supplier = UUIDRelatedField(read_only=True)
     lines = QuotationLineSerializer(many=True, read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
     is_expired = serializers.BooleanField(read_only=True)
@@ -160,6 +172,7 @@ class RecordQuotationSerializer(serializers.Serializer):
 
 
 class PurchaseOrderLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
     outstanding_quantity = serializers.DecimalField(
         max_digits=12, decimal_places=3, read_only=True
     )
@@ -177,6 +190,11 @@ class PurchaseOrderLineSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    supplier = UUIDRelatedField(read_only=True)
+    requisition = UUIDRelatedField(read_only=True)
+    quotation = UUIDRelatedField(read_only=True)
+    deliver_to = UUIDRelatedField(read_only=True)
     lines = PurchaseOrderLineSerializer(many=True, read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
@@ -237,6 +255,8 @@ class CreateOrderSerializer(serializers.Serializer):
 
 
 class ReceiptLineSerializer(serializers.ModelSerializer):
+    batch = UUIDRelatedField(read_only=True)
+    product = UUIDRelatedField(read_only=True)
     total_units = serializers.DecimalField(
         max_digits=12, decimal_places=3, read_only=True
     )
@@ -258,6 +278,10 @@ class ReceiptLineSerializer(serializers.ModelSerializer):
 
 
 class GoodsReceiptSerializer(serializers.ModelSerializer):
+    order = UUIDRelatedField(read_only=True)
+    supplier = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     lines = ReceiptLineSerializer(many=True, read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
     order_reference = serializers.CharField(source="order.reference", read_only=True)

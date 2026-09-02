@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.encounters.models import Encounter
 from apps.organization.models import Facility
@@ -40,7 +41,9 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     serializer_class = PrescriptionSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "facility", "prescriber_id"]
+    filterset_class = uuid_filterset(
+        Prescription, relations=['facility'], fields=['status', 'prescriber_id']
+    )
     ordering_fields = ["prescribed_at"]
     http_method_names = ["get", "post", "head", "options"]
 

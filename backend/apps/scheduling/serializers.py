@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys are published as the related object's
+# uuid, never as the internal integer id. With a database per tenant,
+# id 42 is a different row in every tenant -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.scheduling.models import (
     Appointment,
     AppointmentSource,
@@ -11,6 +16,8 @@ from apps.scheduling.models import (
 
 
 class ProviderScheduleSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    department = UUIDRelatedField(read_only=True)
     department_name = serializers.CharField(
         source="department.name", read_only=True, default=None
     )
@@ -31,6 +38,9 @@ class ProviderScheduleSerializer(serializers.ModelSerializer):
 
 
 class AppointmentSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
+    department = UUIDRelatedField(read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     patient_phone = serializers.CharField(source="patient.phone", read_only=True)
@@ -82,6 +92,10 @@ class AppointmentCancelSerializer(serializers.Serializer):
 
 
 class QueueTokenSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
+    appointment = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
+    department = UUIDRelatedField(read_only=True)
     #: Exposed so the front desk can open a consultation straight from the
     #: queue without a second lookup.
     patient_uuid = serializers.UUIDField(source="patient.uuid", read_only=True)

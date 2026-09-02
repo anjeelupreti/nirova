@@ -1588,7 +1588,8 @@ breaking one in a new module breaks the platform.
 - [ ] A figure compared across options is normalised first — cost per
       unit, not total spend, when the quantities differ (log 086).
 - [x] Foreign keys are published as `uuid`, never as an integer primary
-      key - `id` 42 is a different row in every tenant (log 090).
+      key - `id` 42 is a different row in every tenant (log 090, 095).
+      Audited at runtime across every serializer; re-runs clean.
 - [x] `Decimal` is rendered as a string, never a float, including from
       hand-built dict responses (log 089).
 - [ ] A document number that must be unique tenant-wide carries the

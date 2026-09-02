@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.organization.models import Department, Facility
 from apps.patients.models import Patient
@@ -45,7 +46,9 @@ class ProviderScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ProviderScheduleSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("facility.read")]
     lookup_field = "uuid"
-    filterset_fields = ["facility", "department", "weekday", "is_active"]
+    filterset_class = uuid_filterset(
+        ProviderSchedule, relations=['facility', 'department'], fields=['weekday', 'is_active']
+    )
 
     def get_queryset(self):
         return ProviderSchedule.objects.select_related(
@@ -110,7 +113,9 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "facility", "department", "provider_uuid", "source"]
+    filterset_class = uuid_filterset(
+        Appointment, relations=['facility', 'department'], fields=['status', 'provider_uuid', 'source']
+    )
     ordering_fields = ["scheduled_for", "created_at"]
     http_method_names = ["get", "post", "head", "options"]
 

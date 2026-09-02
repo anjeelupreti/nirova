@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys are published as the related object's
+# uuid, never as the internal integer id. With a database per tenant,
+# id 42 is a different row in every tenant -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.billing.models import (
     Charge,
     Invoice,
@@ -15,6 +20,7 @@ from apps.billing.models import (
 
 
 class ServiceItemSerializer(serializers.ModelSerializer):
+    department = UUIDRelatedField(read_only=True)
     effective_tax_rate = serializers.DecimalField(
         max_digits=5, decimal_places=2, read_only=True
     )
@@ -35,6 +41,7 @@ class ServiceItemSerializer(serializers.ModelSerializer):
 
 
 class PriceListItemSerializer(serializers.ModelSerializer):
+    service = UUIDRelatedField(read_only=True)
     service_code = serializers.CharField(source="service.code", read_only=True)
     service_name = serializers.CharField(source="service.name", read_only=True)
 
@@ -48,6 +55,7 @@ class PriceListItemSerializer(serializers.ModelSerializer):
 
 
 class PriceListSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
     items = PriceListItemSerializer(many=True, read_only=True)
     facility_name = serializers.CharField(
         source="facility.name", read_only=True, default=None
@@ -64,6 +72,8 @@ class PriceListSerializer(serializers.ModelSerializer):
 
 
 class ChargeSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
+    service = UUIDRelatedField(read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     encounter_reference = serializers.CharField(
@@ -112,6 +122,7 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    invoice = UUIDRelatedField(read_only=True)
     is_refund = serializers.BooleanField(read_only=True)
     method_display = serializers.CharField(
         source="get_method_display", read_only=True
@@ -128,6 +139,8 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
     lines = InvoiceLineSerializer(many=True, read_only=True)
     payments = PaymentSerializer(many=True, read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)

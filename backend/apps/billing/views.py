@@ -39,6 +39,7 @@ from apps.billing.services import (
     refund_payment,
     resolve_price,
 )
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.encounters.models import Encounter
 from apps.organization.models import Facility
@@ -52,7 +53,9 @@ class ServiceItemViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceItemSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
     lookup_field = "uuid"
-    filterset_fields = ["category", "is_active", "department"]
+    filterset_class = uuid_filterset(
+        ServiceItem, relations=['department'], fields=['category', 'is_active']
+    )
     search_fields = ["code", "name", "name_nepali"]
     ordering_fields = ["category", "name", "default_price"]
 
@@ -96,7 +99,9 @@ class PriceListViewSet(viewsets.ModelViewSet):
     serializer_class = PriceListSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
     lookup_field = "uuid"
-    filterset_fields = ["patient_category", "facility", "is_active"]
+    filterset_class = uuid_filterset(
+        PriceList, relations=['facility'], fields=['patient_category', 'is_active']
+    )
 
     def get_queryset(self):
         return (
@@ -117,7 +122,9 @@ class ChargeViewSet(viewsets.ModelViewSet):
     serializer_class = ChargeSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "facility", "service"]
+    filterset_class = uuid_filterset(
+        Charge, relations=['facility', 'service'], fields=['status']
+    )
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
@@ -191,7 +198,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = InvoiceSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "facility", "fiscal_year", "is_credit_note"]
+    filterset_class = uuid_filterset(
+        Invoice, relations=['facility'], fields=['status', 'fiscal_year', 'is_credit_note']
+    )
     ordering_fields = ["issued_at", "total"]
     http_method_names = ["get", "post", "head", "options"]
 

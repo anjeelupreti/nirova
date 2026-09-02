@@ -280,7 +280,9 @@ class DispenseViewSet(viewsets.ModelViewSet):
     serializer_class = DispenseSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("stock.read")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "facility", "location"]
+    filterset_class = uuid_filterset(
+        Dispense, relations=['facility', 'location'], fields=['status']
+    )
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
@@ -484,7 +486,9 @@ class StockCountViewSet(viewsets.ModelViewSet):
     serializer_class = StockCountSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("stock.count")]
     lookup_field = "uuid"
-    filterset_fields = ["status", "location", "count_type"]
+    filterset_class = uuid_filterset(
+        StockCount, relations=['location'], fields=['status', 'count_type']
+    )
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):

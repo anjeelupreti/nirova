@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys are published as the related object's
+# uuid, never as the internal integer id. With a database per tenant,
+# id 42 is a different row in every tenant -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.prescriptions.models import (
     DoseRoute,
     Frequency,
@@ -93,6 +98,7 @@ class PrescriptionLineInputSerializer(serializers.Serializer):
 
 
 class PrescriptionSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
     lines = PrescriptionLineSerializer(many=True, read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
