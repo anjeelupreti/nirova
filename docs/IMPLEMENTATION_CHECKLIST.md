@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 36 of 132 | 494 |
-| Outstanding | 96 | 654 |
+| Done | 39 of 132 | 536 |
+| Outstanding | 93 | 636 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -1051,47 +1051,74 @@ rather than redesigning around it.
 - [ ] Asset assignment
 - [ ] Orientation checklist
 
-## §63 Shift and roster `[ ]`
+## §63 Shift and roster `[~]`
 
-- [ ] Shift definitions: fixed, rotating, split, flexible, overnight
-- [ ] On-call shifts
-- [ ] Emergency and holiday shifts
-- [ ] Department-specific shifts
-- [ ] Roster by employee, date, facility, department
-- [ ] Duty assignment
-- [ ] Rest-period rules
-- [ ] Working-hour limits
-- [ ] Overtime rules
-- [ ] Leave conflict detection
+- [x] Shift definitions: fixed, rotating, split, flexible, overnight, on-call
+- [x] Overnight shifts, with crossing midnight stated rather than inferred
+- [x] Paid hours per shift, net of the scheduled break
+- [x] Grace period and half-day threshold per shift
+- [x] Department- and facility-specific shifts
+- [x] On-call marking on a roster entry
+- [x] Roster by employee, date, facility, department
+- [x] Rest-period rule enforced between consecutive shifts
+- [x] Leave conflict detection at rostering time
+- [x] Double-booking prevented, in the service and by a database constraint
+- [x] Roster publication, distinct from drafting
+- [x] Weekly roster grid with Saturday shaded
 - [ ] Minimum staffing enforcement
-- [ ] Double-booking prevention
-- [ ] Roster publication and swap requests
+- [ ] Working-hour limits per week
+- [ ] Overtime rules beyond the shift duration
+- [ ] Swap requests
+- [ ] Rotating-pattern generation
 
-## §64 Attendance `[ ]`
+## §64 Attendance `[~]`
 
-- [ ] Biometric capture
-- [ ] Face recognition
-- [ ] RFID
-- [ ] Mobile check-in with GPS and geofence
-- [ ] Web check-in
-- [ ] Present, late, early-exit, absent and half-day statuses
-- [ ] Leave, holiday and weekend handling
-- [ ] On-duty and on-call marking
-- [ ] Overtime capture
-- [ ] Regularisation requests
-- [ ] Attendance reports
+- [x] Web check-in and check-out
+- [x] Source recorded per mark: biometric, face, RFID, mobile, web, manual
+- [x] Earliest arrival and latest departure win, so a re-scan does not reset
+      the day
+- [x] GPS coordinates and a geofence verdict stored for a mobile mark
+- [x] Present, late, early-exit, absent and half-day statuses
+- [x] Status derived from the facts, never asserted — approving leave after
+      the absence changes the day without anyone editing it
+- [x] Leave, holiday and weekly-off handling, with Saturday as the weekly off
+- [x] Lateness measured against the shift, after its grace period
+- [x] Overtime measured against paid shift hours, net of the break
+- [x] An unfinished day (in, never out) distinguished from a short day
+- [x] Regularisation requests, keeping the original times
+- [x] Regularisation refused for the person who asked
+- [x] Attendance summary by status and by person, lateness summed not averaged
+- [ ] Biometric, face and RFID device integration
+- [ ] Mobile app capture
+- [ ] Bulk import from a device
+- [ ] On-duty marking for work done off site
 
-## §65 Leave `[ ]`
+## §65 Leave `[~]`
 
-- [ ] Types: annual, sick, maternity, paternity, unpaid, emergency, study, special, custom
-- [ ] Accrual rules
-- [ ] Balance tracking
-- [ ] Carry forward
+- [x] Configurable types: annual, sick, maternity, paternity, bereavement,
+      unpaid, and any the organization adds
+- [x] Per-type rules: entitlement, notice, document threshold, maximum
+      consecutive days, minimum service, negative balance
+- [x] Balance from an append-only ledger, never a stored counter
+- [x] Ledger reasons enumerated so a balance can be explained, not just stated
+- [x] Annual entitlement granted idempotently — a job that runs twice does not
+      double everybody's holiday
+- [x] Application and approval workflow
+- [x] Approval refused for the applicant
+- [x] Overlapping requests refused
+- [x] Weekly offs and public holidays excluded from the deduction
+- [x] Optional holidays deliberately *not* excluded
+- [x] Working days frozen at application, so a later festival cannot change a
+      decided request
+- [x] Insufficient balance refused, or taken unpaid as an explicit choice
+- [x] Cancellation returns the days as a new entry, not a deletion
+- [x] Delegation recorded on the request
+- [x] Leave calendar across a facility
+- [ ] Monthly accrual (the field exists; the job does not)
+- [ ] Carry forward at year end
 - [ ] Encashment
-- [ ] Application and approval workflow
 - [ ] Blackout periods
-- [ ] Delegation during leave
-- [ ] Leave calendar
+- [ ] Half-day handling beyond a single flag
 
 ## §66 Payroll `[ ]`
 
@@ -1649,6 +1676,13 @@ breaking one in a new module breaks the platform.
 - [x] A credential that expires is checked at the moment it matters, not
       in an audit — and unverified counts as blocking (log 097).
 - [x] Nobody verifies, approves or attests their own record (log 097).
+- [x] A balance that people dispute is the sum of an append-only ledger,
+      never a stored counter (log 101).
+- [x] A status that depends on later decisions is derived, not stored as
+      gospel (log 101).
+- [ ] Two figures compared against each other measure the same thing —
+      clock time against paid hours manufactured a day's overtime for
+      every employee (log 102).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

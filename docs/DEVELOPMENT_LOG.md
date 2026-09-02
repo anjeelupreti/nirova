@@ -2612,3 +2612,127 @@ a real decision somebody makes deliberately.
 **Affects.** `frontend/src/pages/People.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+---
+
+## 101 - Attendance, leave and rostering
+2026-09-03 · People · feature
+
+**What.** `Shift`, `Holiday`, `RosterEntry`, `Attendance`,
+`AttendanceRegularisation`, `LeaveType`, `LeaveLedgerEntry`, `LeaveRequest`,
+in `apps/hr/attendance_models.py` with services in `apps/hr/attendance.py`.
+Implements §63, §64 and §65.
+
+**Saturday is the weekend.** Nepal's weekly holiday is Saturday. A system
+assuming Sunday would mark the entire workforce absent once a week and present
+on their day off -- not a cosmetic error but a payroll deduction for everybody,
+every week. `WEEKLY_HOLIDAY` is a constant so the one organization that works
+Saturdays can change it.
+
+**A day's status is derived, never asserted.** `Attendance` stores when
+somebody arrived and left; whether that is *present*, *late*, *half day* or
+*absent* is computed from the roster, the holiday calendar, the weekly off and
+any approved leave. Leave is routinely approved days after the absence, and a
+stored "absent" would then contradict an approved leave record -- with the
+wrong one being what payroll reads. The seed proves it: a day marked `absent`
+becomes `on_leave` the moment the request is approved, and nobody edited it.
+
+**A leave balance is the sum of a ledger, never a counter.** Same discipline as
+the stock ledger, for the same reason: a counter that drifts cannot be
+reconstructed, and leave is disputed with a payslip in hand. Cancelling
+approved leave writes a *returning* entry rather than deleting the deduction,
+because somebody will one day ask where that week went.
+
+**Overlapping leave is refused.** Two overlapping approvals are how a person
+ends up on annual leave and sick leave for the same Tuesday, and payroll then
+deducts twice.
+
+**Rostering refuses what a ward would notice.** A second shift on one day; a
+shift on a day of approved leave; and a turnaround shorter than the shift's
+minimum rest -- a night ending 06:00 followed by a morning starting 08:00 is
+two hours, and the seed reports it as such.
+
+**Optional holidays are not excluded from leave arithmetic.** A festival some
+staff take and others work is not a day the organization is closed, and
+excluding it would silently give a day back to everybody who booked leave
+across it.
+
+**`working_days` is frozen at application.** The holiday calendar can gain a
+festival after somebody applied, and a request whose length changed under them
+-- after approval, after payroll ran -- is worse than one slightly stale.
+
+**Corrections are visible as corrections.** The original times live on the
+regularisation request rather than being overwritten on the attendance row. A
+record that silently became "present" is indistinguishable from one that
+always was, and the pattern of corrections is exactly what an auditor looks
+at. The person who asked cannot approve it.
+
+**Affects.** `apps/hr/attendance_models.py`, `apps/hr/attendance.py`,
+`apps/hr/attendance_api.py`, `apps/hr/urls.py`.
+
+---
+
+## 102 - Everybody was accruing an hour of overtime a day
+2026-09-03 · People · fix · **important**
+
+The attendance seed reported 2.13 hours of overtime across four ordinary
+shifts, none of which had anybody staying late.
+
+`Shift.duration_hours` deducts the scheduled break -- 22:00 to 06:00 with an
+hour's break is seven paid hours. `Attendance.worked_hours` was raw clock time
+between check-in and check-out, and almost nobody clocks out for lunch, so it
+*included* the break. Overtime was the difference between the two, which meant
+every full day produced roughly one hour of phantom overtime for every
+employee.
+
+At a hospital's headcount that is a five-figure monthly overpayment, and it
+would have looked like a plausible number on a payroll report.
+
+`worked_hours` now deducts the shift's break. 08:02 to 16:10 reads 7.13 hours
+worked and 0.13 overtime against a seven-hour shift, which is right.
+
+**Where there is no roster, no break is deducted.** Raw clock time is the
+honest answer when nobody said when the day was meant to start, end or pause
+-- the same reasoning as not calling somebody late against a shift they were
+never given.
+
+**What surfaced it.** The seed printed hours and overtime side by side on four
+deliberately ordinary days. A test asserting the code's own output would have
+locked the bug in.
+
+**Affects.** `apps/hr/attendance.py`.
+
+---
+
+## 103 - The Time screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Time.tsx`.
+
+**The first tab is mine, not the team's.** This is the only screen almost
+every employee opens -- a ward attendant marking in, a nurse checking their
+shift, a doctor applying for leave -- and none of them need the facility's
+attendance report. That ordering is the design.
+
+**Marking attendance needs no permission.** `check-in` and `check-out` are
+behind `IsAuthenticated` and an employee record, nothing more. Requiring
+`attendance.read` to punch a clock would mean giving every ward attendant
+sight of the whole facility's attendance.
+
+**A check-in with no check-out is shown as unfinished, not as a short day.**
+They are different facts, payroll treats them differently, and the screen must
+not blur them into one number. The team summary counts them separately.
+
+**A balance links to the entries behind it.** Somebody disputing their balance
+is asking *why*, and a single figure cannot answer that.
+
+**"Take it unpaid if my balance is short" is an explicit checkbox.** Taking
+leave you have not accrued has a pay consequence, and it should be a decision
+rather than something the system quietly did.
+
+**Lateness is summed, not averaged**, and the by-person table says so: an
+average hides the one person forty minutes late every day behind twenty who
+are punctual.
+
+**Affects.** `frontend/src/pages/Time.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+

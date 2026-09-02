@@ -18,9 +18,12 @@ multi-branch group.
 > - **People** — positions, the employee record, append-only employment
 >   history, and credential verification that refuses a prescription written
 >   on a lapsed registration.
+> - **Time** — shifts and rosters with rest-period enforcement, attendance
+>   whose status is derived rather than asserted, and leave balances kept
+>   as a ledger.
 >
-> Payroll, attendance and the hospital inpatient modules are not built yet.
-> 36 of the specification's 132 sections are complete; see
+> Payroll and the hospital inpatient modules are not built yet.
+> 39 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -68,6 +71,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_procurement_demo # order to goods receipt
 .venv/Scripts/python.exe manage.py seed_pos_demo         # a shift at the counter
 .venv/Scripts/python.exe manage.py seed_hr_demo          # a workforce, and its rules
+.venv/Scripts/python.exe manage.py seed_attendance_demo  # a rostered week and leave
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -127,7 +131,8 @@ backend/
     pharmacy/          products, batches, stock ledger, FEFO, expiry    [tenant]
     procurement/       suppliers, requisitions, orders, goods receipt   [tenant]
     pos/               till sessions, counter sales, returns, cash-up   [tenant]
-    hr/                positions, employees, credentials, contracts     [tenant]
+    hr/                positions, employees, credentials, contracts,    [tenant]
+                       shifts, rosters, attendance and leave
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -239,6 +244,28 @@ Nepal Pharma Distributors   total 4300.00  units 500 (free   0)  per unit 8.60
 Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
+
+### Saturday is the weekend
+
+Nepal's weekly holiday is Saturday. A system that assumes Sunday marks the
+whole workforce absent once a week and present on their day off:
+
+```
+2026-09-04 to 2026-09-06 is 3 calendar days and 2.00 working days
+  — 2026-09-05 is a Saturday
+```
+
+### Attendance status is derived, not asserted
+
+Leave is routinely approved after the absence, so a stored "absent" would
+contradict an approved leave record — and payroll reads the wrong one:
+
+```
+Ram Bahadur is marked absent for today
+LV26090002 approved -> today is now on_leave
+```
+
+Nobody edited the attendance row.
 
 ### A lapsed registration refuses the prescription
 
@@ -356,6 +383,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `GET /api/hr/employees/{code}/practice-status/` | Why somebody may not treat patients |
 | `POST /api/hr/credentials/{uuid}/verify/` | Attest — refused for the holder |
 | `GET /api/hr/dashboard/` | Headcount, vacancies, what is about to lapse |
+| `POST /api/hr/attendance/check-in/` | Mark yourself in — no permission needed |
+| `GET /api/hr/leave-balance/` | Your balances, summed from the ledger |
+| `POST /api/hr/leave/` | Apply — overlaps and short balances refused |
+| `POST /api/hr/leave/{ref}/decide/` | Approve — never your own |
+| `GET /api/hr/leave-calendar/?facility=` | Who is away, for planning |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |

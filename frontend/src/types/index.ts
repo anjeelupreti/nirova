@@ -1512,3 +1512,219 @@ export interface HrDashboard {
     turnover_percent_of_current_headcount: number;
   };
 }
+
+// ---------------------------------------------------------------------------
+// Time: shifts, roster, attendance and leave
+// ---------------------------------------------------------------------------
+
+export interface Shift {
+  uuid: string;
+  code: string;
+  name: string;
+  shift_type: string;
+  facility: string | null;
+  department: string | null;
+  starts_at: string;
+  ends_at: string;
+  /** A night shift's end time is earlier than its start. Stated, not inferred. */
+  crosses_midnight: boolean;
+  duration_hours: string;
+  break_minutes: number;
+  grace_minutes: number;
+  half_day_hours: string;
+  minimum_rest_hours: string;
+  is_active: boolean;
+  colour: string;
+}
+
+export interface Holiday {
+  uuid: string;
+  name: string;
+  name_nepali: string;
+  date: string;
+  facility: string | null;
+  /** Staff may choose to work; absence is not counted either way. */
+  is_optional: boolean;
+  applies_to: string;
+  notes: string;
+}
+
+export interface RosterEntry {
+  uuid: string;
+  employee: string;
+  employee_code: string;
+  employee_name: string;
+  shift: string;
+  shift_code: string;
+  shift_name: string;
+  starts_at: string;
+  ends_at: string;
+  colour: string;
+  date: string;
+  facility: string;
+  department: string | null;
+  status: string;
+  published_at: string | null;
+  is_on_call: boolean;
+  notes: string;
+}
+
+export interface AttendanceRecord {
+  uuid: string;
+  employee: string;
+  employee_code: string;
+  employee_name: string;
+  date: string;
+  facility: string;
+  roster_entry: string | null;
+  checked_in_at: string | null;
+  checked_out_at: string | null;
+  /** False when somebody checked in and never checked out. */
+  is_complete: boolean;
+  source: string;
+  within_geofence: boolean | null;
+  status: string;
+  late_minutes: number;
+  early_exit_minutes: number;
+  worked_hours: string;
+  overtime_hours: string;
+  is_regularised: boolean;
+  notes: string;
+}
+
+export interface Regularisation {
+  uuid: string;
+  attendance: string;
+  employee_name: string;
+  date: string;
+  requested_by_name: string;
+  original_checked_in_at: string | null;
+  original_checked_out_at: string | null;
+  original_status: string;
+  requested_checked_in_at: string | null;
+  requested_checked_out_at: string | null;
+  reason: string;
+  status: string;
+  decided_by_name: string;
+  decided_at: string | null;
+  decision_notes: string;
+}
+
+export interface LeaveType {
+  uuid: string;
+  code: string;
+  name: string;
+  description: string;
+  annual_entitlement: string;
+  unit: string;
+  is_paid: boolean;
+  carry_forward: boolean;
+  max_carry_forward: string;
+  encashable: boolean;
+  requires_document: boolean;
+  document_required_after_days: string;
+  minimum_notice_days: number;
+  maximum_consecutive_days: string;
+  minimum_service_months: number;
+  allow_negative_balance: boolean;
+  is_active: boolean;
+  colour: string;
+}
+
+export interface LeaveRequest {
+  uuid: string;
+  reference: string;
+  employee: string;
+  employee_code: string;
+  employee_name: string;
+  leave_type: string;
+  leave_type_name: string;
+  starts_on: string;
+  ends_on: string;
+  is_half_day: boolean;
+  calendar_days: string;
+  /** Weekly offs and holidays excluded, frozen at application. */
+  working_days: string;
+  reason: string;
+  contact_during_leave: string;
+  delegate: string | null;
+  delegate_name: string;
+  document_url: string;
+  status: string;
+  is_open: boolean;
+  applied_at: string;
+  decided_by_name: string;
+  decided_at: string | null;
+  decision_notes: string;
+  cancellation_reason: string;
+  is_unpaid: boolean;
+  leave_year: string;
+}
+
+export interface LeaveBalance {
+  leave_type: string;
+  leave_type_name: string;
+  year: string;
+  balance: string;
+  pending: string;
+  available: string;
+  by_reason: Record<string, string>;
+  entitlement: string;
+}
+
+export interface LeaveBalances {
+  employee: string;
+  employee_name: string;
+  balances: LeaveBalance[];
+}
+
+export interface LeaveLedgerEntry {
+  uuid: string;
+  employee: string;
+  leave_type: string;
+  leave_type_name: string;
+  leave_year: string;
+  days: string;
+  reason: string;
+  effective_on: string;
+  reference_type: string;
+  reference_id: string;
+  recorded_by_name: string;
+  notes: string;
+}
+
+export interface LeaveCalendarRow {
+  reference: string;
+  employee_code: string;
+  employee_name: string;
+  department: string;
+  leave_type: string;
+  colour: string;
+  starts_on: string;
+  ends_on: string;
+  working_days: string;
+  status: string;
+  is_unpaid: boolean;
+  delegate: string;
+}
+
+export interface AttendanceSummary {
+  from: string;
+  to: string;
+  records: number;
+  by_status: Record<string, number>;
+  total_hours: string;
+  overtime_hours: string;
+  total_late_minutes: number;
+  /** Check-in with no check-out — not the same as a short day. */
+  unclosed_days: number;
+  by_employee: {
+    employee__employee_code: string;
+    employee__first_name: string;
+    employee__last_name: string;
+    days: number;
+    late_minutes: number;
+    absent: number;
+    overtime: string;
+  }[];
+}
