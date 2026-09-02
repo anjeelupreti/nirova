@@ -6,11 +6,12 @@ multi-branch group.
 
 > **Status: early.** The platform core is built and running — tenancy,
 > identity, RBAC, the subscription and entitlement engine and the facility
-> lifecycle — together with the clinical foundation: patients, appointments
-> and the OPD queue. Pharmacy, laboratory, finance, HR and the hospital
-> inpatient modules are not built yet.
+> lifecycle — together with the clinical core: patients, appointments, the
+> OPD queue, encounters with vitals and SOAP notes, and prescribing with
+> allergy and interaction checking. Pharmacy, laboratory, finance, HR and the
+> hospital inpatient modules are not built yet.
 >
-> 17 of the specification's 132 sections are complete; see
+> 19 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -51,6 +52,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_catalog          # plans, modules, add-ons
 .venv/Scripts/python.exe manage.py seed_demo             # a demo tenant, end to end
 .venv/Scripts/python.exe manage.py seed_clinical_demo    # patients, clinics, a queue
+.venv/Scripts/python.exe manage.py seed_consultation_demo # three consultations
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -103,6 +105,8 @@ backend/
     audit/             audit log and entity version history            [tenant]
     patients/          patient master, identifiers, allergies, merge   [tenant]
     scheduling/        provider schedules, appointments, OPD queue     [tenant]
+    encounters/        episodes of care, vitals, SOAP notes, diagnoses [tenant]
+    prescriptions/     prescribing, and the safety checks around it    [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -157,6 +161,21 @@ what the customer already pays for is theirs to make; one that changes the
 commercial relationship goes to the platform, which can approve it *together
 with* the capacity that makes it fit.
 
+### Prescribing safety warns, it never blocks
+
+Allergies are checked with cross-sensitivity families, so a recorded
+*penicillin* allergy flags *amoxicillin*. High and critical warnings require
+an override reason, which is stored on the prescription permanently:
+
+```
+[critical] Amoxicillin - patient has a recorded severe allergy to Penicillin
+           (Urticaria and facial swelling). Matched by same family (penicillin).
+```
+
+Refusing outright would get bypassed with a paper prescription, losing the
+record entirely. Warning, capturing the reason, and keeping both is the
+outcome that leaves evidence.
+
 ### Segregation of duties
 
 Permissions declare their conflicts (`purchase.create` ⁄ `purchase.approve`,
@@ -186,6 +205,13 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/clinical/appointments/` | Book, re-checking slot capacity in the transaction |
 | `GET /api/clinical/queue/?facility=` | The live queue, in the order patients will be seen |
 | `POST /api/clinical/queue/call-next/` | Call the next waiting patient |
+| `GET /api/clinical/patients/{uuid}/summary/` | Allergies, conditions, vitals and history in one call |
+| `POST /api/clinical/encounters/` | Open an episode of care |
+| `POST /api/clinical/encounters/{uuid}/vitals/` | Record observations, with abnormal flagging |
+| `POST /api/clinical/encounters/{uuid}/notes/` | Write a SOAP note, optionally signing it |
+| `POST /api/clinical/prescriptions/preview/` | Safety warnings without writing anything |
+| `POST /api/clinical/prescriptions/` | Prescribe — 409 if a warning needs a reason |
+| `GET /api/clinical/patients/{uuid}/medications/` | Everything the patient is currently taking |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -228,11 +254,13 @@ Built:
 - [x] Patient master: identifiers, allergies, conditions, duplicate detection, merge
 - [x] Appointments: provider schedules, slots, overbooking, walk-in reserve
 - [x] Queue: triage priority, call / recall / skip, waiting-time measurement
+- [x] Encounters: vitals with abnormal flagging, SOAP notes, sign and amend
+- [x] Prescribing: versioned, allergy and interaction checked, overrides captured
 
 Next, in dependency order:
 
-- [ ] Encounters, vitals, SOAP notes
-- [ ] Prescriptions with allergy and interaction checking
+- [ ] Charge capture and outpatient billing
+- [ ] Laboratory and radiology orders
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement
 - [ ] Finance: chart of accounts, ledger, revenue cycle

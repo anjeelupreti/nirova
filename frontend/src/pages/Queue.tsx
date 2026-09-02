@@ -8,18 +8,26 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BellRing,
   CheckCircle2,
   Clock,
   PlayCircle,
   Siren,
+  Stethoscope,
   Users,
 } from "lucide-react";
 
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { Facility, Paginated, QueueResponse, SessionAvailability } from "@/types";
+import type {
+  Facility,
+  Paginated,
+  QueueResponse,
+  QueueToken as QueueTokenRow,
+  SessionAvailability,
+} from "@/types";
 import {
   Badge,
   Button,
@@ -85,6 +93,7 @@ function StatTile({
 }
 
 export default function QueuePage() {
+  const navigate = useNavigate();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityUuid, setFacilityUuid] = useState("");
   const [queue, setQueue] = useState<QueueResponse | null>(null);
@@ -127,6 +136,31 @@ export default function QueuePage() {
     try {
       await api.post(path, body);
       await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Open the consultation for a token.
+   *
+   * Creates the encounter first, then navigates. The server returns the
+   * existing open encounter if there is one, so clicking twice lands on the
+   * same chart rather than splitting a visit across two records.
+   */
+  async function openConsultation(token: QueueTokenRow) {
+    setBusy(true);
+    try {
+      const encounter = await api.post<{ uuid: string }>(
+        "/clinical/encounters/",
+        {
+          patient_uuid: token.patient_uuid,
+          facility_uuid: facilityUuid,
+          queue_token_uuid: token.uuid,
+          chief_complaint: token.chief_complaint ?? "",
+        },
+      );
+      navigate(`/consultation/${encounter.uuid}`);
     } finally {
       setBusy(false);
     }
@@ -276,16 +310,26 @@ export default function QueuePage() {
                           </Button>
                         )}
                         {token.status === "in_service" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() =>
-                              void act(`/clinical/queue/${token.uuid}/complete/`)
-                            }
-                          >
-                            Complete
-                          </Button>
+                          <div className="flex justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => void openConsultation(token)}
+                            >
+                              <Stethoscope className="h-4 w-4" />
+                              Consult
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() =>
+                                void act(`/clinical/queue/${token.uuid}/complete/`)
+                              }
+                            >
+                              Complete
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>

@@ -269,6 +269,9 @@ export interface PatientDetail extends Patient {
 export interface QueueToken {
   uuid: string;
   token_number: string;
+  /** Needed to open a consultation straight from the queue. */
+  patient_uuid: string;
+  chief_complaint?: string;
   patient_mrn: string;
   patient_name: string;
   status: string;
@@ -316,4 +319,170 @@ export interface SessionAvailability {
   open_slot_times: number;
   is_blocked: boolean;
   next_free: string | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Encounters and prescribing                                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface AbnormalFlag {
+  field: string;
+  level: "low" | "high" | "critical";
+  note: string;
+}
+
+export interface VitalSigns {
+  uuid: string;
+  recorded_at: string;
+  recorded_by_name: string;
+  temperature_c: string | null;
+  pulse_bpm: number | null;
+  respiratory_rate: number | null;
+  systolic_bp: number | null;
+  diastolic_bp: number | null;
+  blood_pressure: string | null;
+  spo2_percent: number | null;
+  weight_kg: string | null;
+  height_cm: string | null;
+  bmi: number | null;
+  gcs_total: number | null;
+  notes: string;
+  abnormal: AbnormalFlag[];
+}
+
+export interface ClinicalNote {
+  uuid: string;
+  note_type: string;
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+  body: string;
+  author_name: string;
+  is_signed: boolean;
+  signed_at: string | null;
+  is_amendment: boolean;
+  amendment_reason: string;
+  created_at: string;
+}
+
+export interface Diagnosis {
+  uuid: string;
+  name: string;
+  icd10_code: string;
+  certainty: string;
+  is_primary: boolean;
+  is_chronic: boolean;
+}
+
+export interface Encounter {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_mrn: string;
+  patient_name: string;
+  encounter_type: string;
+  status: string;
+  facility_name: string;
+  provider_name: string;
+  chief_complaint: string;
+  triage_category: number | null;
+  started_at: string;
+  ended_at: string | null;
+  duration_minutes: number | null;
+  is_open: boolean;
+  disposition: string;
+  is_signed: boolean;
+}
+
+export interface EncounterDetail extends Encounter {
+  facility?: string;
+  department_name: string | null;
+  follow_up_date: string | null;
+  follow_up_instructions: string;
+  vitals: VitalSigns[];
+  notes: ClinicalNote[];
+  diagnoses: Diagnosis[];
+}
+
+/** Everything a clinician wants before they walk into the room. */
+export interface ClinicalSummary {
+  patient: {
+    uuid: string;
+    mrn: string;
+    name: string;
+    age: number | null;
+    gender: string;
+    blood_group: string;
+    alerts: string;
+  };
+  allergies: {
+    substance: string;
+    severity: string;
+    reaction: string;
+    status: string;
+    blocks_prescribing: boolean;
+  }[];
+  conditions: {
+    name: string;
+    icd10_code: string;
+    status: string;
+    onset_date: string | null;
+  }[];
+  latest_vitals: {
+    recorded_at: string;
+    blood_pressure: string | null;
+    pulse_bpm: number | null;
+    spo2_percent: number | null;
+    bmi: number | null;
+    abnormal: AbnormalFlag[];
+  } | null;
+  recent_encounters: {
+    reference: string;
+    started_at: string;
+    encounter_type: string;
+    facility: string;
+    chief_complaint: string;
+    status: string;
+    diagnoses: { name: string; icd10_code: string; is_primary: boolean }[];
+  }[];
+}
+
+export interface PrescriptionLineInput {
+  generic_name: string;
+  brand_name?: string;
+  strength: string;
+  dose: string;
+  route: string;
+  frequency: string;
+  duration_days?: number;
+  is_prn: boolean;
+  prn_indication: string;
+  instructions: string;
+}
+
+export interface SafetyWarning {
+  type: "allergy" | "interaction" | "duplicate";
+  severity: "info" | "moderate" | "high" | "critical";
+  message: string;
+  drug?: string;
+  drugs?: string[];
+  substance?: string;
+  match?: string;
+}
+
+/**
+ * The result of the prescribing safety checks.
+ *
+ * `is_blocking` is always false and is sent explicitly: the server warns and
+ * records overrides, it never refuses to prescribe. A client must not present
+ * these as a wall.
+ */
+export interface SafetyReport {
+  warnings: SafetyWarning[];
+  count: number;
+  by_severity: Record<string, number>;
+  requires_override: boolean;
+  has_critical: boolean;
+  is_blocking: false;
 }

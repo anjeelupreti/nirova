@@ -24,6 +24,7 @@ import CapacityPage from "@/pages/Capacity";
 import FacilitiesPage from "@/pages/Facilities";
 import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
+import ConsultationPage from "@/pages/Consultation";
 import PatientsPage from "@/pages/Patients";
 import QueuePage from "@/pages/Queue";
 import {
@@ -171,6 +172,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/patients" replace />} />
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/queue" element={<QueuePage />} />
+          <Route path="/consultation/:uuid" element={<ConsultationPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

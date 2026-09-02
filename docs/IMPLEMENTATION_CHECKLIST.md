@@ -12,7 +12,7 @@ This is the map of what exists, what is next, and what has not been started.
 | ⬜ | Not started |
 | 🔷 | Architecturally provided for — the seam exists, the module does not |
 
-**Progress:** 17 of 132 sections complete, 10 partial.
+**Progress:** 19 of 132 sections complete, 11 partial.
 The completed set is deliberately the platform core: every remaining module
 depends on tenancy, identity, RBAC and entitlements, and building a vertical
 first would mean rewriting it.
@@ -57,15 +57,16 @@ the patient and encounter models, so these come before any vertical.*
 
 | § | Section | Status | Notes |
 |---|---|---|---|
-| 18 | Clinic OS | 🟡 | Registration, patients, appointments and queue done. EMR, prescription and billing outstanding |
+| 18 | Clinic OS | 🟡 | Registration, patients, appointments, queue, EMR and prescribing done. Billing, lab/radiology orders and referrals outstanding |
 | 19 | Patient management | ✅ | Demographics, identifiers, allergies, conditions, duplicate detection, merge. All patient types supported including walk-in with no documents |
 | 20 | Appointment management | ✅ | Provider schedules, slots, overbooking capacity, walk-in reserve, exceptions, cancellation, no-show, follow-up chains |
 | 21 | Queue management | ✅ | Tokens per facility-day, triage priority, call / recall / skip, the four timestamps that make waiting time measurable |
-| 22 | Clinical / EMR | ⬜ | Next: encounters, SOAP notes, vitals |
-| 23 | Prescription | ⬜ | Allergy checking is already modelled — `blocks_prescribing` |
+| 22 | Clinical / EMR | ✅ | Encounters, vitals with abnormal flagging, SOAP notes with sign-and-amend, diagnoses, triage. Specialty templates outstanding |
+| 23 | Prescription | ✅ | Versioned prescriptions, allergy checking with cross-sensitivity families, interaction and duplicate checks, captured overrides, per-line discontinuation |
 | 24 | Referral management | ⬜ | |
 | 85 | Medical records / HIM | 🟡 | Merge, duplicate detection and version history exist. Indexing, release and retention outstanding |
 | 86 | Consent management | 🟡 | Per-channel communication consent on the patient. Procedure and data consent outstanding |
+| 44 | Pharmacovigilance | 🟡 | Allergies and reactions are structured and checked at prescribing. Adverse-event reporting outstanding |
 
 ---
 
@@ -260,6 +261,10 @@ enforced in the core; breaking one in a new module breaks the platform.
 - [ ] Permission scope filters querysets; it does not only refuse requests.
 - [ ] Records with clinical, financial or legal weight are versioned, not
       overwritten.
+- [ ] Every read of a patient's clinical history resolves the merge chain
+      (`patient.resolve()`). A merged record has no allergies — they moved to
+      the survivor — so an unresolved read reports a dangerous *clean*
+      (development log 054).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

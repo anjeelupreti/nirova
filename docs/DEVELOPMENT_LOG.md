@@ -1123,3 +1123,266 @@ sessions).
 **Affects.** `frontend/src/pages/Patients.tsx`,
 `frontend/src/pages/Queue.tsx`, `frontend/src/types/index.ts`,
 `frontend/src/App.tsx`.
+
+---
+
+## 048 — Encounters
+2026-09-02 · Clinical · feature
+
+**What.** `apps.encounters`: `Encounter`, `VitalSigns`, `ClinicalNote`,
+`Diagnosis`. A tenant app.
+
+**Why.** An encounter is the unit clinical work attaches to. A patient is a
+person; an encounter is one occasion on which that person was seen. Vitals,
+notes, diagnoses, orders and charges hang off the encounter rather than the
+patient, because "what was their blood pressure?" is meaningless without
+"when, and who took it?".
+
+**Shaped for inpatient before inpatient exists.** An OPD consultation and a
+three-week admission are the same entity with a different `encounter_type` and
+duration. Building a separate IPD record later would mean two parallel
+clinical histories per patient, which is how systems end up unable to answer
+simple questions.
+
+**Specific decisions.**
+
+- *Vitals stored as a set, not as individual observations.* A blood pressure
+  without the pulse and temperature taken alongside it is much harder to
+  interpret. Several sets per encounter is normal — on arrival, after
+  treatment, before discharge.
+- *Every vitals field nullable.* A nurse taking a temperature in triage should
+  not have to invent a respiratory rate.
+- *`on_room_air` on the oxygen saturation.* 94% on air and 94% on four litres
+  are very different observations, and a number without that context is
+  clinically misleading.
+- *SOAP as four fields, not one blob.* The structure is what lets a discharge
+  summary pull the assessment and an audit ask whether a plan was recorded.
+  Neither is possible over free text.
+- *`AWAITING_RESULTS` distinct from `IN_PROGRESS`.* One needs the doctor's
+  attention now; the other is waiting on the laboratory. A worklist that
+  conflates them is noise.
+- *Triage as 1–5 integers.* Ordering a queue by the field puts the sickest
+  first with no lookup table.
+- *`Diagnosis` separate from `PatientCondition`.* A diagnosis is what was
+  decided at one visit; a condition is what the patient carries between
+  visits. Promotion from one to the other is deliberate (entry 052).
+
+**Affects.** `apps/encounters/`.
+
+---
+
+## 049 — Signed notes are amended, never edited
+2026-09-02 · Clinical · decision
+
+**What.** Signing a note locks it and snapshots it to `EntityVersion`.
+Corrections create an amendment row pointing at the original, which stays
+readable and unchanged.
+
+**Why.** A clinician cannot un-say something. A signed note is a clinical and
+legal statement, and "what did the record say before it was changed?" is a
+question asked in exactly the situations where the answer matters most.
+Editing in place makes it unanswerable.
+
+**How.** `amend_note()` requires a reason and refuses to amend an unsigned
+note (that one is edited directly — the ceremony would be pointless).
+`sign_note()` snapshots the content, so the version record proves what the
+note said at the moment of signature.
+
+**Affects.** `apps/encounters/models.py`, `apps/encounters/services.py`.
+
+---
+
+## 050 — Closing an encounter requires documentation
+2026-09-02 · Clinical · decision
+
+**What.** `close_encounter()` refuses when there is no note, no diagnosis and
+no vitals.
+
+**Why.** A visit with nothing recorded is almost always an encounter opened by
+mistake — a mis-click on a queue, a duplicate. Closing it silently makes the
+mistake permanent and puts a phantom visit in the patient's history. The error
+message says to cancel it instead, which is the honest action.
+
+**Affects.** `apps/encounters/services.py`.
+
+---
+
+## 051 — Prescribing: nothing is overwritten
+2026-09-02 · Prescribing · feature
+
+**What.** `apps.prescriptions`: `Prescription` and `PrescriptionLine`.
+Changing a prescription creates a new version and supersedes the old one;
+stopping a drug records who, when and why.
+
+**Why.** A prescription is a clinical instruction and a legal record. "What
+were they taking on the 14th?" must be answerable years later, and it cannot
+be if edits mutate rows.
+
+**Also: the medicine is denormalised onto the line.** Each line stores the
+drug's name, strength and form as text *as well as* a `product_uuid` pointing
+at the future pharmacy catalogue. Products get renamed, reformulated and
+withdrawn; none of that may retrospectively change what a doctor actually
+wrote.
+
+**Specific decisions.**
+
+- *`suggested_quantity()` returns `None` for PRN and irregular frequencies*
+  rather than guessing. A wrong number on a prescription is worse than no
+  number, because the pharmacist would dispense it.
+- *A course needs a duration or an end date* unless it is PRN. This is how
+  patients end up on antibiotics for months.
+- *PRN requires an indication.* "Paracetamol as required" without saying what
+  for is not a usable instruction.
+- *`allow_substitution` is the prescriber's decision*, because some drugs are
+  brand-specific for real clinical reasons.
+
+**Affects.** `apps/prescriptions/`.
+
+---
+
+## 052 — Diagnoses are promoted to conditions deliberately
+2026-09-02 · Clinical · decision
+
+**What.** `promote_to_condition()` is an explicit action, not automatic.
+
+**Why.** Most diagnoses are episodic. A chest infection should not follow
+someone for life. A condition list that fills with every past complaint stops
+being read — and a condition list nobody reads is worse than none, because the
+system looks like it is carrying the information.
+
+**Affects.** `apps/encounters/services.py`.
+
+---
+
+## 053 — Prescribing safety warns; it does not block
+2026-09-02 · Prescribing · decision
+
+**What.** `apps/prescriptions/safety.py` checks allergies (with cross-
+sensitivity families), interactions and duplicates. High and critical warnings
+require an **override reason**, captured and stored permanently. Nothing is
+refused.
+
+**Why.** A clinician may have a good reason to prescribe against a recorded
+allergy — a documented mild rash decades ago, no alternative available, a
+resuscitation. Software that refuses outright gets bypassed by writing the
+prescription on paper, which loses the record entirely. Warning, capturing the
+override and keeping both is the outcome that leaves evidence.
+
+**Fails loud, not silent.** An *unconfirmed* allergy still warns. The cost of
+a spurious warning is a click; the cost of a missed one can be anaphylaxis.
+
+**The interaction list is deliberately small.** Eight high-severity pairs, not
+a drug database. Shipping a partial list dressed up as comprehensive would be
+worse than shipping none, because clinicians would trust the silence. A
+licensed interaction database goes behind `check_interactions()` when the
+pharmacy catalogue lands.
+
+**Affects.** `apps/prescriptions/safety.py`, `apps/prescriptions/services.py`.
+
+---
+
+## 054 — Merged patient records were invisible to the safety checks
+2026-09-02 · Prescribing · fix · **important**
+
+**What.** `check_allergies()` and `run_safety_checks()` now call
+`patient.resolve()` first. `create_prescription()` refuses outright to write
+against a merged record and names the survivor.
+
+**Why.** Found by the consultation seed. A patient with a recorded **severe
+penicillin allergy** came back with **zero warnings**, and a prescription for
+amoxicillin was accepted with no override.
+
+The cause: merging moves allergies, conditions and identifiers to the
+surviving record (entry 040) and leaves the merged row as a tombstone. Any
+code path holding a reference to the retired record therefore sees a patient
+with no allergies — and a safety check that finds nothing reports *clean*.
+
+Silence is the most dangerous possible answer from a safety check. It is
+indistinguishable from "this patient has no allergies".
+
+`Patient.resolve()` had existed since entry 040 and nothing was calling it.
+
+**How.** Defence in depth: resolve inside the checks so a stale reference
+still gets the right answer, *and* refuse to prescribe against a tombstone at
+all, since such a prescription would also be invisible on the patient's real
+chart.
+
+**Lesson.** Every read of clinical history must resolve the merge chain. Added
+to the checklist's cross-cutting invariants.
+
+**Affects.** `apps/prescriptions/safety.py`, `apps/prescriptions/services.py`.
+
+---
+
+## 055 — The cross-family allergy rule never fired
+2026-09-02 · Prescribing · fix
+
+**What.** `CROSS_FAMILY_RISK` keys are now normalised with `tuple(sorted(...))`
+at import.
+
+**Why.** The dictionary was keyed `("penicillin", "cephalosporin")`, but the
+lookup builds `tuple(sorted(pair))`, which is `("cephalosporin",
+"penicillin")` — `c` sorts before `p`. The key never matched, so prescribing a
+cephalosporin to a penicillin-allergic patient produced **no warning at all**.
+
+Confirmed by API test before and after: cefixime for a penicillin-allergic
+patient went from 0 warnings to a moderate cross-reactivity warning.
+
+**Why normalise rather than fix the literal.** A safety rule that depends on
+whoever adds the next pair remembering alphabetical order is a rule waiting to
+fail silently. Sorting at import makes the data impossible to write wrongly.
+
+**Severity note.** Reported as *moderate*, not critical, and it does not force
+an override — modern estimates put penicillin/cephalosporin cross-reactivity
+around 2%, not the 10% once taught. A warning that cries wolf gets clicked
+through, which costs more than it saves.
+
+**Affects.** `apps/prescriptions/safety.py`.
+
+---
+
+## 056 — Vitals comparisons coerce before comparing
+2026-09-02 · Clinical · fix
+
+**What.** `VitalSigns.abnormal_flags()` and `.bmi` route every reading through
+a `_numeric()` helper.
+
+**Why.** `abnormal_flags()` raised `TypeError: '>=' not supported between
+instances of 'str' and 'int'` when called on an instance that had not been
+round-tripped through the database — a `DecimalField` still holds whatever the
+caller assigned, often a string.
+
+That matters more than an ordinary type error: a `TypeError` here means a
+**fever goes unflagged**. A safety check that works only on the happy path is
+not a safety check.
+
+**Affects.** `apps/encounters/models.py`.
+
+---
+
+## 057 — Consultation screen
+2026-09-02 · Frontend · feature
+
+**What.** `Consultation.tsx` — vitals, SOAP note and prescribing on one page,
+reached from the queue.
+
+**Specific decisions.**
+
+- *Laid out in the order a consultation happens*, top to bottom, so a
+  clinician with ninety seconds never hunts for the next step.
+- *Allergies and alerts pin above everything.* They are the one thing that
+  must not be scrolled past.
+- *Safety checks re-run as the prescriber types* (debounced 400 ms), so an
+  allergy surfaces while they can still change their mind rather than as a
+  rejection after they commit.
+- *The override box only appears when a warning demands it*, and its
+  placeholder says the reason is kept permanently — because it is.
+- *Warnings sort most-severe first*, so a critical interaction is never below
+  a duplicate-medicine notice.
+- *Opening a consultation from the queue creates the encounter first*, then
+  navigates. The server returns the existing open encounter if there is one,
+  so a double click lands on the same chart rather than splitting a visit.
+
+**Affects.** `frontend/src/pages/Consultation.tsx`,
+`frontend/src/pages/Queue.tsx`, `frontend/src/types/index.ts`,
+`apps/scheduling/serializers.py`.

@@ -82,7 +82,13 @@ class AppointmentCancelSerializer(serializers.Serializer):
 
 
 class QueueTokenSerializer(serializers.ModelSerializer):
+    #: Exposed so the front desk can open a consultation straight from the
+    #: queue without a second lookup.
+    patient_uuid = serializers.UUIDField(source="patient.uuid", read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
+    chief_complaint = serializers.CharField(
+        source="appointment.reason", read_only=True, default=""
+    )
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
     department_name = serializers.CharField(
         source="department.name", read_only=True, default=None
@@ -93,16 +99,18 @@ class QueueTokenSerializer(serializers.ModelSerializer):
     class Meta:
         model = QueueToken
         fields = (
-            "uuid", "token_number", "queue_date", "patient", "patient_mrn",
-            "patient_name", "appointment", "facility", "department",
+            "uuid", "token_number", "queue_date", "patient", "patient_uuid",
+            "patient_mrn", "patient_name", "chief_complaint", "appointment",
+            "facility", "department",
             "department_name", "provider_uuid", "counter", "status",
             "priority", "is_emergency", "issued_at", "called_at",
             "service_started_at", "completed_at", "call_count",
             "waiting_minutes", "is_active", "notes",
         )
         read_only_fields = (
-            "uuid", "token_number", "queue_date", "issued_at", "called_at",
-            "service_started_at", "completed_at", "call_count",
+            "uuid", "token_number", "queue_date", "patient_uuid",
+            "patient_mrn", "patient_name", "chief_complaint", "issued_at",
+            "called_at", "service_started_at", "completed_at", "call_count",
             "waiting_minutes", "is_active",
         )
 
