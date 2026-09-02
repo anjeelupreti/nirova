@@ -152,8 +152,23 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("discount.approve", "Approve discounts beyond limit", "Finance"),
 
     # -- people -----------------------------------------------------------
-    _p("employee.read", "View employees", "People"),
-    _p("employee.manage", "Manage employees", "People"),
+    _p("employee.read", "View employees", "People", is_sensitive=True),
+    _p("employee.manage", "Manage employees", "People", is_sensitive=True),
+    # Hiring and separating are singled out from general record maintenance.
+    # Correcting a phone number and ending someone's employment are not the
+    # same authority, and a role that needs the first should not carry the
+    # second by implication.
+    _p("employee.hire", "Hire and onboard", "People", is_sensitive=True),
+    _p("employee.separate", "End employment", "People", is_sensitive=True),
+    _p("employee.transfer", "Transfer and promote", "People"),
+    _p("position.manage", "Define positions and headcount", "People"),
+    _p("credential.read", "View credentials", "People"),
+    # Verification is what turns a claim into a fact, so it is a separate
+    # authority from recording the claim -- and never held by the subject.
+    _p("credential.verify", "Verify credentials", "People",
+       is_sensitive=True, conflicts_with=("employee.manage",)),
+    _p("salary.read", "View salaries and contracts", "People",
+       is_sensitive=True),
     _p("attendance.read", "View attendance", "People"),
     _p("leave.approve", "Approve leave", "People"),
     _p("payroll.process", "Run payroll", "People"),

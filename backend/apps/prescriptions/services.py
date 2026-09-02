@@ -95,6 +95,37 @@ def create_prescription(
     if not lines:
         raise PrescriptionError("A prescription must have at least one medicine.")
 
+    # Who is writing this, and may they? Until `apps.hr` existed the
+    # prescriber was a bare uuid with nothing behind it -- no name to print,
+    # no council number, and no way to notice that their registration had
+    # lapsed. `Employee.for_user` closes that, and a lapsed registration is a
+    # refusal rather than a warning: prescribing on one is an offence under
+    # the council's own rules, and a warning somebody can click past is not a
+    # control.
+    #
+    # Imported inside the function because `apps.hr` imports nothing from
+    # here, and a module-level import in both directions would be a cycle.
+    from apps.hr.services import assert_may_practise, provider_for
+
+    prescriber = provider_for(getattr(actor, "uuid", None))
+    if prescriber is not None:
+        assert_may_practise(prescriber)
+        # Printed on the prescription. Nepali law requires the prescriber's
+        # council registration on a dispensable script, and taking it from
+        # the verified record beats retyping it correctly every time.
+        prescriber_name = prescriber_name or prescriber.full_name
+        if not prescriber_registration:
+            registration = next(
+                (
+                    credential for credential in prescriber.credentials.all()
+                    if credential.credential_type == "council"
+                    and not credential.is_expired
+                ),
+                None,
+            )
+            if registration:
+                prescriber_registration = registration.reference_number
+
     # A merged record is a tombstone: its allergies and conditions moved to
     # the surviving chart, so a prescription written here would be both
     # unsafe to check and invisible on the patient's real record. Refuse and

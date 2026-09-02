@@ -413,7 +413,7 @@ SYSTEM_ROLES = [
         "max_scope": Scope.ORGANIZATION,
         "permissions": [
             "facility.read", "invoice.read", "invoice.create",
-            "payment.record", "refund.create", "purchase.read",
+            "payment.record", "refund.create", "purchase.read", "salary.read",
             "report.read", "analytics.read", "subscription.read",
         ],
     },
@@ -424,8 +424,32 @@ SYSTEM_ROLES = [
         "max_scope": Scope.ORGANIZATION,
         "permissions": [
             "facility.read", "department.read", "user.read", "user.invite",
-            "employee.read", "employee.manage", "attendance.read",
+            "employee.read", "employee.manage", "employee.hire",
+            "employee.separate", "employee.transfer", "position.manage",
+            "credential.read", "attendance.read",
+            # Whoever runs payroll must be able to see what people are paid.
+            # Withholding it while granting `payroll.process` is a rule that
+            # only stops the job being done.
+            "salary.read",
             "leave.approve", "payroll.process", "report.read",
+        ],
+    },
+    {
+        "code": "medical_director",
+        "name": "Medical Director",
+        "description": (
+            "Clinical governance: verifies professional registrations and "
+            "signs off who may practise."
+        ),
+        "max_scope": Scope.ORGANIZATION,
+        # Holds `credential.verify` and deliberately not `employee.manage`:
+        # the person who records a claimed registration must not be the one
+        # who attests it, which is how forged registrations get caught.
+        "permissions": [
+            "organization.read", "facility.read", "department.read",
+            "employee.read", "credential.read", "credential.verify",
+            "patient.read", "encounter.read", "prescription.approve",
+            "report.read", "analytics.read", "audit.read",
         ],
     },
     {
@@ -437,7 +461,8 @@ SYSTEM_ROLES = [
             "organization.read", "facility.read", "department.read",
             "config.read", "user.read", "role.read", "patient.read",
             "encounter.read", "stock.read", "purchase.read", "invoice.read",
-            "employee.read", "report.read", "analytics.read",
+            "employee.read", "credential.read", "salary.read",
+            "report.read", "analytics.read",
             "audit.read", "audit.export", "subscription.read",
         ],
     },
