@@ -98,6 +98,7 @@ PLANS = [
             LimitKey.MAX_FACILITIES: 1,
             LimitKey.MAX_USERS: 10,
             LimitKey.MAX_STORAGE_GB: 20,
+            LimitKey.MAX_PATIENTS: 5000,
             LimitKey.for_facility_type("hospital"): 0,
             LimitKey.for_facility_type("laboratory"): 0,
             LimitKey.for_facility_type("warehouse"): 0,
@@ -120,6 +121,7 @@ PLANS = [
             LimitKey.MAX_FACILITIES: 5,
             LimitKey.MAX_USERS: 60,
             LimitKey.MAX_STORAGE_GB: 200,
+            LimitKey.MAX_PATIENTS: 50000,
             LimitKey.for_facility_type("hospital"): 0,
             LimitKey.for_facility_type("pharmacy"): 3,
             LimitKey.for_facility_type("laboratory"): 2,
@@ -148,6 +150,7 @@ PLANS = [
             LimitKey.MAX_FACILITIES: 12,
             LimitKey.MAX_USERS: 400,
             LimitKey.MAX_STORAGE_GB: 2000,
+            LimitKey.MAX_PATIENTS: 500000,
             LimitKey.for_facility_type("hospital"): 2,
             LimitKey.for_facility_type("pharmacy"): 4,
             LimitKey.for_facility_type("laboratory"): 3,
@@ -169,6 +172,7 @@ PLANS = [
             # "unlimited everything" is a contract nobody can price.
             LimitKey.MAX_FACILITIES: None,
             LimitKey.MAX_USERS: None,
+            LimitKey.MAX_PATIENTS: None,
             LimitKey.MAX_STORAGE_GB: 20000,
             LimitKey.for_facility_type("hospital"): 10,
         },
@@ -222,6 +226,20 @@ METERS = [
     (MeterKey.API_CALLS, "API calls", "count", LimitKey.MAX_API_CALLS_PER_MONTH, True),
     (MeterKey.SMS_SENT, "SMS sent", "count", LimitKey.MAX_SMS_PER_MONTH, True),
 ]
+
+
+#: Which limits block, and which merely warn or bill. See the comment in
+#: _seed_plans for the reasoning behind each.
+SOFT_LIMITS = {LimitKey.MAX_PATIENTS}
+METERED_LIMITS = {LimitKey.MAX_STORAGE_GB}
+
+
+def _enforcement_for(key: str) -> str:
+    if key in METERED_LIMITS:
+        return Enforcement.METERED
+    if key in SOFT_LIMITS:
+        return Enforcement.SOFT
+    return Enforcement.HARD
 
 
 class Command(BaseCommand):
@@ -308,20 +326,29 @@ class Command(BaseCommand):
                     plan=plan,
                     key=key,
                     value=value,
-                    # Storage overruns are billed rather than blocked: refusing
-                    # to save a scan because a customer is 2 GB over is not a
-                    # decision a healthcare system should make on its own.
-                    enforcement=(
-                        Enforcement.METERED
-                        if key == LimitKey.MAX_STORAGE_GB
-                        else Enforcement.HARD
-                    ),
-                    overage_unit_price=(
-                        Decimal("20.00") if key == LimitKey.MAX_STORAGE_GB else None
-                    ),
+                    # Not every ceiling is a wall, and which ones are is a
+                    # clinical decision as much as a commercial one.
+                    #
+                    #   storage  -> METERED. Refusing to save a scan because a
+                    #               customer is 2 GB over is not a call a
+                    #               healthcare system should make on its own.
+                    #   patients -> SOFT. A clinic that has outgrown its plan
+                    #               must still be able to register the sick
+                    #               person in front of them. The overage is
+                    #               flagged for the account team, who can have
+                    #               a commercial conversation the next morning.
+                    #   facilities and users -> HARD. Both are deliberate,
+                    #               reversible administrative acts with nobody
+                    #               waiting on them.
+                    enforcement=_enforcement_for(key),
+                    overage_unit_price=self._overage_price_for(key),
                     warn_at_percent=80,
                 )
             self.stdout.write(f"  plan: {plan.code} ({len(spec['limits'])} limits)")
+
+    @staticmethod
+    def _overage_price_for(key):
+        return Decimal("20.00") if key == LimitKey.MAX_STORAGE_GB else None
 
     def _seed_addons(self):
         for code, name, kind, target, increment, price in ADDONS:

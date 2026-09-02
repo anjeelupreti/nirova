@@ -874,3 +874,252 @@ financial data never is — so a future change that crosses it has to argue
 against something explicit rather than drift past a gap.
 
 **Affects.** `README.md`, `docs/adr/`.
+
+---
+
+## 039 — Implementation checklist
+2026-09-02 · Documentation · doc
+
+**What.** `docs/IMPLEMENTATION_CHECKLIST.md` — all 132 specification sections
+with status, grouped into eleven delivery phases.
+
+**Why.** The development log records *why* each decision was made; it does not
+answer "how much is left?". With a specification this large, that question is
+asked constantly, and answering it from memory produces different answers each
+time.
+
+**Also.** The checklist carries a set of cross-cutting invariants — tenant
+context, entitlement checks, audit, segregation of duties, scope filtering,
+versioning, error envelope, log entry. Those are the rules every new module
+must hold to, and having them in one list makes a review checkable.
+
+**Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 040 — Patient master
+2026-09-02 · Clinical · feature
+
+**What.** `apps.patients`: `Patient`, `PatientIdentifier`, `PatientAllergy`,
+`PatientCondition`, `PatientMergeLog`. A tenant app.
+
+**Why.** Everything clinical, most of billing and all of diagnostics acquires
+a foreign key to the patient, which makes it the hardest model in the system
+to change later. Three properties are therefore built in rather than
+retrofitted:
+
+1. **One patient, many facilities.** Registration is per *organization*. A
+   patient registered at the Kathmandu clinic and later admitted to the
+   Bhaktapur hospital is one person with one history.
+2. **Identity in Nepal is messy.** Many patients have no national ID; names
+   transliterate inconsistently; dates of birth are often approximate. Hence
+   `is_dob_estimated`, `stated_age_years`, and identifiers as a *list of
+   claims* rather than a column.
+3. **Duplicates are inevitable.** A 2 a.m. walk-in will be registered again.
+   The design detects and merges rather than pretending to prevent.
+
+**Specific decisions.**
+
+- *Name stored in parts.* Nepali names do not split reliably on whitespace —
+  "Krishna Bahadur Shrestha" has a middle name, "Sita Devi" does not.
+- *`age_years` returns `None`, not 0, when unknown.* A newborn and an unknown
+  age must not look identical to a dosing calculation.
+- *MRN allocated under `select_for_update`.* Counting rows would reuse a
+  number after a delete, and two concurrent registrations at a busy counter
+  would collide.
+- *`merged_into` rather than deletion.* Prescriptions and invoices already
+  point at the duplicate; a merge must never orphan a clinical record.
+  `resolve()` follows the chain, with cycle protection.
+
+**Affects.** `apps/patients/`.
+
+---
+
+## 041 — Duplicate detection scores, it does not decide
+2026-09-02 · Clinical · feature
+
+**What.** `find_duplicate_candidates()` returns weighted candidates. A shared
+identifier scores 60, a phone 25, name-plus-date-of-birth 20, name alone 10.
+Registration raises HTTP 409 with the candidates rather than an error.
+
+**Why.** Both failure modes are expensive and they pull in opposite
+directions. A missed duplicate splits one patient's history across two records
+and is painful to unpick; a false positive that *blocks* registration stops a
+real patient being seen. So the system surfaces candidates and lets a human
+decide, with `force=true` to proceed.
+
+**Why 409 rather than 400.** It is not a validation failure. Nothing the clerk
+typed is wrong — the server is asking them to look before creating a second
+record. The status distinguishes "you made a mistake" from "please confirm".
+
+**Affects.** `apps/patients/services.py`, `apps/patients/views.py`,
+`frontend/src/pages/Patients.tsx`.
+
+---
+
+## 042 — Reads of patient records are audited, not only writes
+2026-09-02 · Audit · decision
+
+**What.** `PatientViewSet.retrieve` calls `record_patient_access()`, writing a
+`VIEW_SENSITIVE` audit event.
+
+**Why.** "Who looked at this record?" is the question asked after a privacy
+complaint, and it cannot be answered retrospectively. Logging only changes
+would leave the most common form of privacy breach — an unauthorised *look* —
+entirely invisible.
+
+**Affects.** `apps/patients/views.py`, `apps/patients/services.py`.
+
+---
+
+## 043 — Appointments and the queue live in one app
+2026-09-02 · Scheduling · decision
+
+**What.** `apps.scheduling` holds `ProviderSchedule`, `ScheduleException`,
+`Appointment` and `QueueToken`.
+
+**Why.** They are the same problem from two ends. An appointment is a claim on
+a provider's future time; a queue token is a claim on their time *today*. In a
+Nepali OPD both arrive at once — a booked follow-up and a walk-in who has
+travelled four hours — and whatever sequences them has to see both. Splitting
+them across apps would put a circular dependency between the two.
+
+**Specific decisions.**
+
+- *Sunday is weekday 0.* The Nepali working week runs Sunday to Friday.
+- *`NO_SHOW` is distinct from `CANCELLED`.* A cancellation freed the slot; a
+  no-show wasted it. Conflating them makes utilisation unmeasurable.
+- *`walk_in_reserve`.* Online booking cannot consume the whole diary, so a
+  patient who travelled in is not turned away by a full remote schedule.
+- *Four timestamps on an appointment* (`arrived_at`,
+  `consultation_started_at`, `consultation_ended_at`, plus `scheduled_for`).
+  Each is the boundary of an interval a patient actually experiences. Without
+  all four, section 21's waiting-time requirement cannot be answered.
+- *`SKIPPED` rather than deleting a token.* A patient who missed their call
+  because they stepped out is re-queued, and the fact that they were called
+  stays on the record.
+- *Emergencies get priority 100*, not merely a higher number — triage should
+  not be a matter of degree when someone is critically unwell.
+
+**Affects.** `apps/scheduling/`.
+
+---
+
+## 044 — `@transaction.atomic` was opening the wrong database
+2026-09-02 · Tenancy · fix · **important**
+
+**What.** Added `apps/tenancy/db.py` with `tenant_atomic()` and
+`@tenant_atomic_method`. Replaced nine bare `@transaction.atomic` decorators
+in the patient and scheduling services.
+
+**Why.** `transaction.atomic()` with no arguments opens a transaction on the
+**default** database. Under database-per-tenant that is the control plane —
+which is almost never the database the code is writing to.
+
+The failure is quiet and nasty. A decorated service that writes tenant rows
+*appears* to work: the writes succeed, because Django autocommits them on the
+tenant connection. What is silently lost is the guarantee. The block is not
+atomic, a failure half-way leaves the tenant database with partial data, and
+nothing complains.
+
+It surfaced only because `Patient.allocate_mrn()` uses `select_for_update`,
+which raised `TransactionManagementError: select_for_update cannot be used
+outside of a transaction`. Without that row lock the bug would have shipped —
+a service that looks transactional and is not.
+
+`FacilityService` already got this right, using `atomic(using=alias)`
+explicitly. The new services did not, which is exactly why it needed to be a
+named helper rather than a convention people are expected to remember.
+
+**How.** `tenant_atomic()` resolves the alias from the active context and
+raises `NoTenantBound` if none is set — so the *other* failure mode, running
+tenant work with no context, is loud rather than silent.
+
+**Lesson.** Never write a bare `@transaction.atomic` in code touching tenant
+models. Added to the checklist's cross-cutting invariants.
+
+**Affects.** `apps/tenancy/db.py`, `apps/patients/services.py`,
+`apps/scheduling/services.py`.
+
+---
+
+## 045 — Patient limits are soft; facility limits are hard
+2026-09-02 · Entitlements · decision
+
+**What.** `max_patients` added to every plan, enforced `SOFT`.
+
+**Why.** Found because the fail-closed default (entry 009) blocked the
+clinical seed: no plan defined a patient ceiling, so it resolved to 0 and
+registration was refused. The guard worked exactly as designed and caught a
+real gap.
+
+The interesting part was choosing the enforcement. A **hard** patient limit
+means refusing to register a sick person standing at a counter because their
+clinic has outgrown its subscription — a commercial dispute resolved at the
+patient's expense. `SOFT` allows the registration, flags the overage, and
+leaves the account team a conversation to have the next morning.
+
+This is entry 011's principle applied where it matters most. The current
+split:
+
+| Limit | Enforcement | Why |
+|---|---|---|
+| `max_patients` | soft | Somebody is waiting to be seen |
+| `max_storage_gb` | metered | Refusing to save a scan is not our call |
+| `max_facilities*` | hard | Deliberate, reversible, nobody waiting |
+| `max_users` | hard | Same |
+
+**Affects.** `seed_catalog`.
+
+---
+
+## 046 — "Free slots" meant the wrong thing
+2026-09-02 · Scheduling · fix
+
+**What.** `provider_day_view()` now returns `capacity`, `booked` and
+`remaining_capacity` instead of a bare `free_slots` count.
+
+**Why.** Caught by reading the seeded output: Dr Karki showed **9/9 free**
+while holding four appointments. Not a bug in the counting — with
+`slot_capacity = 2`, every slot genuinely still had room. But a receptionist
+reads "9/9 free" as an empty diary and books into it.
+
+The old field answered "how many slot times have space?"; the question
+actually being asked is "how many more patients fit?". Now reads
+`booked 4/18, remaining 14`.
+
+**Lesson.** A correct number under a misleading name is a bug. Overbooking
+capacity made the two diverge.
+
+**Affects.** `apps/scheduling/services.py`,
+`frontend/src/pages/Queue.tsx`.
+
+---
+
+## 047 — Clinical frontend
+2026-09-02 · Frontend · feature
+
+**What.** `Patients.tsx` (search, registration, duplicate confirmation,
+record panel) and `Queue.tsx` (live queue, call/start/complete, today's
+sessions).
+
+**Specific decisions.**
+
+- *Search is one box.* At a counter the clerk has whatever the patient can
+  give them — a card, a phone number, half a name — and should not have to
+  decide which field it belongs in first. Debounced at 300 ms.
+- *Blocking allergies render first, in red.* A severe penicillin allergy
+  below an address is a patient-safety problem, not a layout preference.
+- *Duplicate candidates are a decision, not an error.* The panel offers "use
+  an existing record" and "this is a different person" rather than a
+  dismissible warning.
+- *The queue polls at 15 s rather than using a WebSocket.* A queue changes
+  every few minutes; a socket that must survive a Nepali clinic's
+  connectivity is a lot of machinery for a number that can be seconds stale
+  without harm.
+- *Average wait colours at 30 and 45 minutes* — roughly where a waiting room
+  starts to feel broken.
+
+**Affects.** `frontend/src/pages/Patients.tsx`,
+`frontend/src/pages/Queue.tsx`, `frontend/src/types/index.ts`,
+`frontend/src/App.tsx`.

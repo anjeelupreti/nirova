@@ -13,7 +13,9 @@ import {
   ChevronDown,
   GaugeCircle,
   LogOut,
+  ListOrdered,
   ScrollText,
+  Users,
 } from "lucide-react";
 
 import { useSession } from "@/hooks/useSession";
@@ -22,6 +24,8 @@ import CapacityPage from "@/pages/Capacity";
 import FacilitiesPage from "@/pages/Facilities";
 import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
+import PatientsPage from "@/pages/Patients";
+import QueuePage from "@/pages/Queue";
 import {
   Alert,
   AlertDescription,
@@ -32,6 +36,8 @@ import {
 } from "@/components/ui/primitives";
 
 const NAV = [
+  { to: "/patients", label: "Patients", icon: Users },
+  { to: "/queue", label: "Queue", icon: ListOrdered },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
   { to: "/facility-requests", label: "Change requests", icon: ScrollText },
@@ -162,11 +168,13 @@ export default function App() {
         )}
 
         <Routes>
-          <Route path="/" element={<Navigate to="/facilities" replace />} />
+          <Route path="/" element={<Navigate to="/patients" replace />} />
+          <Route path="/patients" element={<PatientsPage />} />
+          <Route path="/queue" element={<QueuePage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />
-          <Route path="*" element={<Navigate to="/facilities" replace />} />
+          <Route path="*" element={<Navigate to="/patients" replace />} />
         </Routes>
       </main>
     </div>

@@ -43,9 +43,10 @@ python -m venv .venv
 # source .venv/bin/activate && pip install -r requirements.txt  # macOS / Linux
 cp .env.example .env
 
-.venv/Scripts/python.exe manage.py migrate          # control plane
-.venv/Scripts/python.exe manage.py seed_catalog     # plans, modules, add-ons
-.venv/Scripts/python.exe manage.py seed_demo        # a demo tenant, end to end
+.venv/Scripts/python.exe manage.py migrate               # control plane
+.venv/Scripts/python.exe manage.py seed_catalog          # plans, modules, add-ons
+.venv/Scripts/python.exe manage.py seed_demo             # a demo tenant, end to end
+.venv/Scripts/python.exe manage.py seed_clinical_demo    # patients, clinics, a queue
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -166,6 +167,13 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/org/facility-requests/preview/` | What would happen, without doing it |
 | `POST /api/org/facility-requests/` | Raise a change request |
 | `POST /api/org/facility-requests/{ref}/decide/` | Organization-level decision |
+| `GET /api/clinical/patients/search/?q=` | Find a patient by name, MRN, phone or document |
+| `POST /api/clinical/patients/` | Register — returns 409 with candidates if a duplicate is likely |
+| `POST /api/clinical/patients/{uuid}/merge/` | Merge a duplicate into this record |
+| `GET /api/clinical/availability/?facility=` | Every session today, with remaining capacity |
+| `POST /api/clinical/appointments/` | Book, re-checking slot capacity in the transaction |
+| `GET /api/clinical/queue/?facility=` | The live queue, in the order patients will be seen |
+| `POST /api/clinical/queue/call-next/` | Call the next waiting patient |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -205,11 +213,14 @@ Built:
 - [x] Facility lifecycle with request-and-approval
 - [x] Audit log and entity version history
 - [x] Platform owner console API
+- [x] Patient master: identifiers, allergies, conditions, duplicate detection, merge
+- [x] Appointments: provider schedules, slots, overbooking, walk-in reserve
+- [x] Queue: triage priority, call / recall / skip, waiting-time measurement
 
 Next, in dependency order:
 
-- [ ] Patient master, encounters, appointments, queue
-- [ ] Clinic OS: EMR, prescriptions, billing
+- [ ] Encounters, vitals, SOAP notes
+- [ ] Prescriptions with allergy and interaction checking
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement
 - [ ] Finance: chart of accounts, ledger, revenue cycle
@@ -222,6 +233,10 @@ Next, in dependency order:
 ---
 
 ## Contributing
+
+[`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md) maps
+all 132 specification sections to their status, and lists the cross-cutting
+invariants every new module must hold to.
 
 Read [`docs/DEVELOPMENT_LOG.md`](docs/DEVELOPMENT_LOG.md) first — it records
 why things are the way they are, including several decisions that look odd

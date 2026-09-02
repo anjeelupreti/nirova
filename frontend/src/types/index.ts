@@ -206,3 +206,114 @@ export interface Paginated<T> {
   page_size: number;
   results: T[];
 }
+
+/* -------------------------------------------------------------------------- */
+/* Clinical                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface Patient {
+  uuid: string;
+  mrn: string;
+  full_name: string;
+  gender: string;
+  age_years: number | null;
+  date_of_birth: string | null;
+  phone: string;
+  district: string;
+  municipality: string;
+  category: string;
+  status: string;
+  blood_group: string;
+  registered_on: string;
+}
+
+export interface PatientAllergy {
+  uuid: string;
+  substance: string;
+  category: string;
+  reaction: string;
+  severity: string;
+  status: string;
+  /** Whether prescribing should be stopped. Unconfirmed allergies still do. */
+  blocks_prescribing: boolean;
+}
+
+export interface PatientCondition {
+  uuid: string;
+  name: string;
+  icd10_code: string;
+  category: string;
+  status: string;
+  onset_date: string | null;
+}
+
+export interface PatientDetail extends Patient {
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  is_dob_estimated: boolean;
+  is_minor: boolean;
+  is_merged: boolean;
+  merged_into_mrn: string | null;
+  tole: string;
+  ward: string;
+  guardian_name: string;
+  guardian_relationship: string;
+  guardian_phone: string;
+  alerts: string;
+  notes: string;
+  allergies: PatientAllergy[];
+  conditions: PatientCondition[];
+}
+
+export interface QueueToken {
+  uuid: string;
+  token_number: string;
+  patient_mrn: string;
+  patient_name: string;
+  status: string;
+  priority: number;
+  is_emergency: boolean;
+  waiting_minutes: number;
+  call_count: number;
+  counter: string;
+}
+
+export interface QueueStatistics {
+  date: string;
+  total_tokens: number;
+  waiting: number;
+  in_service: number;
+  completed: number;
+  skipped: number;
+  left: number;
+  emergencies: number;
+  average_wait_minutes: number;
+  longest_wait_minutes: number;
+}
+
+export interface QueueResponse {
+  facility: string;
+  statistics: QueueStatistics;
+  queue: QueueToken[];
+}
+
+/** One provider session on one day, with how much room is left in it. */
+export interface SessionAvailability {
+  schedule_uuid: string;
+  provider_uuid: string;
+  provider_name: string;
+  department: string | null;
+  room: string;
+  start_time: string;
+  end_time: string;
+  total_slots: number;
+  slot_capacity: number;
+  /** total_slots × slot_capacity — how many patients fit in the session. */
+  capacity: number;
+  booked: number;
+  remaining_capacity: number;
+  open_slot_times: number;
+  is_blocked: boolean;
+  next_free: string | null;
+}
