@@ -151,7 +151,7 @@ customers, and the module a hospital needs first.*
 
 | § | Section | Status |
 |---|---|---|
-| 33 | Lab / LIMS | ✅ | Test catalogue with panels, population-specific reference ranges, order → collect → receive → result → verify → release, specimen rejection, accessioning, TAT reporting |
+| 33 | Lab / LIMS | ✅ | Test catalogue with panels, population-specific reference ranges, order → collect → receive → result → verify → release, specimen rejection, accessioning, TAT reporting, department worklist UI |
 | 34 | Lab quality | 🟡 | Critical-value alerting with notification and acknowledgement records, result amendment chains, rejection tracking, TAT breach detection. QC charts, calibration and reagent lots outstanding |
 | 35 | Radiology / RIS / PACS | 🟡 | Ordering, modality worklist, narrative reporting, verification and release. DICOM, PACS and the image viewer outstanding |
 | 36 | Blood bank | ⬜ |

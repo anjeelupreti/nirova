@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
+  FlaskConical,
   Pill,
   ShieldAlert,
   Stethoscope,
@@ -24,9 +25,12 @@ import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   ClinicalSummary,
+  DiagnosticOrder,
   EncounterDetail,
+  Paginated,
   PrescriptionLineInput,
   SafetyReport,
+  TestDefinition,
 } from "@/types";
 import {
   Alert,
@@ -639,6 +643,178 @@ function PrescribePanel({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Investigations                                                              */
+/* -------------------------------------------------------------------------- */
+
+const PRIORITY_OPTIONS = [
+  ["routine", "Routine"],
+  ["urgent", "Urgent"],
+  ["stat", "STAT — now"],
+] as const;
+
+function InvestigationsPanel({
+  encounter,
+  facilityUuid,
+}: {
+  encounter: EncounterDetail;
+  facilityUuid: string;
+}) {
+  const [tests, setTests] = useState<TestDefinition[]>([]);
+  const [testUuid, setTestUuid] = useState("");
+  const [priority, setPriority] = useState("routine");
+  const [indication, setIndication] = useState("");
+  const [orders, setOrders] = useState<DiagnosticOrder[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const loadOrders = useCallback(async () => {
+    const page = await api.get<Paginated<DiagnosticOrder>>(
+      `/diagnostics/orders/?encounter=${encounter.uuid}`,
+    );
+    setOrders(page.results);
+  }, [encounter.uuid]);
+
+  useEffect(() => {
+    // `orderable=true` hides panel members: a clinician orders the liver
+    // function test, not its bilirubin component.
+    api
+      .get<Paginated<TestDefinition>>(
+        "/diagnostics/tests/?orderable=true&page_size=200",
+      )
+      .then((page) => {
+        setTests(page.results);
+        if (page.results.length) setTestUuid(page.results[0].uuid);
+      })
+      .catch(() => undefined);
+    void loadOrders();
+  }, [loadOrders]);
+
+  // A non-routine request must say what is being looked for. Mirrored from
+  // the server so the button explains itself rather than failing on submit.
+  const needsIndication = priority !== "routine" && !indication.trim();
+
+  async function order() {
+    setError(null);
+    setBusy(true);
+    try {
+      await api.post("/diagnostics/orders/", {
+        patient_uuid: encounter.patient,
+        facility_uuid: facilityUuid,
+        encounter_uuid: encounter.uuid,
+        test_uuid: testUuid,
+        priority,
+        clinical_indication: indication,
+      });
+      setIndication("");
+      setPriority("routine");
+      await loadOrders();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Could not place the order.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2">
+          <FlaskConical className="h-4 w-4 text-muted-foreground" />
+          Investigations
+        </CardTitle>
+        <CardDescription>
+          Ordering moves this encounter to awaiting results until everything
+          is back.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {orders.length > 0 && (
+          <div className="space-y-1.5">
+            {orders.map((existing) => (
+              <div
+                key={existing.uuid}
+                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+              >
+                <span>
+                  {existing.test_name}
+                  <span className="ml-2 font-mono text-xs text-muted-foreground">
+                    {existing.reference}
+                  </span>
+                </span>
+                <Badge
+                  variant={
+                    existing.status === "released"
+                      ? "success"
+                      : existing.is_overdue
+                        ? "destructive"
+                        : "secondary"
+                  }
+                >
+                  {existing.status.replace(/_/g, " ")}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <Label className="text-xs">Test</Label>
+          <Select value={testUuid} onChange={(e) => setTestUuid(e.target.value)}>
+            {tests.map((test) => (
+              <option key={test.uuid} value={test.uuid}>
+                {test.code} — {test.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Priority</Label>
+          <Select value={priority} onChange={(e) => setPriority(e.target.value)}>
+            {PRIORITY_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Clinical indication
+            {priority !== "routine" && (
+              <span className="ml-1 text-destructive">required</span>
+            )}
+          </Label>
+          <Input
+            value={indication}
+            placeholder="What are you looking for?"
+            onChange={(e) => setIndication(e.target.value)}
+          />
+        </div>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <Button
+          size="sm"
+          disabled={busy || !testUuid || needsIndication}
+          onClick={() => void order()}
+        >
+          {needsIndication ? "State the indication first" : "Order"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Page                                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -724,6 +900,11 @@ export default function ConsultationPage() {
             encounter={encounter}
             facilityUuid={encounter.facility ?? ""}
             onSaved={() => void load()}
+          />
+
+          <InvestigationsPanel
+            encounter={encounter}
+            facilityUuid={encounter.facility ?? ""}
           />
 
           {summary.conditions.length > 0 && (

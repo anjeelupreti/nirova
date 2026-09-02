@@ -599,3 +599,109 @@ export interface DailyCollection {
   invoiced_total: string;
   payment_count: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Diagnostics                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface TestDefinition {
+  uuid: string;
+  code: string;
+  name: string;
+  modality: string;
+  is_panel: boolean;
+  component_codes: string[];
+  result_data_type: string;
+  unit: string;
+  needs_specimen: boolean;
+  patient_preparation: string;
+  turnaround_minutes: number;
+  is_active: boolean;
+}
+
+export interface DiagnosticResultRow {
+  uuid: string;
+  analyte_code: string;
+  analyte_name: string;
+  display_value: string;
+  unit: string;
+  reference_text: string;
+  /** normal | low | high | abnormal | critical_low | critical_high */
+  flag: string;
+  is_abnormal: boolean;
+  is_critical: boolean;
+  entered_by_name: string;
+  is_verified: boolean;
+  was_amended: boolean;
+}
+
+export interface DiagnosticOrder {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_mrn: string;
+  patient_name: string;
+  test_code: string;
+  test_name: string;
+  modality: string;
+  priority: string;
+  status: string;
+  clinical_indication: string;
+  ordered_by_name: string;
+  ordered_at: string;
+  due_at: string | null;
+  accession_number: string | null;
+  released_at: string | null;
+  is_open: boolean;
+  /** Past its expected turnaround and still not released. */
+  is_overdue: boolean;
+  turnaround_minutes: number | null;
+}
+
+export interface CriticalAlert {
+  uuid: string;
+  patient_mrn: string;
+  patient_name: string;
+  order_reference: string;
+  analyte: string;
+  value: string;
+  flag: string;
+  threshold: string;
+  status: string;
+  raised_at: string;
+  notified_person: string;
+  notified_via: string;
+  notified_at: string | null;
+  acknowledged_at: string | null;
+  action_taken: string;
+  /** Drives the quality report: an alert open for hours is a finding. */
+  minutes_outstanding: number;
+}
+
+export interface DiagnosticOrderDetail extends DiagnosticOrder {
+  facility_name: string;
+  encounter_reference: string | null;
+  clinical_notes: string;
+  specimen_type: string;
+  collected_by_name: string;
+  rejection_reason: string;
+  verified_by_name: string;
+  collection_to_result_minutes: number | null;
+  results: DiagnosticResultRow[];
+  critical_alerts: CriticalAlert[];
+}
+
+export interface TurnaroundReport {
+  since: string;
+  released: number;
+  /** Ordered to released. */
+  average_total_minutes: number;
+  /** Collection to result — the laboratory's own portion, reported apart. */
+  average_lab_minutes: number;
+  breached: number;
+  breach_rate_percent: number;
+  open: number;
+  overdue: number;
+  rejected: number;
+  critical_alerts_open: number;
+}

@@ -1761,3 +1761,59 @@ Worth recording because it is easy to write a module gate that never fires and
 believe it works.
 
 **Affects.** `apps/diagnostics/management/commands/seed_diagnostics_demo.py`.
+
+---
+
+## 075 — Diagnostics screens
+2026-09-02 · Frontend · feature
+
+**What.** `Diagnostics.tsx` — the department worklist with inline result
+entry — and an investigations panel added to the consultation screen.
+
+**Specific decisions.**
+
+- *Critical alerts pin to the top and stay there* until somebody records the
+  call. Not a styling choice: an unacknowledged critical value is the most
+  dangerous state this screen can be in, and it should be impossible to work
+  around.
+- *The alert asks two questions in sequence* — who did you speak to, then what
+  was done — because those are two separate events with a gap between them,
+  and collapsing them into one box would invite guessing at the second.
+- *Every action sits on the order row itself.* A technician at a bench should
+  not navigate to a detail page to mark a specimen received.
+- *The worklist keeps the server's ordering* (STAT, urgent, oldest) rather
+  than re-sorting client-side. Re-sorting would quietly diverge from the
+  worklist the API considers authoritative.
+- *`orderable=true` hides panel members* in the consultation's test picker: a
+  clinician orders the liver function test, not its bilirubin component.
+  Verified — 4 orderable tests from 11 definitions.
+- *The order button explains its own refusal.* When priority is above routine
+  and no indication is given, it reads "State the indication first" rather
+  than sitting greyed out with no reason, mirroring the server rule.
+
+**Affects.** `frontend/src/pages/Diagnostics.tsx`,
+`frontend/src/pages/Consultation.tsx`, `frontend/src/types/index.ts`,
+`frontend/src/App.tsx`.
+
+---
+
+## 076 — Environment recovery after Docker stopped
+2026-09-02 · Operations · doc
+
+**What.** No code change. Recording that the whole local environment came
+down between sessions — Docker Desktop had stopped, taking Postgres with it —
+and what it took to recover.
+
+**What happened.** Both dev servers were unreachable and `docker ps` could not
+reach the daemon. Restarting Docker Desktop, then
+`docker compose -f infra/docker-compose.yml up -d`, brought both containers
+back.
+
+**What is worth knowing.** All data survived: 1 organization, 7 patients, 4
+invoices, every tenant table intact. That is the named volume in
+`infra/docker-compose.yml` doing its job — worth confirming explicitly rather
+than assuming, because a compose file that recreates volumes on restart looks
+identical until the day it matters.
+
+**Affects.** Nothing in the repository.
+
