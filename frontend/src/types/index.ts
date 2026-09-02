@@ -809,3 +809,196 @@ export interface ReorderResponse {
   urgent: number;
   suggestions: ReorderSuggestion[];
 }
+
+// ---------------------------------------------------------------------------
+// Point of sale
+// ---------------------------------------------------------------------------
+
+export interface CounterSession {
+  uuid: string;
+  reference: string;
+  facility: string;
+  facility_name: string;
+  location: string;
+  location_code: string;
+  counter: string;
+  cashier_id: string;
+  cashier_name: string;
+  status: "open" | "closing" | "closed" | "reconciled";
+  opened_at: string;
+  closed_at: string | null;
+  opening_float: string;
+  closing_count: string | null;
+  expected_cash: string | null;
+  variance: string | null;
+  has_variance: boolean;
+  variance_reason: string;
+  card_total: string;
+  wallet_total: string;
+  credit_total: string;
+  reconciled_at: string | null;
+  duration_minutes: number | null;
+  notes: string;
+}
+
+/** One row from the counter's product lookup. */
+export interface CounterProduct {
+  uuid: string;
+  code: string;
+  name: string;
+  generic_name: string;
+  brand_name: string;
+  dosage_form: string;
+  base_unit: string;
+  barcode: string;
+  available: string;
+  batch_uuid: string | null;
+  batch_number: string;
+  expires_on: string | null;
+  unit_price: string;
+  mrp: string;
+  requires_prescription: boolean;
+}
+
+/**
+ * A priced basket that has not been committed.
+ *
+ * The counter never computes its own total: the figure a customer is asked
+ * for is rounded to the whole rupee server-side, and a client that did its
+ * own arithmetic would eventually disagree with the invoice.
+ */
+export interface SaleQuote {
+  lines: {
+    product: string;
+    product_name: string;
+    batch_number: string;
+    expires_on: string;
+    quantity: string;
+    unit_price: string;
+    discount_percent: string;
+    discount_amount: string;
+    tax_percent: string;
+    tax_amount: string;
+    total: string;
+  }[];
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  rounding_adjustment: string;
+  total: string;
+  shortfalls: { product: string; requested: string; available: string }[];
+  warnings: string[];
+  can_sell: boolean;
+}
+
+export interface SaleLine {
+  uuid: string;
+  product: string;
+  product_name: string;
+  batch: string;
+  batch_number: string;
+  expires_on: string;
+  quantity: string;
+  returned_quantity: string;
+  returnable_quantity: string;
+  unit_price: string;
+  mrp: string;
+  discount_percent: string;
+  discount_amount: string;
+  tax_percent: string;
+  tax_amount: string;
+  total: string;
+}
+
+export interface Sale {
+  uuid: string;
+  reference: string;
+  session: string;
+  session_reference: string;
+  facility: string;
+  location: string;
+  sale_type: string;
+  patient: string | null;
+  customer_label: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_pan: string;
+  prescription_reference: string;
+  status:
+    | "draft"
+    | "completed"
+    | "partially_returned"
+    | "returned"
+    | "voided";
+  sold_at: string;
+  sold_by_name: string;
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  rounding_adjustment: string;
+  total: string;
+  invoice_number: string;
+  void_reason: string;
+  notes: string;
+  lines: SaleLine[];
+}
+
+export interface SaleReturn {
+  uuid: string;
+  reference: string;
+  sale: string;
+  sale_reference: string;
+  session: string;
+  status: "pending" | "approved" | "rejected" | "completed";
+  reason: string;
+  restock: boolean;
+  restock_note: string;
+  requested_by_name: string;
+  approved_by_name: string;
+  approved_at: string | null;
+  decision_notes: string;
+  refund_total: string;
+  refund_method: string;
+  credit_note_number: string;
+  completed_at: string | null;
+  lines: {
+    uuid: string;
+    sale_line: string;
+    product_name: string;
+    batch_number: string;
+    quantity: string;
+    refund_amount: string;
+    condition_note: string;
+  }[];
+}
+
+export interface SessionTakings {
+  reference: string;
+  sales_count: number;
+  sales_total: string;
+  cash: string;
+  card: string;
+  wallet: string;
+  credit: string;
+  by_method: Record<string, string>;
+  /** Only present when the caller asked for a non-blind read. */
+  expected_cash?: string;
+  opening_float?: string;
+}
+
+export interface SalesSummary {
+  date: string;
+  sales_count: number;
+  gross_revenue: string;
+  returns_count: number;
+  returns_total: string;
+  net_revenue: string;
+  tax: string;
+  cost_of_goods: string;
+  cost_recovered: string;
+  cost_written_off: string;
+  net_cost_of_goods: string;
+  gross_margin: string;
+  margin_percent: string;
+  top_products: { product_name: string; quantity: string; total: string }[];
+}

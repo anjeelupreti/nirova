@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.organization.models import Facility
 from apps.patients.models import Patient
@@ -55,7 +56,10 @@ class CounterSessionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CounterSessionSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("sale.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "facility", "counter"]
+    filterset_class = uuid_filterset(
+        CounterSession, relations=["facility"],
+        fields=["status", "counter"],
+    )
     ordering_fields = ["opened_at", "closed_at"]
 
     def get_queryset(self):
@@ -167,7 +171,10 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SaleSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("sale.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "sale_type", "facility", "session"]
+    filterset_class = uuid_filterset(
+        Sale, relations=["facility", "session"],
+        fields=["status", "sale_type"],
+    )
     search_fields = ["reference", "invoice_number", "customer_name",
                      "customer_phone"]
     ordering_fields = ["sold_at", "total"]
@@ -362,7 +369,9 @@ class SaleReturnViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SaleReturnSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("sale.read")]
     lookup_field = "reference"
-    filterset_fields = ["status", "sale"]
+    filterset_class = uuid_filterset(
+        SaleReturn, relations=["sale"], fields=["status"]
+    )
 
     def get_queryset(self):
         queryset = SaleReturn.objects.select_related("sale", "session")

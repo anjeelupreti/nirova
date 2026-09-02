@@ -18,6 +18,7 @@ import {
   Package,
   Receipt,
   ScrollText,
+  ShoppingCart,
   Users,
 } from "lucide-react";
 
@@ -29,6 +30,7 @@ import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
 import BillingPage from "@/pages/Billing";
 import ConsultationPage from "@/pages/Consultation";
+import CounterPage from "@/pages/Counter";
 import DiagnosticsPage from "@/pages/Diagnostics";
 import PatientsPage from "@/pages/Patients";
 import PharmacyPage from "@/pages/Pharmacy";
@@ -47,6 +49,7 @@ const NAV = [
   { to: "/queue", label: "Queue", icon: ListOrdered },
   { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
   { to: "/pharmacy", label: "Pharmacy", icon: Package },
+  { to: "/counter", label: "Counter", icon: ShoppingCart },
   { to: "/billing", label: "Billing", icon: Receipt },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
@@ -185,6 +188,7 @@ export default function App() {
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/pharmacy" element={<PharmacyPage />} />
+          <Route path="/counter" element={<CounterPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

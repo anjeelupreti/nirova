@@ -10,11 +10,12 @@ multi-branch group.
 > OPD queue, encounters with vitals and SOAP notes, and prescribing with
 > allergy and interaction checking, and outpatient billing through to
 > payment, and laboratory and radiology ordering through to verified results.
-> pharmacy stock with batches, FEFO and expiry control, and procurement
-> from requisition through to stock. HR and the hospital inpatient
-> modules are not built yet.
+> pharmacy stock with batches, FEFO and expiry control, procurement from
+> requisition through to stock, and a retail counter with till sessions
+> and cash reconciliation. HR and the hospital inpatient modules are not
+> built yet.
 >
-> 32 of the specification's 132 sections are complete; see
+> 33 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -60,6 +61,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_diagnostics_demo # lab orders, a critical result
 .venv/Scripts/python.exe manage.py seed_pharmacy_demo    # stock, FEFO, a recall
 .venv/Scripts/python.exe manage.py seed_procurement_demo # order to goods receipt
+.venv/Scripts/python.exe manage.py seed_pos_demo         # a shift at the counter
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -118,6 +120,7 @@ backend/
     diagnostics/       laboratory and radiology, ordered and reported   [tenant]
     pharmacy/          products, batches, stock ledger, FEFO, expiry    [tenant]
     procurement/       suppliers, requisitions, orders, goods receipt   [tenant]
+    pos/               till sessions, counter sales, returns, cash-up   [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -230,6 +233,32 @@ Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
 
+### The till is reconciled, not trusted
+
+A session opens with a counted float and closes with a counted drawer. The
+expected figure is withheld until after the count — showing a cashier the
+number they are counting towards is how a count stops being a count.
+
+```
+close refused without an explanation: The drawer is short by 50.00.
+                                      Record why before closing.
+counted 1954.00 against 2004.00: variance -50.00
+  - Change given from own pocket for a 50 note.
+the cashier cannot sign off their own count
+```
+
+### Margin is net of returns
+
+A day that sold 24.00 and refunded 10.00 did not earn margin on 24.00. Goods
+returned and restocked give their cost back; goods written off do not — the
+pharmacy lost the refund *and* the stock.
+
+```
+4 sales gross 48.00, less 4 returns of 20.00 = net 28.00
+cost 28.80 less 7.20 back on the shelf = 21.60 (of which 4.80 written off)
+margin 6.40 (22.86%)
+```
+
 ### Segregation of duties
 
 Permissions declare their conflicts (`purchase.create` ⁄ `purchase.approve`,
@@ -289,6 +318,13 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/procurement/orders/{ref}/receive/` | Book a delivery in |
 | `POST /api/procurement/receipts/{ref}/post/` | Create batches and post to stock |
 | `GET /api/procurement/suppliers/{uuid}/performance/` | Lead time, fill rate, rejections |
+| `POST /api/pos/sessions/open/` | Open a till with a counted float |
+| `GET /api/pos/search/?q=` | Barcode, brand, generic or code |
+| `POST /api/pos/sales/quote/` | Price a basket - commits nothing |
+| `POST /api/pos/sales/` | Sell: stock, invoice, tender |
+| `POST /api/pos/sales/{ref}/return/` | Raise a return for approval |
+| `POST /api/pos/returns/{ref}/decide/` | Approve - refused for the requester |
+| `POST /api/pos/sessions/{ref}/close/` | Blind count; variance must be explained |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -340,10 +376,12 @@ Built:
       authorised override, expiry buckets, recall exposure, blind stock counts
 - [x] Procurement: suppliers with licence enforcement, requisitions, quotation
       comparison, orders, goods receipt with quality check, supplier performance
+- [x] Pharmacy POS: till sessions with blind cash-up, counter sales with split
+      tender, FEFO at the counter, approved returns, margin net of returns
 
 Next, in dependency order:
 
-- [ ] Pharmacy POS
+- [ ] Procurement screens
 - [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement

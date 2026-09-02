@@ -2102,3 +2102,288 @@ with no free units. The narration now only makes the claim when it applies.
 **Affects.** `apps/procurement/services.py`, `apps/procurement/models.py`,
 `apps/procurement/management/commands/seed_procurement_demo.py`.
 
+---
+
+## 087 - Pharmacy POS: the retail counter
+2026-09-03 · Point of sale · feature
+
+**What.** `apps.pos`: `CounterSession`, `Sale`, `SaleLine`, `SaleReturn`,
+`SaleReturnLine`, with services for opening a till, quoting a basket, selling,
+voiding, returning and cashing up. Implements §47.
+
+**Why a separate app from `pharmacy`.** A hospital dispensary knows who the
+patient is and bills their account. A retail counter serves someone who walked
+in off the street, takes their money now, and may never see them again. Same
+stock, different assumptions — and the assumptions are what the code encodes.
+
+**Three modules, one event, sequenced here.** Every sale touches `pharmacy`
+(stock leaves the shelf), `billing` (a tax invoice is raised and paid) and
+`pos` (which till, which cashier, which shift). This is the only place that
+knows the order, and **the order is stock first**. If the ledger posting fails
+— the batch was quarantined a second ago, someone else took the last three
+tablets — nothing has been billed and the customer is told before they pay.
+The reverse order takes money for goods that turn out not to exist.
+
+**A sale is an invoice.** Retail sale in Nepal requires a tax invoice, so the
+money goes through the same statutory numbering, credit notes and cash-up as
+everything else. A parallel revenue path for POS would give the organization
+two sets of books.
+
+**The till is reconciled, not trusted.** A session opens with a counted float
+and closes with a counted drawer, blind — the expected figure is not shown
+until after the count, for the same reason a stock count is blind. A variance
+must be explained before the till will close, and a second person signs the
+count off. Without that second signature a shortage is only ever attested by
+the person it would implicate.
+
+**Every control is a maker-checker pair.** Sell / void. Request a return /
+approve it. Count the drawer / sign the count off. The demo tenant ships with
+a counter assistant and a pharmacy manager as separate users, and
+`pharmacy_manager` deliberately holds neither `sale.create` nor `sale.return`,
+so the segregation check has something to bite on.
+
+**A walk-in has no patient record, and that is fine.** Requiring registration
+to sell a strip of paracetamol would mean either refusing the sale or
+inventing a patient — and invented patients corrupt the record the clinical
+side depends on. `Invoice.patient` is now nullable and `bill_to_name` carries
+the customer.
+
+**Restocking is a decision, not an assumption.** A sealed box returned within
+the hour goes back on the shelf; an opened bottle does not. Both are refunded.
+Goods that cannot be resold are still returned to the ledger first and *then*
+written off, so the loss shows as a write-off rather than as a sale that
+quietly never reversed.
+
+**Affects.** `apps/pos/`, `apps/billing/` (retail invoice, counter refund),
+`apps/pharmacy/models.py` (`Product.vat_rate`), `apps/rbac/`,
+`frontend/src/pages/Counter.tsx`.
+
+---
+
+## 088 - Two facilities issued the same invoice number
+2026-09-03 · Billing · fix · **important**
+
+`NumberSequence` was correctly scoped per facility, per document type, per
+fiscal year — and `format()` rendered `INV-<fiscal year>-<serial>`, with no
+facility in it. `Invoice.number` is unique across the tenant, so the second
+facility in an organization to issue an invoice on a given day collided on
+`INV-2083/84-000001` and the sale failed with an IntegrityError.
+
+The row was per facility. The string was not. The counter for facility B was
+sitting at 0 and handing out numbers facility A had already used.
+
+The prefix now carries the facility code — `INV-MKP-KTM-2083/84-000001`. This
+is not a uniqueness dodge: each facility holds its own PAN registration in
+Nepal and issues its own invoice book, so a number that does not say which
+book it came from is ambiguous on a tax return.
+
+**Numbers already issued are untouched.** An issued invoice is a statutory
+document; its number is what was handed to a customer. The migration sets the
+prefix used from now on and rewrites nothing.
+
+**Also learned:** the data migration first failed with `TenantRoutingError`.
+The router raises when no organization is bound, and a migration runs outside
+any request. The fix is `.using(schema_editor.connection.alias)` — which is
+more precise than ambient context would have been anyway, since the alias
+being migrated is right there on the schema editor. Worth remembering for
+every future tenant data migration.
+
+**Affects.** `apps/billing/models.py`, `apps/billing/services.py`,
+`apps/billing/migrations/0003_number_sequence_facility_prefix.py`.
+
+---
+
+## 089 - Money was becoming a float on the way out
+2026-09-03 · API · fix · **important**
+
+The whole billing module is built on `Decimal` — every field, every service,
+every rounding rule — and then the JSON encoder turned it into a float at the
+last step.
+
+DRF's `COERCE_DECIMAL_TO_STRING` covers serializer fields. It does not cover a
+view that returns a plain dict, which is what most reporting, dashboard and
+summary endpoints do because their shape is computed rather than modelled.
+Those go straight to the encoder, whose default for `Decimal` is `float`.
+
+Observed: `"unit_price": 2.0` and `"available": 1982.0` from the counter
+lookup. Harmless there; not harmless when a total of `1234.55` comes back as
+`1234.5499999999999`, a client formats it, and the customer is shown a figure
+that disagrees with their invoice. The precision was correct the entire way
+and lost in serialisation.
+
+`NirovaJSONRenderer` now renders `Decimal` as a string everywhere, so no view
+has to remember. Clients `Number()` it where they need arithmetic and print it
+verbatim where they do not.
+
+**Affects.** `apps/common/renderers.py`, `config/settings/base.py`.
+
+---
+
+## 090 - Primary keys were leaking into the API
+2026-09-03 · API · fix · **important**
+
+`GET /api/pharmacy/locations/?facility=<uuid>` returned
+`400: Select a valid choice. That choice is not one of the available choices.`
+
+The cause was not permissions. `StockLocationSerializer` listed `"facility"`
+in its fields, so DRF serialised the foreign key as its **primary key** — an
+integer — while every other endpoint publishes `uuid`. The client received a
+uuid from `/org/facilities/`, sent it back as a filter, and django-filter's
+generated `ModelChoiceFilter` looked for an integer.
+
+The message reads like an authorisation failure. It is a type mismatch, and it
+had been latent on the pharmacy screen as well as the new counter.
+
+Three reasons this is worth fixing systemically rather than per endpoint,
+in increasing order of cost:
+
+1. Clients get a `uuid` from one endpoint and an `id` from another for the
+   same object, so a filter built from what they were given returns 400.
+2. Sequential integers disclose how many patients, invoices or organizations
+   exist, and let anyone enumerate them.
+3. **Per-tenant databases mean `id` 42 is a different facility in every
+   tenant.** Anything that caches, logs or reports a bare integer is ambiguous
+   across tenants. A uuid never is. This one is specific to this architecture
+   and is the reason the rule is absolute here rather than a preference.
+
+Added `UUIDRelatedField` (foreign keys go out as the related object's uuid,
+read and write) and `uuid_filterset` (a FilterSet factory matching named
+relations on `__uuid`). Applied across pharmacy and POS.
+
+**Rejected:** telling clients to send `?facility__uuid=`. It works and it
+leaves the underlying inconsistency — two identifiers for one object — in
+place, which is what caused the confusion.
+
+**Affects.** `apps/common/fields.py`, `apps/common/filters.py`,
+`apps/pharmacy/serializers.py`, `apps/pharmacy/views.py`,
+`apps/pos/serializers.py`, `apps/pos/views.py`, `frontend/src/types/`.
+
+---
+
+## 091 - The day's margin was computed on goods that came back
+2026-09-03 · Point of sale · fix · **important**
+
+The counter summary reported `revenue 24.00, cost 14.40, margin 9.60 (40%)`
+on a day that had sold 24.00 and refunded 10.00 of it. Both rupee figures were
+gross. The percentage happened to be right; the amounts overstated the day by
+71%.
+
+Netting is not symmetric, and the asymmetry is the point:
+
+- Goods returned **and restocked** give their cost back. They are on the shelf
+  and will be sold again.
+- Goods returned and **written off** do not. The pharmacy refunded the
+  customer *and* lost the stock, so that cost stays in the day.
+
+The summary now reports gross revenue, returns and net revenue separately,
+with cost recovered only where the goods went back on sale, and margin
+computed on the net. The same day now reads `net 28.00, cost 21.60 of which
+4.80 written off, margin 6.40 (22.86%)` — which is the honest number, and it
+is much lower than the naive one precisely because write-offs are charged to
+the day that caused them.
+
+`session_takings` gained `net_takings` alongside `sales_total` for the same
+reason: "we sold 24 and gave 10 back" and "we sold 14" are different days, and
+a cashier reconciling a drawer needs both.
+
+**Affects.** `apps/pos/services.py`.
+
+---
+
+## 092 - A quoted basket, and a tender that means "the rest"
+2026-09-03 · Point of sale · design
+
+Writing the counter seed exposed an API that could not be used correctly.
+
+`create_sale` refuses to leave a walk-in sale unpaid — right, since a walk-in
+pays now. But the total is **rounded to the whole rupee on the invoice**,
+after discount and tax, so a caller could not know what to tender until after
+committing. The seed worked around it by selling as `corporate`, paying, then
+flipping the type back. A workaround in a seed is a workaround the real client
+would need too.
+
+Two additions, both of which are how a real counter already works:
+
+- **`quote_sale`** prices a basket and commits nothing — same rounding rule as
+  `billing._recalculate`, so the quote and the invoice agree to the paisa. It
+  also reports shortfalls and prescription-only warnings, so the cashier finds
+  out the shelf is short *before* the customer has handed over a note. The
+  till screen calls it on every scan.
+- **A tender with no `amount` settles the remaining balance.** "150 cash, the
+  rest on eSewa" is an ordinary sentence at a Nepali counter, and it is the
+  only way to hit a rupee-rounded total exactly without guessing it.
+
+**The general lesson:** the seed is worth writing *before* the client, because
+an API that is awkward to drive from a script is an API that is wrong, and
+that is much cheaper to learn in a management command than in a UI.
+
+**Affects.** `apps/pos/services.py`, `apps/pos/views.py`,
+`apps/pos/serializers.py`.
+
+---
+
+## 093 - A facility-scoped role bound to no facility
+2026-09-03 · RBAC · fix
+
+The counter user signed in successfully and saw an estate of zero facilities.
+
+`seed_demo` assigned `pharmacy_counter` with `scope="facility"` and no
+`facility=`. The scope filter then resolved to *no facility at all* and
+correctly returned nothing. The guard was working; the assignment was
+meaningless.
+
+The real cause was ordering: role assignment ran before the facilities were
+opened, so there was nothing to bind to. Counter roles are now assigned after
+`_open_facilities`.
+
+**Worth naming because of how it presents.** An empty list looks like a data
+problem or a permissions bug, and the instinct is to loosen the scope filter.
+The filter was right. A facility-scoped assignment with no facility should
+arguably be refused at `assign_role` rather than silently resolving to
+nothing — queued as a follow-up rather than changed mid-feature.
+
+**Affects.** `apps/tenancy/management/commands/seed_demo.py`.
+
+---
+
+## 094 - The counter screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Counter.tsx`. Opening a till, selling, tendering,
+returning, cashing up.
+
+**Keyboard-first, because of who uses it.** This screen is used more than
+every other screen in the product combined, by someone with a queue in front
+of them. The search box holds focus and returns to it after every action;
+Enter adds the top match; F2 opens payment; Enter again starts the next
+customer. A barcode scanner is a keyboard that types very fast and presses
+Enter, so scanning needs no separate mode. Barcode is matched exactly and
+first — a scanned code falling through to a fuzzy name search would produce a
+list where the cashier expected one item, which is the commonest way a counter
+sells the wrong product.
+
+**The total comes from the server.** Every basket change re-quotes. The screen
+never does its own money arithmetic, so it cannot ask for a rupee the receipt
+does not mention.
+
+**Nothing is hidden until it is too late.** Short stock, prescription-only
+flags and near expiry are on the line as it is added, not surfaced as a
+rejected submission after the customer has counted out their money.
+
+**Change is only offered on cash.** A wallet overpayment is not change, it is
+a failed transfer, and a counter that offered to hand notes back for one would
+be handing out the pharmacy's money. The last cash tender absorbs the change,
+so what reaches the invoice is what was actually kept.
+
+**The cash-up is blind.** The expected figure is deliberately not requested
+before the count. Showing a cashier the number they are counting towards is
+how a count stops being a count.
+
+**Permissions degrade, they do not break.** The day's margin needs
+`report.read`, which a counter assistant does not hold — they sell, they do
+not see the branch's profitability. The panel is simply absent, and the
+session's own totals are shown instead.
+
+**Affects.** `frontend/src/pages/Counter.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+

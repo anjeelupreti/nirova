@@ -8,6 +8,11 @@ the server about it, and the customer is standing there holding the receipt.
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys go out as the related object's uuid, never as
+# the internal integer id. See apps/common/fields.py for why that matters more
+# here than in a single-database application.
+from apps.common.fields import UUIDRelatedField
+
 from apps.pos.models import (
     CounterSession,
     Sale,
@@ -18,6 +23,8 @@ from apps.pos.models import (
 
 
 class CounterSessionSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
     location_code = serializers.CharField(source="location.code", read_only=True)
     has_variance = serializers.BooleanField(read_only=True)
@@ -37,6 +44,8 @@ class CounterSessionSerializer(serializers.ModelSerializer):
 
 
 class SaleLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
+    batch = UUIDRelatedField(read_only=True)
     returnable_quantity = serializers.DecimalField(
         max_digits=12, decimal_places=3, read_only=True
     )
@@ -53,6 +62,10 @@ class SaleLineSerializer(serializers.ModelSerializer):
 
 
 class SaleSerializer(serializers.ModelSerializer):
+    session = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
+    patient = UUIDRelatedField(read_only=True)
     lines = SaleLineSerializer(many=True, read_only=True)
     customer_label = serializers.CharField(read_only=True)
     is_returnable = serializers.BooleanField(read_only=True)
@@ -66,7 +79,8 @@ class SaleSerializer(serializers.ModelSerializer):
             "uuid", "reference", "session", "session_reference", "facility",
             "location", "sale_type", "patient", "customer_label",
             "customer_name", "customer_phone", "customer_pan",
-            "prescription_reference", "status", "sold_at", "sold_by_name",
+            "prescription_reference", "status", "is_returnable",
+            "sold_at", "sold_by_name",
             "subtotal", "discount_total", "tax_total", "rounding_adjustment",
             "total", "invoice_number", "void_reason", "notes", "lines",
         )
@@ -74,6 +88,7 @@ class SaleSerializer(serializers.ModelSerializer):
 
 
 class SaleReturnLineSerializer(serializers.ModelSerializer):
+    sale_line = UUIDRelatedField(read_only=True)
     product_name = serializers.CharField(
         source="sale_line.product_name", read_only=True
     )
@@ -91,6 +106,8 @@ class SaleReturnLineSerializer(serializers.ModelSerializer):
 
 
 class SaleReturnSerializer(serializers.ModelSerializer):
+    sale = UUIDRelatedField(read_only=True)
+    session = UUIDRelatedField(read_only=True)
     lines = SaleReturnLineSerializer(many=True, read_only=True)
     sale_reference = serializers.CharField(source="sale.reference", read_only=True)
 

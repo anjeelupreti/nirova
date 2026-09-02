@@ -196,6 +196,11 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Money must not become a float on the way out. See apps/common/renderers.
+    "DEFAULT_RENDERER_CLASSES": (
+        "apps.common.renderers.NirovaJSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    ),
     "EXCEPTION_HANDLER": "apps.common.exceptions.api_exception_handler",
 }
 

@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.organization.models import Facility
 from apps.patients.models import Patient
@@ -93,7 +94,11 @@ class StockLocationViewSet(viewsets.ModelViewSet):
     serializer_class = StockLocationSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("stock.read")]
     lookup_field = "uuid"
-    filterset_fields = ["facility", "location_type", "is_active"]
+    # Filters match on uuid because that is the identifier the API publishes.
+    filterset_class = uuid_filterset(
+        StockLocation, relations=["facility"],
+        fields=["location_type", "is_active"],
+    )
 
     def get_queryset(self):
         return StockLocation.objects.select_related("facility").order_by("code")
@@ -105,7 +110,9 @@ class BatchViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = BatchSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("stock.read")]
     lookup_field = "uuid"
-    filterset_fields = ["product", "status"]
+    filterset_class = uuid_filterset(
+        Batch, relations=["product"], fields=["status"]
+    )
     ordering_fields = ["expires_on", "received_on"]
 
     def get_queryset(self):

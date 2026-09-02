@@ -63,6 +63,7 @@ class Command(BaseCommand):
         counter_staff = self._counter_staff(organization, slug)
         self._assign_roles(organization, owner, requester, counter_staff)
         self._open_facilities(organization, requester, owner, platform_user)
+        self._assign_counter_roles(organization, counter_staff)
         self._report(organization)
 
     # -- control plane ---------------------------------------------------
@@ -229,14 +230,34 @@ class Command(BaseCommand):
             # could not raise the request for the first facility.
             assign_role(requester, "operations_manager", scope="organization",
                         reason="Demo seed")
-            cashier, pharmacy_manager = counter_staff
+        self.stdout.write("  roles assigned")
+
+    def _assign_counter_roles(self, organization, counter_staff):
+        """Bind the counter roles to an actual facility.
+
+        Must run *after* the facilities are open. A facility-scoped assignment
+        with no facility on it resolves to no facility at all -- the scope
+        filter is doing exactly what it should, and the user sees an empty
+        estate. It looks like a permissions bug and is really an ordering one.
+        """
+        cashier, pharmacy_manager = counter_staff
+        with tenant_context(context_for_organization(organization)):
+            from apps.organization.models import Facility as TenantFacility
+
+            facility = (
+                TenantFacility.objects.filter(facility_type="pharmacy").first()
+                or TenantFacility.objects.filter(facility_type="clinic").first()
+            )
+            if facility is None:
+                self.stdout.write("  no facility yet — counter roles skipped")
+                return
             # Facility scope for both: a counter is a place, and nothing about
             # either job needs sight of another branch's takings.
             assign_role(cashier, "pharmacy_counter", scope="facility",
-                        reason="Demo seed")
+                        facility=facility, reason="Demo seed")
             assign_role(pharmacy_manager, "pharmacy_manager", scope="facility",
-                        reason="Demo seed")
-        self.stdout.write("  roles assigned")
+                        facility=facility, reason="Demo seed")
+        self.stdout.write(f"  counter roles bound to {facility.code}")
 
     def _open_facilities(self, organization, requester, approver, platform_user):
         """Open facilities through the request workflow, including one refusal."""

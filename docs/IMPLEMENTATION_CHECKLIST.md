@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 32 of 132 | 384 |
-| Outstanding | 100 | 665 |
+| Done | 33 of 132 | 432 |
+| Outstanding | 99 | 670 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -782,20 +782,78 @@ rather than redesigning around it.
 - [ ] Corrective action record
 - [ ] Equipment maintenance linkage
 
-## §47 Pharmacy POS `[ ]`
+## §47 Pharmacy POS `[~]`
 
-- [ ] Over-the-counter sale
-- [ ] Prescription sale
-- [ ] Walk-in and patient-linked sale
-- [ ] Corporate and insurance sale
-- [ ] Credit sale
-- [ ] Barcode scanning
-- [ ] Generic and brand search
-- [ ] Batch selection at the counter
-- [ ] Sales return and refund
-- [ ] Partial and multiple payment
-- [ ] Thermal receipt printing
-- [ ] Cash drawer integration
+**Selling**
+- [x] Over-the-counter sale to a walk-in
+- [x] Prescription-only medicine refused without a prescription
+- [x] Prescription sale linked to the prescription record
+- [x] Patient-linked sale
+- [x] Corporate, insurance and staff sale (may leave a balance)
+- [x] Credit sale - balance permitted only for credit sale types
+- [x] Basket quoted before commit, with server-side rounding
+- [x] Shortfalls reported at quote time, before payment
+- [x] Sale refused when the shelf is short
+- [x] Barcode matched exactly and first
+- [x] Generic and brand search
+- [x] Batch chosen by FEFO, one item spanning several batches
+- [x] Batch selection at the counter, overriding FEFO with an audit trail
+- [x] Line discount as a percentage, taken before tax
+- [x] Selling above printed MRP refused
+- [x] VAT per product, defaulting to exempt
+- [ ] Discount above a threshold requiring approval
+- [ ] Package and combo pricing
+- [ ] Loyalty and repeat-customer lookup
+
+**Tender**
+- [x] Cash, card, eSewa, Khalti, IME Pay, Fonepay, bank transfer
+- [x] Partial and multiple payment on one sale
+- [x] A tender with no amount settles the remaining balance
+- [x] Change computed, offered on cash only
+- [x] Quick-tender note buttons
+- [x] Overpayment refused rather than absorbed
+- [ ] Wallet payment confirmed against the provider's API
+- [ ] Cash drawer integration (hardware)
+
+**Receipt**
+- [x] Receipt composed server-side so a reprint matches the original
+- [x] Statutory invoice number per facility, per fiscal year
+- [x] Batch and expiry printed per line
+- [x] Browser print
+- [ ] Thermal printer (ESC/POS) output
+- [ ] SMS and e-mail receipt
+
+**Till session**
+- [x] Open a till with a counted float
+- [x] One open session per till enforced
+- [x] Takings by payment method, computed from payment rows
+- [x] Blind cash count - expected figure withheld until after counting
+- [x] Variance must be explained before the till closes
+- [x] Second person signs the count off (maker-checker)
+- [x] Variance logged as a warning for review
+- [ ] Cash pickup and mid-shift drop
+- [ ] Shift handover between cashiers
+
+**Returns and voids**
+- [x] Partial return by line and quantity
+- [x] Refund is a proportion of what was actually charged
+- [x] Returns raised by the cashier, approved by someone else
+- [x] Restock or write off decided by the approver, not the requester
+- [x] Write-off posts to the ledger as a write-off, not a silent loss
+- [x] Credit note against the original invoice
+- [x] Refund recorded as a negative payment so the day nets
+- [x] Void a whole sale, approved by someone other than the seller
+- [x] Return refused with a stated reason
+- [ ] Return window policy (time limit)
+- [ ] Exchange (return and re-sell in one transaction)
+
+**Reporting**
+- [x] Day summary: gross, returns, net revenue
+- [x] Margin net of returns, with write-offs charged to the day
+- [x] Top-selling products
+- [x] Cost captured per line at the time of sale
+- [ ] Cashier performance and per-till comparison
+- [ ] Hourly sales profile
 
 ## §48 Pharmacy procurement `[~]`
 
@@ -1529,6 +1587,14 @@ breaking one in a new module breaks the platform.
       compensating row, exactly one of the two feeds any total (log 064).
 - [ ] A figure compared across options is normalised first — cost per
       unit, not total spend, when the quantities differ (log 086).
+- [x] Foreign keys are published as `uuid`, never as an integer primary
+      key - `id` 42 is a different row in every tenant (log 090).
+- [x] `Decimal` is rendered as a string, never a float, including from
+      hand-built dict responses (log 089).
+- [ ] A document number that must be unique tenant-wide carries the
+      facility that issued it (log 088).
+- [ ] A figure reported as revenue or margin is net of returns, with
+      write-offs charged to the day that caused them (log 091).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

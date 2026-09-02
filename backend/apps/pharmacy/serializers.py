@@ -2,6 +2,11 @@
 
 from rest_framework import serializers
 
+# UUIDRelatedField: foreign keys go out as the related object's uuid. A client
+# that receives `uuid` from one endpoint and an integer id from another cannot
+# build a filter out of what it was given -- see apps/common/fields.py.
+from apps.common.fields import UUIDRelatedField
+
 from apps.pharmacy.models import (
     Batch,
     BatchStock,
@@ -38,6 +43,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class StockLocationSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    department = UUIDRelatedField(read_only=True)
+    parent = UUIDRelatedField(read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
 
     class Meta:
@@ -51,6 +59,7 @@ class StockLocationSerializer(serializers.ModelSerializer):
 
 
 class BatchSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
     product_name = serializers.CharField(
         source="product.display_name", read_only=True
     )
@@ -75,6 +84,9 @@ class BatchSerializer(serializers.ModelSerializer):
 
 
 class BatchStockSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
+    batch = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     product_name = serializers.CharField(
         source="product.display_name", read_only=True
     )
@@ -99,6 +111,9 @@ class BatchStockSerializer(serializers.ModelSerializer):
 
 
 class StockEntrySerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
+    batch = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     product_name = serializers.CharField(
         source="product.display_name", read_only=True
     )
@@ -197,6 +212,8 @@ class DispenseCreateSerializer(serializers.Serializer):
 
 
 class DispenseLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
+    batch = UUIDRelatedField(read_only=True)
     class Meta:
         model = DispenseLine
         fields = (
@@ -209,6 +226,9 @@ class DispenseLineSerializer(serializers.ModelSerializer):
 
 
 class DispenseSerializer(serializers.ModelSerializer):
+    patient = UUIDRelatedField(read_only=True)
+    facility = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     lines = DispenseLineSerializer(many=True, read_only=True)
     patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
     patient_name = serializers.CharField(source="patient.full_name", read_only=True)
@@ -241,6 +261,8 @@ class QuarantineSerializer(serializers.Serializer):
 
 
 class StockCountLineSerializer(serializers.ModelSerializer):
+    product = UUIDRelatedField(read_only=True)
+    batch = UUIDRelatedField(read_only=True)
     product_name = serializers.CharField(
         source="product.display_name", read_only=True
     )
@@ -276,6 +298,8 @@ class StockCountLineSerializer(serializers.ModelSerializer):
 
 
 class StockCountSerializer(serializers.ModelSerializer):
+    facility = UUIDRelatedField(read_only=True)
+    location = UUIDRelatedField(read_only=True)
     lines = StockCountLineSerializer(many=True, read_only=True)
     location_code = serializers.CharField(source="location.code", read_only=True)
 
