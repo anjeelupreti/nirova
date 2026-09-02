@@ -4,10 +4,14 @@ A multi-tenant healthcare SaaS platform for Nepal: clinics, hospitals,
 pharmacies, laboratories and diagnostic centres, from a single site up to a
 multi-branch group.
 
-> **Status: foundation.** The platform core is built and running — tenancy,
-> identity, RBAC, the subscription and entitlement engine, and the facility
-> lifecycle. The clinical, pharmacy, laboratory, finance and HR modules are
-> not built yet. See [Roadmap](#roadmap).
+> **Status: early.** The platform core is built and running — tenancy,
+> identity, RBAC, the subscription and entitlement engine and the facility
+> lifecycle — together with the clinical foundation: patients, appointments
+> and the OPD queue. Pharmacy, laboratory, finance, HR and the hospital
+> inpatient modules are not built yet.
+>
+> 17 of the specification's 132 sections are complete; see
+> [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
 
@@ -60,6 +64,11 @@ raises facility change requests and approves them rather than inserting rows,
 so a successful run is also a test of entitlements, quotas, approval routing,
 segregation of duties and cross-database writes.
 
+`seed_clinical_demo` does the same for the clinical path: it registers six
+patients through duplicate detection and quota checks, builds three doctors'
+schedules, books into them, and issues queue tokens — including a walk-in
+emergency that correctly overtakes three booked patients.
+
 ### Demo accounts
 
 Password for all three: `NirovaDemo!2026`
@@ -92,10 +101,13 @@ backend/
     organization/      facilities, departments, units, configuration   [tenant]
     rbac/              roles, assignments, permission overrides        [tenant]
     audit/             audit log and entity version history            [tenant]
+    patients/          patient master, identifiers, allergies, merge   [tenant]
+    scheduling/        provider schedules, appointments, OPD queue     [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
-  DEVELOPMENT_LOG.md   every change, and why it was made that way
-  adr/                 architecture decision records
+  DEVELOPMENT_LOG.md          every change, and why it was made that way
+  IMPLEMENTATION_CHECKLIST.md all 132 spec sections, with status
+  adr/                        architecture decision records
 infra/                 docker-compose for Postgres and Redis
 ```
 
