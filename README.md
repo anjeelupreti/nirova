@@ -10,10 +10,11 @@ multi-branch group.
 > OPD queue, encounters with vitals and SOAP notes, and prescribing with
 > allergy and interaction checking, and outpatient billing through to
 > payment, and laboratory and radiology ordering through to verified results.
-> and pharmacy stock with batches, FEFO and expiry control. HR and the
-> hospital inpatient modules are not built yet.
+> pharmacy stock with batches, FEFO and expiry control, and procurement
+> from requisition through to stock. HR and the hospital inpatient
+> modules are not built yet.
 >
-> 30 of the specification's 132 sections are complete; see
+> 32 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -58,6 +59,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_billing_demo     # prices, invoices, a refund
 .venv/Scripts/python.exe manage.py seed_diagnostics_demo # lab orders, a critical result
 .venv/Scripts/python.exe manage.py seed_pharmacy_demo    # stock, FEFO, a recall
+.venv/Scripts/python.exe manage.py seed_procurement_demo # order to goods receipt
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -115,6 +117,7 @@ backend/
     billing/           services, prices, charges, invoices, payments    [tenant]
     diagnostics/       laboratory and radiology, ordered and reported   [tenant]
     pharmacy/          products, batches, stock ledger, FEFO, expiry    [tenant]
+    procurement/       suppliers, requisitions, orders, goods receipt   [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -213,6 +216,20 @@ DSP-2026-000001:
 Naming a later batch while an earlier one has stock is refused until a reason
 is given — then recorded on both the ledger entry and the dispensing line.
 
+### Quotations are compared on cost per unit, not total
+
+A supplier quoting 4,600 for 600 units (500 paid, 100 free) beats one quoting
+4,300 for 500. Ranking on the totals picks the wrong one:
+
+```
+Himalayan Medico Supplies   total 4600.00  units 600 (free 100)  per unit 7.67
+Nepal Pharma Distributors   total 4300.00  units 500 (free   0)  per unit 8.60
+```
+
+Choosing the dearer quotation is allowed and requires a stated reason —
+an unexplained preference for a costlier supplier is what procurement fraud
+looks like.
+
 ### Segregation of duties
 
 Permissions declare their conflicts (`purchase.create` ⁄ `purchase.approve`,
@@ -266,6 +283,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `GET /api/pharmacy/stock/expiring/` | Batches by expiry bucket, with value at cost |
 | `GET /api/pharmacy/batches/{uuid}/exposure/` | Who received a recalled batch |
 | `POST /api/pharmacy/counts/{uuid}/approve/` | Approve variances — refused for the counter |
+| `POST /api/procurement/requisitions/` | Raise a request to buy |
+| `GET /api/procurement/requisitions/{ref}/compare/` | Rank quotations on cost per unit |
+| `POST /api/procurement/orders/` | Raise an order — 409 for a dearer quote with no reason |
+| `POST /api/procurement/orders/{ref}/receive/` | Book a delivery in |
+| `POST /api/procurement/receipts/{ref}/post/` | Create batches and post to stock |
+| `GET /api/procurement/suppliers/{uuid}/performance/` | Lead time, fill rate, rejections |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -315,10 +338,12 @@ Built:
       critical-value alerting, verification by a second person
 - [x] Pharmacy: product master, batches, immutable stock ledger, FEFO with
       authorised override, expiry buckets, recall exposure, blind stock counts
+- [x] Procurement: suppliers with licence enforcement, requisitions, quotation
+      comparison, orders, goods receipt with quality check, supplier performance
 
 Next, in dependency order:
 
-- [ ] Pharmacy POS and procurement
+- [ ] Pharmacy POS
 - [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement

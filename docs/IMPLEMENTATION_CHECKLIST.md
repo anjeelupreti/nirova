@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 30 of 132 | 366 |
-| Outstanding | 102 | 676 |
+| Done | 32 of 132 | 384 |
+| Outstanding | 100 | 665 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -797,21 +797,24 @@ rather than redesigning around it.
 - [ ] Thermal receipt printing
 - [ ] Cash drawer integration
 
-## §48 Pharmacy procurement `[ ]`
+## §48 Pharmacy procurement `[~]`
 
-- [ ] Demand aggregation
-- [ ] Reorder generation
-- [ ] Purchase requisition
-- [ ] Requisition approval
-- [ ] Request for quotation
-- [ ] Supplier quotations
-- [ ] Quotation comparison
-- [ ] Purchase order
-- [ ] Goods receipt note
-- [ ] Quality check on receipt
-- [ ] Batch creation from receipt
-- [ ] Supplier invoice matching
+- [x] Demand aggregation from reorder levels
+- [x] Reorder generation into a requisition
+- [x] Purchase requisition
+- [x] Requisition approval, refused for the requester
+- [x] Supplier quotations
+- [x] Quotation comparison on blended cost per unit
+- [x] Purchase order
+- [x] Order approval, refused for whoever raised it
+- [x] Dearer quotation requires a stated reason
+- [x] Goods receipt note
+- [x] Quality check with per-line rejection
+- [x] Batch creation from receipt, traceable to the delivery
+- [x] Supplier invoice matching (reported, not blocking)
+- [ ] Request for quotation issued to suppliers
 - [ ] Accounts payable posting
+- [ ] Purchase returns to supplier
 
 ## §49 Wholesale and distribution `[ ]`
 
@@ -1210,11 +1213,18 @@ rather than redesigning around it.
 
 # Phase 7 — Facility operations `[ ]`
 
-## §53 Procurement management `[ ]`
-- [ ] Requisition · RFQ · quotation · comparison · supplier selection
-- [ ] Purchase order · goods receipt · quality check · invoice · return · payment
-- [ ] Supplier master: PAN/VAT, contacts, contracts, credit terms
-- [ ] Supplier performance: price history, lead time, fill rate, return rate, quality
+## §53 Procurement management `[~]`
+- [x] Requisition, quotation, comparison and supplier selection
+- [x] Purchase order, goods receipt and quality check
+- [x] Supplier master: PAN/VAT, contacts, credit terms, drug licence
+- [x] Licence expiry blocks ordering, re-checked at approval
+- [x] Supplier performance measured from receipts — lead time variance, fill
+      rate, rejection rate, overdue orders
+- [ ] RFQ issued to suppliers
+- [ ] Supplier contracts
+- [ ] Supplier invoice and payment posting
+- [ ] Purchase returns
+- [ ] Price history analytics
 
 ## §54 Contract management `[ ]`
 - [ ] Contracts for suppliers, employees, doctors, insurers, vendors, equipment, maintenance, rent, corporate customers
@@ -1517,6 +1527,8 @@ breaking one in a new module breaks the platform.
       any cached total rebuildable from it (log 077).
 - [ ] Where a reversal is recorded both as a status change *and* as a
       compensating row, exactly one of the two feeds any total (log 064).
+- [ ] A figure compared across options is normalised first — cost per
+      unit, not total spend, when the quantities differ (log 086).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

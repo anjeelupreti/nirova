@@ -2008,3 +2008,97 @@ speculative lines for a module nobody has scoped is planning theatre.
 
 **Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.
 
+---
+
+## 085 — Procurement: requisition to stock
+2026-09-03 · Procurement · feature
+
+**What.** `apps.procurement`: `Supplier`, `PurchaseRequisition`, `Quotation`,
+`PurchaseOrder`, `GoodsReceipt` and their lines. Implements §48 and §53:
+demand → requisition → approval → quotation → comparison → order → receipt →
+quality check → batch → stock.
+
+**A requisition is a request; a purchase order is a commitment.** Separate
+documents because the first is internal and reversible and the second binds
+the organization to a supplier. Collapsing them would give everyone who can
+ask for something the authority to spend.
+
+**Receiving is the single door stock comes through.** Posting a receipt
+creates the pharmacy batch and the ledger movement, so every batch on a shelf
+traces back to the delivery, the order, the quotation and the requisition. The
+ad-hoc batch creation the pharmacy seed used is now the exception rather than
+the path.
+
+**Quality check happens before posting, not after.** Stock that failed
+inspection should never have been dispensable, and reversing it afterwards
+leaves a window in which it could have gone out.
+
+**Specific decisions.**
+
+- *The stock position is frozen onto each requisition line when it is raised*,
+  so an approver sees what the requester saw. Looking it up at approval time
+  would show today's figure and could make an urgent request look
+  unjustified because someone else's delivery landed in between.
+- *Supplier status distinguishes blacklisted from inactive.* Both block
+  ordering; only one is a decision somebody has to justify.
+- *A lapsed drug licence blocks ordering.* Buying medicines from an
+  unlicensed distributor is a regulatory breach, and the moment to catch it is
+  before the order goes out — re-checked at approval too, since an order
+  raised last week may have been approved this week.
+- *Supplier performance is computed from receipts, never stored.* A
+  performance score somebody typed is a performance score somebody chose. The
+  gap between agreed and measured lead time is the number worth looking at.
+
+**Affects.** `apps/procurement/`.
+
+---
+
+## 086 — Three arithmetic errors the seed caught
+2026-09-03 · Procurement · fix · **important**
+
+All three were visible in the demo output and would have been invisible in a
+unit test that asserted the code's own behaviour.
+
+**1. The quotation comparison named the wrong winner.**
+
+It ranked on total spend. Nepal quoted 4,300 for 500 units; Himalayan quoted
+4,600 for 600 (500 paid, 100 free). Ranking on the total made Nepal cheapest —
+while the per-unit column printed on the same line read 8.60 against 7.67.
+
+Total spend is only comparable when the quantities are equal, and free units
+are exactly the case where they are not. A comparison that contradicts the
+numbers beside it is worse than none: a buyer either follows it and overpays,
+or stops trusting the tool.
+
+Now ranked on **blended effective cost per unit** — total spend over total
+units received. Total is still reported, because a buyer also has a budget.
+
+**2. Fill rate came out at 116%.**
+
+580 received against 500 ordered. The 100 free units counted as delivery
+against a denominator that excluded them. The denominator is now quantity plus
+free quantity — everything the supplier undertook to deliver — giving 96%.
+
+**3. Rejected stock inflated the cost of what was kept.**
+
+`effective_unit_cost` divided by `accepted_quantity`. With 500 received at
+8.60 and 20 rejected, the accepted stock came out at **8.96 a unit** — the
+cost of goods being sent back loaded onto the goods kept. That overstates
+inventory value and quietly writes off a claim the supplier owes.
+
+Now divided by `total_units`. Free units still dilute the cost, which is
+correct; rejected units no longer concentrate it, because what was rejected is
+credited by the supplier rather than absorbed by the shelf.
+
+**What made all three visible.** The seed printed its own reasoning next to
+the numbers — "the higher headline price wins because of the free units" —
+and the numbers disagreed with it. That is worth keeping as a habit: a seed
+that narrates what it believes will contradict itself when the arithmetic is
+wrong, where one that only prints values will not.
+
+**Also fixed:** the seed asserted "diluted by the free stock" even on an order
+with no free units. The narration now only makes the claim when it applies.
+
+**Affects.** `apps/procurement/services.py`, `apps/procurement/models.py`,
+`apps/procurement/management/commands/seed_procurement_demo.py`.
+
