@@ -10,9 +10,10 @@ multi-branch group.
 > OPD queue, encounters with vitals and SOAP notes, and prescribing with
 > allergy and interaction checking, and outpatient billing through to
 > payment, and laboratory and radiology ordering through to verified results.
-> Pharmacy stock, HR and the hospital inpatient modules are not built yet.
+> and pharmacy stock with batches, FEFO and expiry control. HR and the
+> hospital inpatient modules are not built yet.
 >
-> 24 of the specification's 132 sections are complete; see
+> 30 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -56,6 +57,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_consultation_demo # three consultations
 .venv/Scripts/python.exe manage.py seed_billing_demo     # prices, invoices, a refund
 .venv/Scripts/python.exe manage.py seed_diagnostics_demo # lab orders, a critical result
+.venv/Scripts/python.exe manage.py seed_pharmacy_demo    # stock, FEFO, a recall
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -112,6 +114,7 @@ backend/
     prescriptions/     prescribing, and the safety checks around it    [tenant]
     billing/           services, prices, charges, invoices, payments    [tenant]
     diagnostics/       laboratory and radiology, ordered and reported   [tenant]
+    pharmacy/          products, batches, stock ledger, FEFO, expiry    [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -195,6 +198,21 @@ A critical value raises a `CriticalValueAlert` the moment it is *entered* —
 not at verification — because it obliges someone to make a phone call, and
 the record has to show who was told and when.
 
+### Stock is a ledger, not a counter
+
+There is no `quantity_on_hand` column. Every movement is an append-only entry
+and the balance is their sum, so a discrepancy can always be replayed and
+explained. Dispensing takes stock earliest-expiry-first, spanning batches:
+
+```
+DSP-2026-000001:
+   40.000 from AMX-2024-A (expires 2026-09-27)
+   20.000 from AMX-2025-B (expires 2027-03-31)
+```
+
+Naming a later batch while an earlier one has stock is refused until a reason
+is given — then recorded on both the ledger entry and the dispensing line.
+
 ### Segregation of duties
 
 Permissions declare their conflicts (`purchase.create` ⁄ `purchase.approve`,
@@ -242,6 +260,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/diagnostics/orders/{uuid}/verify/` | Verify and release — refused for the entering user |
 | `GET /api/diagnostics/worklist/?facility=` | Department worklist, STAT first |
 | `GET /api/diagnostics/turnaround/?facility=` | TAT performance and breach rate |
+| `POST /api/pharmacy/stock/receive/` | Book a batch in |
+| `GET /api/pharmacy/dispenses/allocate/` | Preview which batches FEFO would take |
+| `POST /api/pharmacy/dispenses/` | Dispense — 409 if it would break FEFO without a reason |
+| `GET /api/pharmacy/stock/expiring/` | Batches by expiry bucket, with value at cost |
+| `GET /api/pharmacy/batches/{uuid}/exposure/` | Who received a recalled batch |
+| `POST /api/pharmacy/counts/{uuid}/approve/` | Approve variances — refused for the counter |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -289,10 +313,12 @@ Built:
 - [x] Billing: layered pricing, gapless statutory numbering, credit notes, refunds
 - [x] Diagnostics: lab and radiology ordering, population reference ranges,
       critical-value alerting, verification by a second person
+- [x] Pharmacy: product master, batches, immutable stock ledger, FEFO with
+      authorised override, expiry buckets, recall exposure, blind stock counts
 
 Next, in dependency order:
 
-- [ ] Pharmacy product master, batches and FEFO
+- [ ] Pharmacy POS and procurement
 - [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement

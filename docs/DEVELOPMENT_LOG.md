@@ -1817,3 +1817,136 @@ identical until the day it matters.
 
 **Affects.** Nothing in the repository.
 
+---
+
+## 077 — Stock is a ledger, never a counter
+2026-09-02 · Pharmacy · decision
+
+**What.** `apps.pharmacy` has no `quantity_on_hand` column that code
+increments. Every movement is an append-only `StockEntry`; the balance is
+their sum. `BatchStock` caches that sum and is rebuildable from the ledger by
+`rebuild_stock_cache()`.
+
+**Why.** A counter is one lost update away from being wrong with no way to
+discover when it happened. A ledger can be replayed, reconciled and explained
+— and when the cache and the ledger disagree, the ledger is right by
+construction rather than by convention.
+
+**How the cache stays honest.** `post_movement` locks the cache row with
+`select_for_update` for the duration, so two counters dispensing the same
+batch cannot both read the same balance and both succeed. The lock is on the
+cache because that is the row being contended.
+
+**Quantities are always positive**, with direction carried by
+`INBOUND_MOVEMENTS`. Signed quantities were rejected: a negative number that
+should have been positive is invisible on inspection, while a movement type
+that does not match its context is obvious.
+
+**Affects.** `apps/pharmacy/`.
+
+---
+
+## 078 — Batches are the unit of stock, not products
+2026-09-02 · Pharmacy · decision
+
+**What.** Stock, expiry, FEFO, recall and cost all attach to `Batch`, not
+`Product`.
+
+**Why.** Two boxes of the same paracetamol expiring in different months are
+different stock. More sharply: a product-level system cannot answer "who
+received the recalled lot?", which is the question that gets asked when it
+matters. `recall_exposure()` answers it only because the ledger records the
+patient on every dispensing movement.
+
+Demonstrated: quarantining `AMX-2024-A` named the one patient who received 40
+units of it, with their phone number, and removed the batch from FEFO's offer
+while leaving the stock physically where it was.
+
+**Costs are per batch too.** The same medicine bought twice at different
+prices has two costs; averaging them silently destroys the margin figure.
+
+**Affects.** `apps/pharmacy/models.py`, `apps/pharmacy/services.py`.
+
+---
+
+## 079 — FEFO, and overriding it deliberately
+2026-09-02 · Pharmacy · feature
+
+**What.** `allocate_fefo()` takes stock earliest-expiry-first, spanning
+batches when the first is not big enough. Naming a later batch while an
+earlier one has stock raises `FefoOverrideRequired` — a 409 carrying which
+batch expires sooner and when.
+
+**Why not just refuse.** There are real reasons to break FEFO: a damaged
+outer box, a presentation the patient cannot swallow, a batch physically at
+another counter. What is unacceptable is doing it silently, so the override is
+captured with a reason and an approver, written onto both the ledger entry and
+the dispensing line, and logged at WARNING.
+
+**Verified end to end.** Dispensing 60 capsules took all 40 from the
+near-expiry batch then 20 from the next — the span is the normal case, not an
+edge case, because the oldest batch is usually not big enough alone. The
+override was then refused without a reason and accepted with one.
+
+**Affects.** `apps/pharmacy/services.py`.
+
+---
+
+## 080 — Expiry has eight thresholds, not one
+2026-09-02 · Pharmacy · decision
+
+**What.** `EXPIRY_BUCKETS` at 365, 180, 120, 90, 60, 30, 15 and 7 days, per
+the specification (section 42).
+
+**Why.** A batch does not become worthless on its expiry date; it becomes
+progressively harder to shift for months beforehand. At 180 days it can be
+transferred to a busier branch, at 30 discounted, at 7 it is probably a
+write-off. One threshold would surface the problem when it is already a loss.
+
+**`sweep_expired()` does two things, both necessary.** Marking the batch
+expired stops it being dispensed; writing the stock out of the ledger stops it
+being counted as an asset. Doing only the first inflates the valuation; doing
+only the second leaves a batch that still looks dispensable.
+
+**`Batch.is_dispensable` checks status *and* date.** A batch can be past its
+date while still marked active — nothing has run the sweep yet — and checking
+only the status would dispense expired stock every morning before it ran.
+
+**Affects.** `apps/pharmacy/models.py`, `apps/pharmacy/services.py`.
+
+---
+
+## 081 — A stock count cannot approve itself
+2026-09-02 · Pharmacy · decision
+
+**What.** `approve_count()` calls `assert_different_actors()` against the
+counter, and refuses to post an adjustment whose variance has no explanation.
+
+**Why.** A stock adjustment is the classic route for concealing theft, and a
+count that adjusts itself is a blank cheque. Counts are also **blind by
+default** — the serializer withholds the expected quantity while counting,
+because showing it produces counts that match expectation rather than reality.
+
+Expected quantities are frozen when the count opens, so a movement mid-count
+cannot change the variance under the counter's feet.
+
+**Affects.** `apps/pharmacy/services.py`, `apps/pharmacy/serializers.py`.
+
+---
+
+## 082 — The seed narrates what happened, not what was expected
+2026-09-02 · Tooling · fix
+
+**What.** `seed_pharmacy_demo` now describes the FEFO result from the actual
+allocation instead of asserting a fixed outcome.
+
+**Why.** On a second run the near-expiry batch is already gone, so the
+dispensing came from one batch — while the output still claimed "the 40
+nearest expiry went first, then 20 from the next". The mechanism was right;
+the commentary had become a quiet lie.
+
+A seed that describes an outcome it did not verify is worse than one that says
+nothing, because it is read as evidence.
+
+**Affects.** `apps/pharmacy/management/commands/seed_pharmacy_demo.py`.
+

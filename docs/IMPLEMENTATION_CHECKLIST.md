@@ -12,7 +12,7 @@ This is the map of what exists, what is next, and what has not been started.
 | ⬜ | Not started |
 | 🔷 | Architecturally provided for — the seam exists, the module does not |
 
-**Progress:** 24 of 132 sections complete, 13 partial.
+**Progress:** 30 of 132 sections complete, 15 partial.
 The completed set is deliberately the platform core: every remaining module
 depends on tenancy, identity, RBAC and entitlements, and building a vertical
 first would mean rewriting it.
@@ -78,21 +78,21 @@ customers, and the module a hospital needs first.*
 | § | Section | Status |
 |---|---|---|
 | 37 | Pharmacy OS (7 deployment shapes) | ⬜ |
-| 38 | Product master | ⬜ |
-| 39 | Batch management | ⬜ |
-| 40 | Pharmacy inventory (18 transaction types) | ⬜ |
-| 41 | FEFO with authorised override | ⬜ |
-| 42 | Expiry management (9 thresholds) | ⬜ |
-| 43 | Recall | ⬜ |
+| 38 | Product master | ✅ | Generic and brand, strengths, forms, pack sizes, storage conditions, control schedules, reorder policy |
+| 39 | Batch management | ✅ | Expiry, supplier, per-batch cost and price, six statuses including quarantine and recall |
+| 40 | Pharmacy inventory (18 transaction types) | ✅ | Twenty movement types on an immutable append-only ledger, with a rebuildable cache |
+| 41 | FEFO with authorised override | ✅ | Earliest-expiry allocation spanning batches; override refused without a reason, then recorded on the ledger entry and the dispensing line |
+| 42 | Expiry management (9 thresholds) | ✅ | Eight buckets plus expired, value at cost per bucket, sweep that both blocks dispensing and writes off |
+| 43 | Recall | 🟡 | Quarantine, FEFO exclusion, and full patient exposure from the ledger. Supplier notification and destruction records outstanding |
 | 44 | Pharmacovigilance | ⬜ |
-| 45 | Controlled / restricted medicines | ⬜ |
+| 45 | Controlled / restricted medicines | 🟡 | Control schedules on the product and prescription-only enforcement. Enhanced ledger and witnessed counts outstanding |
 | 46 | Cold chain | ⬜ |
 | 47 | Pharmacy POS | ⬜ |
 | 48 | Pharmacy procurement | ⬜ |
 | 49 | Wholesale / distribution | ⬜ |
 | 50 | Inventory / supply chain platform | ⬜ |
-| 51 | Inventory forecasting | ⬜ |
-| 52 | Stock counting | ⬜ |
+| 51 | Inventory forecasting | 🟡 | Consumption rate, days of cover, reorder suggestions that flag stock-out before delivery. Seasonality and EOQ outstanding |
+| 52 | Stock counting | ✅ | Blind counts, frozen expectations, variance explanations, approval by someone other than the counter |
 
 ---
 
@@ -270,6 +270,9 @@ enforced in the core; breaking one in a new module breaks the platform.
       (development log 054).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Money is `Decimal` everywhere — never `float` — and rounds half-up.
+- [ ] Quantities that must reconcile are held as an append-only
+      ledger, with any cached total rebuildable from it
+      (development log 077).
 - [ ] Where a reversal is recorded both as a status change *and* as a
       compensating row, exactly one of the two feeds any total (development
       log 064).
