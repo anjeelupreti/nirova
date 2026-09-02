@@ -141,6 +141,19 @@ class Product(BaseModel):
     )
     requires_prescription = models.BooleanField(default=False)
 
+    #: VAT on retail sale, as a percentage.
+    #:
+    #: Defaults to zero because most medicines in Nepal are VAT-exempt. It is
+    #: a field rather than a rule inferred from `category` because the
+    #: exemption list is set by the tax authority and changes without asking
+    #: anything about how we classify a product -- surgical consumables and
+    #: devices are commonly standard-rated while the medicine beside them on
+    #: the shelf is not.
+    vat_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=ZERO,
+        help_text="Percentage. Zero for VAT-exempt items.",
+    )
+
     # -- stock policy ------------------------------------------------------
 
     reorder_level = models.DecimalField(

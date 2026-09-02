@@ -117,6 +117,24 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("stock.transfer", "Transfer stock between locations", "Inventory"),
     _p("stock.count", "Perform stock counts", "Inventory"),
 
+    # -- point of sale ----------------------------------------------------
+    #
+    # Kept apart from `invoice.*` because the counter is where cash is
+    # physically handled, and the controls that matter there are about the
+    # drawer rather than about the ledger. Three maker-checker pairs: whoever
+    # sells cannot void, whoever asks for a return cannot approve it, and
+    # whoever counted the till cannot be the one who signs the count off.
+    _p("sale.read", "View counter sales", "Point of sale"),
+    _p("sale.create", "Sell at the counter", "Point of sale"),
+    _p("sale.void", "Void a completed sale", "Point of sale",
+       is_sensitive=True, conflicts_with=("sale.create",)),
+    _p("sale.return", "Raise a sales return", "Point of sale"),
+    _p("sale.return_approve", "Approve a sales return", "Point of sale",
+       is_sensitive=True, conflicts_with=("sale.return",)),
+    _p("till.open", "Open and close a till session", "Point of sale"),
+    _p("till.reconcile", "Sign off a till session", "Point of sale",
+       is_sensitive=True, conflicts_with=("till.open",)),
+
     # -- procurement ------------------------------------------------------
     _p("purchase.read", "View purchases", "Procurement"),
     _p("purchase.create", "Raise purchase orders", "Procurement"),

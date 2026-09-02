@@ -60,7 +60,8 @@ class Command(BaseCommand):
         owner = self._owner(organization, slug)
         requester = self._requester(organization, slug)
 
-        self._assign_roles(organization, owner, requester)
+        counter_staff = self._counter_staff(organization, slug)
+        self._assign_roles(organization, owner, requester, counter_staff)
         self._open_facilities(organization, requester, owner, platform_user)
         self._report(organization)
 
@@ -201,9 +202,25 @@ class Command(BaseCommand):
             f"manager@{slug}.test", "Bikash Thapa", organization, False, slug
         )
 
+    def _counter_staff(self, organization, slug):
+        """The two people a retail counter needs, and why they are two.
+
+        Every control at a till is a maker-checker pair: sell/void, request a
+        return/approve it, count the drawer/sign the count off. One user
+        holding both halves makes all three checks vacuous, so the demo tenant
+        ships with the pair separated.
+        """
+        cashier = self._user(
+            f"counter@{slug}.test", "Rita Gurung", organization, False, slug
+        )
+        pharmacy_manager = self._user(
+            f"pharmacy@{slug}.test", "Anil Maharjan", organization, False, slug
+        )
+        return cashier, pharmacy_manager
+
     # -- tenant ----------------------------------------------------------
 
-    def _assign_roles(self, organization, owner, requester):
+    def _assign_roles(self, organization, owner, requester, counter_staff):
         context = context_for_organization(organization)
         with tenant_context(context):
             assign_role(owner, "organization_admin", scope="organization",
@@ -211,6 +228,13 @@ class Command(BaseCommand):
             # Estate planning is organization-wide; a facility-scoped role
             # could not raise the request for the first facility.
             assign_role(requester, "operations_manager", scope="organization",
+                        reason="Demo seed")
+            cashier, pharmacy_manager = counter_staff
+            # Facility scope for both: a counter is a place, and nothing about
+            # either job needs sight of another branch's takings.
+            assign_role(cashier, "pharmacy_counter", scope="facility",
+                        reason="Demo seed")
+            assign_role(pharmacy_manager, "pharmacy_manager", scope="facility",
                         reason="Demo seed")
         self.stdout.write("  roles assigned")
 
@@ -225,7 +249,21 @@ class Command(BaseCommand):
             ("hospital", "MKH-BKT", "Manakamana Hospital, Bhaktapur"),
         ]
 
+        # Re-running the seed must be safe. The facility service correctly
+        # refuses a duplicate code -- that is the uniqueness rule doing its
+        # job -- so the seed skips what already exists rather than the rule
+        # being relaxed to accommodate a demo script.
+        from apps.organization.models import Facility as TenantFacility
+
+        with tenant_context(context_for_organization(organization)):
+            existing = set(
+                TenantFacility.objects.values_list("code", flat=True)
+            )
+
         for facility_type, code, name in wanted:
+            if code in existing:
+                self.stdout.write(f"  {code} already open — skipped")
+                continue
             request = submit_request(
                 organization=organization,
                 request_type=ChangeRequestType.OPEN_FACILITY,

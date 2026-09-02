@@ -312,7 +312,13 @@ def allocate_number(facility, document_type: str, on_date=None) -> str:
         facility=facility,
         document_type=document_type,
         fiscal_year=fiscal_year,
-        defaults={"last_number": 0},
+        # The facility code goes into the prefix, not just into the row the
+        # counter is kept on. Without it two facilities in one organization
+        # both render INV-<year>-000001 and collide on the unique number.
+        defaults={
+            "last_number": 0,
+            "prefix": f"{document_type[:3].upper()}-{facility.code}",
+        },
     )
     sequence.last_number += 1
     sequence.save(update_fields=["last_number", "updated_at"])
@@ -425,6 +431,89 @@ def create_invoice(
         )
         charge.status = ChargeStatus.INVOICED
         charge.save(update_fields=["status", "updated_at"])
+
+    _recalculate(invoice)
+
+    if issue:
+        issue_invoice(invoice, actor=actor)
+    return invoice
+
+
+@tenant_atomic_method
+def create_retail_invoice(
+    organization,
+    facility,
+    lines,
+    patient=None,
+    bill_to_name: str = "",
+    bill_to_pan: str = "",
+    payer_reference: str = "",
+    credit_of: Invoice = None,
+    credit_reason: str = "",
+    actor=None,
+    issue: bool = True,
+    notes: str = "",
+) -> Invoice:
+    """Raise an invoice for goods sold over a counter.
+
+    `create_invoice` collects `Charge` rows, which exist because a clinical
+    event happened to a known patient and will be billed later. A retail sale
+    has neither: the customer may not be a patient, and the money is taken in
+    the same breath as the goods are handed over. Manufacturing a charge just
+    to invoice it would put a phantom clinical event in the patient ledger.
+
+    So the lines are passed in directly, as plain dicts. Everything after that
+    -- rounding, numbering, the fiscal year, the audit snapshot -- is the same
+    machinery every other invoice goes through, because a retail sale is a tax
+    invoice under exactly the same rules.
+    """
+    require_module(organization, ModuleCode.FINANCE)
+
+    if not lines:
+        raise BillingError("A sale with no items cannot be invoiced.")
+
+    # A partial return credits some lines and some quantities, not the whole
+    # document, so the caller supplies the negative lines rather than this
+    # mirroring the original. `credit_invoice` still handles the whole-invoice
+    # reversal, which also closes the original off as CREDITED; a partial
+    # credit must leave the original standing, because the rest of it is still
+    # owed and still sold.
+    if credit_of is not None and not credit_reason.strip():
+        raise BillingError("A credit note must record why it was raised.")
+
+    invoice = Invoice.objects.create(
+        patient=patient,
+        facility=facility,
+        is_credit_note=credit_of is not None,
+        credit_reason=credit_reason,
+        # A walk-in still needs a name on the receipt. Falling back to the
+        # patient's own name when there is one keeps the two paths consistent.
+        bill_to_name=(
+            bill_to_name or (patient.full_name if patient else "Walk-in customer")
+        ),
+        bill_to_pan=bill_to_pan,
+        patient_category=getattr(patient, "category", "") or "",
+        payer_reference=payer_reference,
+        status=InvoiceStatus.DRAFT,
+        notes=notes,
+        created_by_id=getattr(actor, "uuid", None),
+    )
+
+    for order, line in enumerate(lines):
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            service_code=line.get("service_code", "")[:32],
+            description=line["description"][:255],
+            category=line.get("category", ""),
+            quantity=line["quantity"],
+            unit_price=line["unit_price"],
+            discount_amount=line.get("discount_amount", ZERO),
+            tax_rate=line.get("tax_rate", ZERO),
+            tax_amount=line.get("tax_amount", ZERO),
+            total=line["total"],
+            display_order=order,
+            created_by_id=getattr(actor, "uuid", None),
+        )
 
     _recalculate(invoice)
 
@@ -708,6 +797,78 @@ def refund_payment(payment: Payment, reason: str, actor=None, approved_by=None) 
     return refund
 
 
+@tenant_atomic_method
+def record_counter_refund(
+    credit_note: Invoice,
+    amount,
+    method: str,
+    actor=None,
+    counter: str = "",
+    reference: str = "",
+    reason: str = "",
+) -> Payment:
+    """Hand money back across the counter against a credit note.
+
+    Distinct from `refund_payment`, which reverses one specific payment in
+    full. A counter return is usually partial -- two of the four boxes come
+    back -- and the customer may have paid by two methods, so there is no
+    single payment row to reverse. What there is, is a credit note for the
+    goods returned; this pays it off, negatively.
+
+    The amount is negative for the same reason `refund_payment`'s is: a
+    refund is cash leaving the drawer, and the day's takings should net it out
+    rather than count it as income.
+    """
+    amount = money(amount)
+    if amount <= ZERO:
+        raise BillingError("A refund must be a positive amount to hand back.")
+    if not credit_note.is_credit_note:
+        raise BillingError("A counter refund must be against a credit note.")
+    if credit_note.status == InvoiceStatus.DRAFT:
+        raise BillingError("Issue the credit note before refunding against it.")
+
+    # `balance_due` on a credit note is negative -- it is money owed *to* the
+    # customer -- so the comparison is against its magnitude.
+    outstanding = -credit_note.balance_due
+    if amount > outstanding:
+        raise BillingError(
+            f"That is more than the {outstanding} outstanding on "
+            f"{credit_note.number}.",
+            detail={"outstanding": str(outstanding), "offered": str(amount)},
+        )
+
+    refund = Payment.objects.create(
+        receipt_number=allocate_number(credit_note.facility, "receipt"),
+        invoice=credit_note,
+        patient=credit_note.patient,
+        facility=credit_note.facility,
+        amount=-amount,
+        method=method,
+        status=PaymentStatus.COMPLETED,
+        reference=reference,
+        counter=counter,
+        received_by_id=getattr(actor, "uuid", None),
+        received_by_name=getattr(actor, "full_name", ""),
+        refund_reason=reason,
+        created_by_id=getattr(actor, "uuid", None),
+    )
+    _apply_payment_totals(credit_note)
+
+    record(
+        AuditAction.REFUND,
+        entity_type="billing.Payment",
+        entity_id=refund.uuid,
+        entity_label=f"Counter refund on {credit_note.number}",
+        reason=reason,
+    )
+    logger.warning(
+        "COUNTER REFUND %s of %s at %s by %s: %s",
+        refund.receipt_number, amount, counter or "?",
+        getattr(actor, "email", "?"), reason,
+    )
+    return refund
+
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -807,7 +968,9 @@ def _snapshot(invoice: Invoice) -> dict:
     return {
         "number": invoice.number,
         "fiscal_year": invoice.fiscal_year,
-        "patient_mrn": invoice.patient.mrn,
+        # Blank for a retail sale to a walk-in: there is no patient, and the
+        # snapshot has to survive that rather than assume a hospital.
+        "patient_mrn": invoice.patient.mrn if invoice.patient_id else "",
         "bill_to_name": invoice.bill_to_name,
         "issued_at": invoice.issued_at.isoformat() if invoice.issued_at else None,
         "subtotal": str(invoice.subtotal),

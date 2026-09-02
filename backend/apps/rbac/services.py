@@ -340,6 +340,39 @@ SYSTEM_ROLES = [
             "stock.read", "stock.adjust", "stock.count", "stock.transfer",
             "purchase.read", "purchase.create",
             "invoice.read", "invoice.create", "payment.record", "report.read",
+            "sale.read", "sale.create", "sale.return", "till.open",
+        ],
+    },
+    {
+        "code": "pharmacy_counter",
+        "name": "Pharmacy Counter Assistant",
+        "description": "Retail counter: sells, takes payment, raises returns.",
+        # Facility scope, not organization: a counter assistant sells at the
+        # branch they are standing in. Nothing about the job requires seeing
+        # another branch's takings.
+        "max_scope": Scope.FACILITY,
+        "permissions": [
+            "facility.read", "patient.read", "stock.read",
+            "sale.read", "sale.create", "sale.return", "till.open",
+            "invoice.read", "payment.record",
+        ],
+    },
+    {
+        "code": "pharmacy_manager",
+        "name": "Pharmacy Manager",
+        "description": "Runs the pharmacy: approves voids, returns and tills.",
+        "max_scope": Scope.FACILITY,
+        # Deliberately holds neither `sale.create` nor `sale.return`, so the
+        # segregation-of-duties check has something to bite on. A manager who
+        # also sells can approve their own void, and the till reconciliation
+        # stops meaning anything.
+        "permissions": [
+            "facility.read", "department.read", "patient.read",
+            "stock.read", "stock.approve_adjustment", "stock.count",
+            "sale.read", "sale.void", "sale.return_approve", "till.reconcile",
+            "purchase.read", "purchase.approve", "supplier.manage",
+            "invoice.read", "refund.approve", "discount.approve",
+            "report.read", "analytics.read",
         ],
     },
     {

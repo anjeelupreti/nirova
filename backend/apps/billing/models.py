@@ -372,8 +372,16 @@ class Invoice(BaseModel):
     #: restarts each year, so the year is part of the identity.
     fiscal_year = models.CharField(max_length=16, blank=True, db_index=True)
 
+    #: Null for a retail sale to a walk-in customer.
+    #:
+    #: The billing module was built for a hospital, where every invoice has a
+    #: patient. A retail pharmacy counter does not: requiring one would mean
+    #: either refusing to sell a strip of paracetamol or inventing a patient
+    #: record, and invented patients corrupt the clinical data everything else
+    #: depends on. `bill_to_name` carries the customer either way.
     patient = models.ForeignKey(
-        Patient, on_delete=models.PROTECT, related_name="invoices"
+        Patient, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="invoices",
     )
     encounter = models.ForeignKey(
         Encounter, null=True, blank=True, on_delete=models.SET_NULL,
@@ -539,8 +547,10 @@ class Payment(BaseModel):
     invoice = models.ForeignKey(
         Invoice, on_delete=models.PROTECT, related_name="payments"
     )
+    #: Null for a walk-in retail payment. See `Invoice.patient`.
     patient = models.ForeignKey(
-        Patient, on_delete=models.PROTECT, related_name="payments"
+        Patient, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payments",
     )
     facility = models.ForeignKey(
         Facility, on_delete=models.PROTECT, related_name="payments"
@@ -632,5 +642,17 @@ class NumberSequence(BaseModel):
         return f"{self.document_type} {self.fiscal_year}: {self.last_number}"
 
     def format(self, number: int) -> str:
+        """Render a number for printing.
+
+        The prefix carries the facility code (see `allocate_number`), which is
+        what keeps two facilities in the same organization from both issuing
+        `INV-2083/84-000001`. The sequence rows were always per facility; the
+        rendered string was not, and `Invoice.number` is unique across the
+        tenant -- so the second facility to invoice on a given day collided.
+
+        It is also the right thing to print. Each facility holds its own PAN
+        registration in Nepal and issues its own invoice book; a number that
+        does not say which book it came from is ambiguous on a tax return.
+        """
         prefix = self.prefix or self.document_type[:3].upper()
         return f"{prefix}-{self.fiscal_year}-{number:0{self.padding}d}"
