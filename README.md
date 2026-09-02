@@ -9,10 +9,10 @@ multi-branch group.
 > lifecycle — together with the clinical core: patients, appointments, the
 > OPD queue, encounters with vitals and SOAP notes, and prescribing with
 > allergy and interaction checking, and outpatient billing through to
-> payment. Pharmacy stock, laboratory, HR and the hospital inpatient modules
-> are not built yet.
+> payment, and laboratory and radiology ordering through to verified results.
+> Pharmacy stock, HR and the hospital inpatient modules are not built yet.
 >
-> 21 of the specification's 132 sections are complete; see
+> 24 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -55,6 +55,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_clinical_demo    # patients, clinics, a queue
 .venv/Scripts/python.exe manage.py seed_consultation_demo # three consultations
 .venv/Scripts/python.exe manage.py seed_billing_demo     # prices, invoices, a refund
+.venv/Scripts/python.exe manage.py seed_diagnostics_demo # lab orders, a critical result
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -110,6 +111,7 @@ backend/
     encounters/        episodes of care, vitals, SOAP notes, diagnoses [tenant]
     prescriptions/     prescribing, and the safety checks around it    [tenant]
     billing/           services, prices, charges, invoices, payments    [tenant]
+    diagnostics/       laboratory and radiology, ordered and reported   [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -179,6 +181,20 @@ Refusing outright would get bypassed with a paper prescription, losing the
 record entirely. Warning, capturing the reason, and keeping both is the
 outcome that leaves evidence.
 
+### Results are interpreted against the right population
+
+A haemoglobin of 10.8 g/dL is low for an adult woman and normal for a child,
+so reference ranges carry sex and an age band and the narrowest match wins:
+
+```
+Haemoglobin      10.8 g/dL    ref 11.5–15.5   <-- low
+Potassium         6.9 mmol/L  ref 3.5–5.1     <-- critical_high
+```
+
+A critical value raises a `CriticalValueAlert` the moment it is *entered* —
+not at verification — because it obliges someone to make a phone call, and
+the record has to show who was told and when.
+
 ### Segregation of duties
 
 Permissions declare their conflicts (`purchase.create` ⁄ `purchase.approve`,
@@ -220,6 +236,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/billing/invoices/{uuid}/pay/` | Take a payment |
 | `POST /api/billing/invoices/{uuid}/credit/` | Reverse with a credit note |
 | `GET /api/billing/collection/?facility=` | End-of-day cash-up by payment method |
+| `POST /api/diagnostics/orders/` | Order a test or scan |
+| `POST /api/diagnostics/orders/{uuid}/collect/` | Record collection, allocate the barcode |
+| `POST /api/diagnostics/orders/{uuid}/results/` | Enter results; criticals alert immediately |
+| `POST /api/diagnostics/orders/{uuid}/verify/` | Verify and release — refused for the entering user |
+| `GET /api/diagnostics/worklist/?facility=` | Department worklist, STAT first |
+| `GET /api/diagnostics/turnaround/?facility=` | TAT performance and breach rate |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |
@@ -265,11 +287,13 @@ Built:
 - [x] Encounters: vitals with abnormal flagging, SOAP notes, sign and amend
 - [x] Prescribing: versioned, allergy and interaction checked, overrides captured
 - [x] Billing: layered pricing, gapless statutory numbering, credit notes, refunds
+- [x] Diagnostics: lab and radiology ordering, population reference ranges,
+      critical-value alerting, verification by a second person
 
 Next, in dependency order:
 
-- [ ] Laboratory and radiology orders
 - [ ] Pharmacy product master, batches and FEFO
+- [ ] Referrals and the patient portal
 - [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
 - [ ] Inventory and procurement
 - [ ] Finance: chart of accounts, ledger, revenue cycle

@@ -1588,3 +1588,176 @@ account history on one screen.
 
 **Affects.** `frontend/src/pages/Billing.tsx`,
 `frontend/src/types/index.ts`, `frontend/src/App.tsx`.
+
+---
+
+## 067 — Laboratory and radiology are one app
+2026-09-02 · Diagnostics · feature
+
+**What.** `apps.diagnostics`: `TestDefinition`, `ReferenceRange`,
+`DiagnosticOrder`, `DiagnosticResult`, `CriticalValueAlert`. Covers both.
+
+**Why one app.** The *workflow* is the same shape — order, collect or acquire,
+process, report, verify, release — and the differences sit in the middle. A
+blood test has a specimen; a chest X-ray has an image. Two apps would
+duplicate the ordering, the result routing, the critical-value escalation and
+the charge capture, and would make a panel containing both (a pre-operative
+screen with bloods and a chest film) inexpressible.
+
+**Panels are self-referential.** A liver function test is a `TestDefinition`
+with children. One order produces one panel; the analytes are its own rows,
+because that is how a laboratory reports it and how a clinician reads it.
+
+**Affects.** `apps/diagnostics/`.
+
+---
+
+## 068 — Reference ranges are per population, not per test
+2026-09-02 · Diagnostics · decision
+
+**What.** `ReferenceRange` carries sex, an age band and a pregnancy flag.
+`select_reference_range()` picks the most specific match.
+
+**Why.** A haemoglobin of 12.5 g/dL is normal in an adult woman, low in an
+adult man, and normal in a child. Reporting one range for all three produces
+false alarms — and false alarms teach clinicians to ignore flags, which is
+worse than having none.
+
+Demonstrated in the seed: the same 10.8 g/dL flags **low** against the adult
+female range (11.5–15.5) and would be normal against the paediatric one.
+
+**Critical thresholds live on the range too**, because "critically low" is
+also a population-specific judgement.
+
+**Affects.** `apps/diagnostics/models.py`, `apps/diagnostics/services.py`.
+
+---
+
+## 069 — A critical value is an event, not a flag
+2026-09-02 · Diagnostics · decision
+
+**What.** `CriticalValueAlert` is its own entity, raised the moment a result
+is *entered* — not at verification.
+
+**Why.** A potassium of 6.9 does not merely render in red. It obliges someone
+to pick up a telephone, and the system has to record that they did, whom they
+reached, and when. "The result was in the system" is not a defence when nobody
+looked.
+
+Raised at entry rather than at verification deliberately: a critical value
+must not wait for a second pair of eyes before anyone is told it exists.
+
+**The person notified is free text**, because it is usually not the person who
+ordered — a covering doctor, the ward sister, whoever answered. What the
+record needs is that a named human was reached.
+
+`minutes_outstanding` is the number a quality report is built on: an alert
+raised at 02:00 and acknowledged at 09:00 is a finding, not a footnote.
+
+**Affects.** `apps/diagnostics/models.py`, `apps/diagnostics/services.py`.
+
+---
+
+## 070 — Verification requires a second person
+2026-09-02 · Diagnostics · decision
+
+**What.** `verify_order()` calls `assert_different_actors()` against every
+result's `entered_by_id`.
+
+**Why.** That is the entire purpose of verification — a second pair of eyes on
+a number somebody is about to act on. Leaving it to process rather than
+enforcing it means it holds until the day the laboratory is short-staffed,
+which is exactly the day it matters.
+
+Verified in the seed: the technician who entered the renal panel is refused;
+the doctor succeeds.
+
+**Affects.** `apps/diagnostics/services.py`.
+
+---
+
+## 071 — The pre-analytical stages are separate statuses
+2026-09-02 · Diagnostics · decision
+
+**What.** `ORDERED → COLLECTED → RECEIVED → IN_PROGRESS → RESULTED →
+VERIFIED → RELEASED`, plus `REJECTED`.
+
+**Why.** That is where laboratory orders actually go missing. "Ordered but
+never collected" and "collected but never arrived in the laboratory" are
+different failures with different fixes, and a single "pending" hides both.
+
+**A rejection is a clinical event, not a deletion.** The clinician is still
+waiting and someone must be told to recollect, so the order stays visible with
+its reason attached.
+
+**The accession number is allocated at collection**, not at ordering: an order
+never collected should not consume one, and a recollected specimen needs a new
+barcode so the two tubes cannot be confused.
+
+**Affects.** `apps/diagnostics/models.py`, `apps/diagnostics/services.py`.
+
+---
+
+## 072 — Ordering parks the encounter, and releasing returns it
+2026-09-02 · Diagnostics · feature
+
+**What.** Placing an order moves the encounter to `AWAITING_RESULTS`.
+Releasing returns it to `IN_PROGRESS` — but only once *every* order on that
+encounter is done.
+
+**Why.** It makes a doctor's worklist honest. A patient waiting on a
+laboratory needs nothing from their doctor until the result lands, and should
+not sit on the worklist as though they do. The `AWAITING_RESULTS` status
+defined back in entry 048 existed for exactly this and was unused until now.
+
+The "only once every order is done" condition matters: a patient with three
+tests outstanding should not reappear because one came back.
+
+**Affects.** `apps/diagnostics/services.py`.
+
+---
+
+## 073 — Trailing-zero stripping turned 280 into 28
+2026-09-02 · Diagnostics · fix · **important**
+
+**What.** `DiagnosticResult.display_value` stripped trailing zeros
+unconditionally: `f"{280:.0f}".rstrip("0")` is `"28"`.
+
+**Why it matters.** Caught in the seed output: a platelet count of **280
+×10⁹/L displayed as 28** — a normal result rendered as critical
+thrombocytopenia. `1000` would have shown as `1`, `100` as `1`.
+
+The stored value was always correct and the flag was computed correctly from
+it, so nothing downstream misbehaved. Only the number a human reads was wrong,
+which in a laboratory report is the entire product.
+
+**How.** Strip only after a decimal point. Verified against the failing cases:
+280→280, 1000→1000, 100→100, 10.80→10.8, 5.00→5.
+
+`_trim()` in the service layer already had this guard; the model's copy did
+not. The lesson is the ordinary one about parallel implementations of the same
+formatting, and the fix keeps the guard visible rather than clever.
+
+**Affects.** `apps/diagnostics/models.py`.
+
+---
+
+## 074 — The module gate proved itself
+2026-09-02 · Entitlements · doc
+
+**What.** No code change. Recording that the entitlement engine refused a real
+action during development, correctly.
+
+**What happened.** The diagnostics seed placed a chest X-ray and was refused:
+*"The 'radiology' module is not included in this subscription."* The demo
+tenant is on Professional, which covers laboratory but not radiology.
+
+That is the gate working. The seed now does what a real clinic would — attach
+the `module_radiology` add-on — which exercises the same mechanism the hospital
+facility request used in entry 034, and demonstrates that the module check is
+enforcement rather than decoration.
+
+Worth recording because it is easy to write a module gate that never fires and
+believe it works.
+
+**Affects.** `apps/diagnostics/management/commands/seed_diagnostics_demo.py`.

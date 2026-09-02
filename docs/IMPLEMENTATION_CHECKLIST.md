@@ -12,7 +12,7 @@ This is the map of what exists, what is next, and what has not been started.
 | ⬜ | Not started |
 | 🔷 | Architecturally provided for — the seam exists, the module does not |
 
-**Progress:** 21 of 132 sections complete, 13 partial.
+**Progress:** 24 of 132 sections complete, 13 partial.
 The completed set is deliberately the platform core: every remaining module
 depends on tenancy, identity, RBAC and entitlements, and building a vertical
 first would mean rewriting it.
@@ -57,7 +57,7 @@ the patient and encounter models, so these come before any vertical.*
 
 | § | Section | Status | Notes |
 |---|---|---|---|
-| 18 | Clinic OS | 🟡 | Registration, patients, appointments, queue, EMR, prescribing and billing done. Lab/radiology orders and referrals outstanding |
+| 18 | Clinic OS | 🟡 | Registration, patients, appointments, queue, EMR, prescribing, billing and diagnostic orders done. Referrals and the patient portal outstanding |
 | 19 | Patient management | ✅ | Demographics, identifiers, allergies, conditions, duplicate detection, merge. All patient types supported including walk-in with no documents |
 | 20 | Appointment management | ✅ | Provider schedules, slots, overbooking capacity, walk-in reserve, exceptions, cancellation, no-show, follow-up chains |
 | 21 | Queue management | ✅ | Tokens per facility-day, triage priority, call / recall / skip, the four timestamps that make waiting time measurable |
@@ -151,9 +151,9 @@ customers, and the module a hospital needs first.*
 
 | § | Section | Status |
 |---|---|---|
-| 33 | Lab / LIMS | ⬜ |
-| 34 | Lab quality | ⬜ |
-| 35 | Radiology / RIS / PACS | ⬜ |
+| 33 | Lab / LIMS | ✅ | Test catalogue with panels, population-specific reference ranges, order → collect → receive → result → verify → release, specimen rejection, accessioning, TAT reporting |
+| 34 | Lab quality | 🟡 | Critical-value alerting with notification and acknowledgement records, result amendment chains, rejection tracking, TAT breach detection. QC charts, calibration and reagent lots outstanding |
+| 35 | Radiology / RIS / PACS | 🟡 | Ordering, modality worklist, narrative reporting, verification and release. DICOM, PACS and the image viewer outstanding |
 | 36 | Blood bank | ⬜ |
 
 ---
@@ -261,6 +261,9 @@ enforced in the core; breaking one in a new module breaks the platform.
 - [ ] Permission scope filters querysets; it does not only refuse requests.
 - [ ] Records with clinical, financial or legal weight are versioned, not
       overwritten.
+- [ ] A value shown to a clinician is formatted so it cannot be misread —
+      trailing zeros never stripped before a decimal point (development log
+      073).
 - [ ] Every read of a patient's clinical history resolves the merge chain
       (`patient.resolve()`). A merged record has no allergies — they moved to
       the survivor — so an unresolved read reports a dangerous *clean*
