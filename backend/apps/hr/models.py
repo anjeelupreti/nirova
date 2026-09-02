@@ -767,3 +767,35 @@ class Skill(BaseModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_level_display()})"
+
+
+# ---------------------------------------------------------------------------
+# Attendance, leave and rostering
+# ---------------------------------------------------------------------------
+#
+# Re-exported from `attendance_models` so `apps.hr.models` stays the single
+# import point for the app. They live in their own module because they are a
+# different kind of data -- the employee record changes a few times a career,
+# these change every day for everybody -- and a thousand-line models.py stops
+# being readable long before it stops working.
+
+from apps.hr.attendance_models import (  # noqa: E402,F401
+    WEEKLY_HOLIDAY,
+    Attendance,
+    AttendanceRegularisation,
+    AttendanceSource,
+    AttendanceStatus,
+    Holiday,
+    LeaveLedgerEntry,
+    LeaveRequest,
+    LeaveStatus,
+    LeaveType,
+    LeaveUnit,
+    LedgerReason,
+    RegularisationStatus,
+    RosterEntry,
+    RosterStatus,
+    Shift,
+    ShiftType,
+)
+
