@@ -1950,3 +1950,61 @@ nothing, because it is read as evidence.
 
 **Affects.** `apps/pharmacy/management/commands/seed_pharmacy_demo.py`.
 
+---
+
+## 083 — Pharmacy screens
+2026-09-02 · Frontend · feature
+
+**What.** `Pharmacy.tsx` — dispensing, stock on hand, expiry buckets and
+reorder suggestions across four tabs.
+
+**Specific decisions.**
+
+- *The FEFO allocation is shown before the pharmacist commits.* The preview
+  endpoint runs as they change product or quantity, so which batches are
+  about to leave the shelf is visible up front — and a FEFO override becomes
+  a decision made deliberately rather than a form rejected after submission.
+- *The override box only appears when FEFO would actually be broken*, and its
+  text says the reason is kept permanently. It is.
+- *A shortfall is explained, not just blocked.* "12 available of 30" with the
+  suggestion to dispense part and order the rest, because that is what a
+  pharmacist would do.
+- *The location selector defaults to somewhere dispensable.* A store is not a
+  counter; defaulting there would show an empty list and look like missing
+  stock.
+- *Expiry buckets carry the action, not just the number.* 180 days reads
+  "still time to transfer", 30 days "discount or return", 7 days "likely a
+  write-off" — the threshold exists to prompt the right action at the right
+  moment, and the label should say which.
+- *Days to expiry are coloured on the stock table too*, so the number a
+  pharmacist scans past is already telling them something.
+
+**Affects.** `frontend/src/pages/Pharmacy.tsx`,
+`frontend/src/types/index.ts`, `frontend/src/App.tsx`.
+
+---
+
+## 084 — The checklist was too coarse to plan against
+2026-09-02 · Documentation · refactor
+
+**What.** `docs/IMPLEMENTATION_CHECKLIST.md` rebuilt from 132 section rows
+into 123 sections holding 1,042 individual feature lines.
+
+**Why.** Raised directly, and correct. "Employee management" as a single row
+hid that it is employee records, prior experience, qualifications, licences
+with expiry, contracts, positions, transfers, promotions, separation and
+final settlement — plus the linkage to user accounts and to the
+`provider_uuid` that schedules, prescriptions and diagnostic orders already
+carry and are waiting on.
+
+A checklist at that altitude cannot be planned against, cannot be estimated,
+and quietly flatters progress: "30 of 132 sections" sounds like a quarter of
+the way through, and by feature count it is not.
+
+**How.** Every section broken into its features, each with its own status.
+Grouped rows survive only in the far phases (`Cath lab · dialysis ·
+oncology`), and get expanded when the phase is picked up — writing sixty
+speculative lines for a module nobody has scoped is planning theatre.
+
+**Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.
+

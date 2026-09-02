@@ -1343,7 +1343,8 @@ rather than redesigning around it.
 - [x] Laboratory worklist — STAT-first
 - [ ] My tasks · approvals · notifications · reminders · schedule
 - [ ] Nurse workspace: assigned patients, vitals, medication, handover
-- [ ] Pharmacist workspace: POS, prescriptions, low stock, expiry, counts
+- [~] Pharmacist workspace: dispensing, stock, expiry and reorder screens
+      built; POS and stock counts outstanding
 - [ ] HR and finance workspaces
 - [ ] Recent activity
 

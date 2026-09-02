@@ -15,6 +15,7 @@ import {
   LogOut,
   FlaskConical,
   ListOrdered,
+  Package,
   Receipt,
   ScrollText,
   Users,
@@ -30,6 +31,7 @@ import BillingPage from "@/pages/Billing";
 import ConsultationPage from "@/pages/Consultation";
 import DiagnosticsPage from "@/pages/Diagnostics";
 import PatientsPage from "@/pages/Patients";
+import PharmacyPage from "@/pages/Pharmacy";
 import QueuePage from "@/pages/Queue";
 import {
   Alert,
@@ -44,6 +46,7 @@ const NAV = [
   { to: "/patients", label: "Patients", icon: Users },
   { to: "/queue", label: "Queue", icon: ListOrdered },
   { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
+  { to: "/pharmacy", label: "Pharmacy", icon: Package },
   { to: "/billing", label: "Billing", icon: Receipt },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
@@ -181,6 +184,7 @@ export default function App() {
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          <Route path="/pharmacy" element={<PharmacyPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

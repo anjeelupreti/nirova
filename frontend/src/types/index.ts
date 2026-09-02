@@ -705,3 +705,107 @@ export interface TurnaroundReport {
   rejected: number;
   critical_alerts_open: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Pharmacy                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface PharmacyProduct {
+  uuid: string;
+  code: string;
+  generic_name: string;
+  brand_name: string;
+  strength: string;
+  dosage_form: string;
+  display_name: string;
+  base_unit: string;
+  storage_condition: string;
+  needs_cold_chain: boolean;
+  control_schedule: string;
+  is_controlled: boolean;
+  requires_prescription: boolean;
+  reorder_level: string;
+  is_active: boolean;
+}
+
+export interface StockLocation {
+  uuid: string;
+  code: string;
+  name: string;
+  location_type: string;
+  is_quarantine: boolean;
+  /** A store is not a counter — stock cannot be dispensed from one. */
+  is_dispensable: boolean;
+  is_active: boolean;
+}
+
+export interface StockLevel {
+  uuid: string;
+  product_name: string;
+  batch_number: string;
+  expires_on: string;
+  days_to_expiry: number;
+  location_code: string;
+  quantity: string;
+  reserved: string;
+  available: string;
+}
+
+/** A FEFO allocation preview — what would leave the shelf, before committing. */
+export interface FefoAllocation {
+  product: string;
+  requested: string;
+  allocated: string;
+  shortfall: string;
+  /** True when a later-expiring batch was chosen over an earlier one. */
+  breaks_fefo: boolean;
+  earliest_batch: string | null;
+  allocation: {
+    batch_uuid: string;
+    batch_number: string;
+    expires_on: string;
+    quantity: string;
+    unit_price: string;
+  }[];
+}
+
+export interface ExpiringItem {
+  product_code: string;
+  product_name: string;
+  batch_number: string;
+  expires_on: string;
+  days_to_expiry: number;
+  bucket: string;
+  quantity: string;
+  location: string;
+  value_at_cost: string;
+}
+
+export interface ExpiringStockResponse {
+  within_days: number;
+  count: number;
+  total_value_at_cost: string;
+  by_bucket: Record<
+    string,
+    { count: number; value: string; items: ExpiringItem[] }
+  >;
+}
+
+export interface ReorderSuggestion {
+  product_code: string;
+  product_name: string;
+  on_hand: string;
+  reorder_level: string;
+  daily_consumption: string;
+  lead_time_days: number;
+  days_of_cover: number | null;
+  /** Stock will run out before a delivery could arrive — order today. */
+  stockout_before_delivery: boolean;
+  suggested_quantity: string;
+}
+
+export interface ReorderResponse {
+  count: number;
+  urgent: number;
+  suggestions: ReorderSuggestion[];
+}
