@@ -81,6 +81,7 @@ TENANT_APPS = [
     "apps.pos",
     "apps.hr",
     "apps.payroll",
+    "apps.inpatient",
 ]
 
 LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS
