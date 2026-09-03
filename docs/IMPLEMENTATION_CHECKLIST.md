@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 45 of 132 | 649 |
-| Outstanding | 87 | 604 |
+| Done | 46 of 132 | 684 |
+| Outstanding | 86 | 605 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -1374,16 +1374,64 @@ rather than redesigning around it.
 
 ## §29 Emergency / casualty `[~]`
 
-- [x] Triage categories modelled
-- [x] Emergency encounter type
-- [x] Emergency queue priority
-- [ ] Arrival registration for unidentified patients
-- [ ] Triage workflow
-- [ ] Resuscitation record
-- [ ] Emergency medication administration
-- [ ] Emergency billing
-- [ ] Disposition: discharge, admit, refer
-- [ ] Critical alerts
+**Arrival**
+- [x] Arrival registration, with mode: ambulance, walk-in, police, referral,
+      air ambulance
+- [x] Registration of an unidentified patient as the *default* path
+- [x] A real patient record with an MRN, not a placeholder
+- [x] Physical description, so staff and relatives can recognise them
+- [x] Identification later, merging into an existing record
+- [x] Everything written while unnamed follows the merge
+- [x] `arrived_unidentified` kept separate from `is_unidentified`, so
+      identification does not erase how they arrived
+- [x] Minutes-unidentified as an operational number
+- [x] Medico-legal flagging with a police-informed timestamp
+- [ ] Identity band printing
+- [ ] Mass-casualty / incident mode
+
+**Triage**
+- [x] Five-level triage with target times as data
+- [x] Triage appends — the history is the record
+- [x] Deterioration detected and flagged
+- [x] Re-triage does not restart the wait clock
+- [x] Vitals captured with each assessment, frozen to that assessment
+- [x] Breach detection, still true after the patient is seen
+- [x] Minutes-to-breach, negative once over
+- [x] Board ordered by category then arrival, untriaged last
+- [ ] Triage decision support / scoring aids
+
+**Treatment**
+- [x] Mark-seen, with the arrival-to-seen gap as the headline number
+- [x] Critical pathways: STEMI, stroke, sepsis, trauma, arrest, obstetric,
+      paediatric, poisoning, burns
+- [x] Pathway clocks measured from arrival, not from activation
+- [x] Recognition time reported separately from door-to-intervention
+- [x] Stand-down recorded rather than deleted
+- [x] Resuscitation record, timestamped on creation, never edited
+- [x] Shocks, drugs, rhythms, airway and ROSC as typed entries
+- [x] Elapsed time from the first entry
+- [x] Emergency prescribing and orders through the existing encounter
+- [ ] Emergency drug administration against a resus trolley's stock
+- [ ] Standing-order protocols
+
+**Disposition**
+- [x] Discharged, admitted, referred, LWBS, LAMA, absconded, died, brought
+      dead
+- [x] Admission requires the admission reference
+- [x] Referral requires a destination
+- [x] The encounter closes with the attendance
+- [ ] Direct admission from the board into a bed
+
+**Performance**
+- [x] Median and longest wait
+- [x] Breach rate overall and per category
+- [x] Left-without-being-seen rate
+- [x] Arrivals by mode and by category
+- [x] Pathway performance: activations, recognition, door-to-intervention,
+      target met
+- [x] Unidentified and medico-legal counts
+- [ ] Hourly arrival profile for staffing
+- [ ] Time-to-first-analgesia and other condition-specific measures
 
 ## §30 ICU `[ ]`
 
@@ -1792,6 +1840,11 @@ breaking one in a new module breaks the platform.
       why the bug survives review (log 112).
 - [x] A recurring price is normalised to a month before it is summed, and
       a trial is never counted as revenue (log 111).
+- [x] A fact about what *happened* and a fact about what is *true now*
+      are different fields. The giveaway is a count that reads zero when
+      you know it should not (log 116).
+- [x] A clock starts when the event started, not when somebody noticed
+      it — otherwise the measurement hides the delay (log 115).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

@@ -28,6 +28,9 @@ multi-branch group.
 > - **Wards** — beds whose occupancy is an interval rather than a flag,
 >   idempotent daily bed-charge accrual, and a discharge that names the
 >   department blocking it.
+> - **Emergency** — a board ordered by how sick people are, triage that
+>   appends rather than overwrites, and registration of a patient nobody
+>   can name as the default path.
 >
 > Theatre, ICU charting and the patient portal are not built yet.
 > 44 of the specification's 132 sections are complete; see
@@ -81,6 +84,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_attendance_demo  # a rostered week and leave
 .venv/Scripts/python.exe manage.py seed_payroll_demo     # a run, checked by hand
 .venv/Scripts/python.exe manage.py seed_inpatient_demo   # admit, move, charge, discharge
+.venv/Scripts/python.exe manage.py seed_emergency_demo   # a shift in the department
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -271,6 +275,24 @@ trial_potential_mrr       0     reported, never added in
 Expansion being four fifths of revenue is the single most useful thing on that
 screen, and a plain `Sum(contracted_price)` hid it completely.
 
+### Nobody has to know who the patient is
+
+An unconscious arrival gets a real patient record with an MRN, flagged
+unidentified, and everything written against it follows the merge when
+somebody finally names them:
+
+```
+ED260903003: registered as MRN-000021 without a name
+  staff will call them: Male, approximately 40, blue shirt, tattoo left forearm
+...
+  the brother recognises the tattoo: this is MRN-000018, Kamala Adhikari
+  they went 48 minutes without a name
+  the resus record (12 entries) and the stroke call (1) came across
+```
+
+`arrived_unidentified` is kept separately from `is_unidentified`, because
+identification must not erase the fact that nobody could name them.
+
 ### A bed is occupied over an interval, not by a flag
 
 `BedAssignment` records who was in which bed from when to when, so a stay
@@ -458,6 +480,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/ipd/admissions/{ref}/transfer/` | Move, keeping the interval |
 | `GET /api/ipd/admissions/{ref}/blockers/` | Why they cannot go home |
 | `POST /api/ipd/accrue/` | The nightly bed-charge job — safe to re-run |
+| `POST /api/ed/arrivals/` | Register — a name is optional |
+| `POST /api/ed/arrivals/{ref}/triage/` | Assess; always appends |
+| `POST /api/ed/arrivals/{ref}/identify/` | Name them, merging the record |
+| `GET /api/ed/board/?facility=` | Sickest first, then longest waiting |
+| `GET /api/ed/summary/?facility=` | Breaches per category, LWBS, pathways |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |

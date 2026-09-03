@@ -3147,3 +3147,135 @@ blank suggests something failed to load when nothing was meant to.
 
 **Affects.** `frontend/src/App.tsx`.
 
+---
+
+## 115 - Emergency: the front door, where nobody knows who the patient is
+2026-09-03 · Emergency · feature
+
+**What.** `apps.emergency`: `Arrival`, `TriageAssessment`, `CriticalAlert`,
+`ResuscitationEvent`. Completes §29.
+
+Every other module in this system starts from a patient record. Emergency
+starts from a body on a trolley, and four decisions follow from that.
+
+**An unidentified patient must be registerable, and it must be the *easy*
+path.** A road accident arrives unconscious with no wallet. A system that
+requires a name does one of two bad things: refuses to register them, so
+nothing that happens in the next hour is recorded anywhere; or invites staff
+to type "Unknown Male" into the name field, producing a dozen patients with
+the same name that the duplicate detector then cheerfully merges into each
+other.
+
+`register_unidentified` creates a *real* patient record with a generated MRN,
+flagged as unidentified. It takes charges, prescriptions and results normally.
+When somebody names them, it merges into the real record through the merge
+machinery `apps.patients` already had — and the resuscitation record, the
+stroke call and the charges all follow across. The seed proves it: twelve resus
+entries and one pathway activation survive the merge.
+
+The description field matters more than it looks. "Male, approximately 40,
+blue shirt, tattoo on left forearm" is what staff will actually call them, and
+what a relative arriving at the desk will recognise. "Unknown 3" is neither.
+
+**Triage appends, never overwrites.** A patient triaged urgent at 09:00 can be
+resuscitation at 09:40, and the fact that they *deteriorated* is exactly what
+a mortality review asks about. The category on the arrival is a cache for the
+board; `TriageAssessment` is the record, and `is_deterioration` makes the fall
+legible without joining to the previous row.
+
+**The wait clock does not restart on a re-triage.** Somebody who has been
+waiting an hour has been waiting an hour, whatever category they are now.
+
+**A breach stays a breach after the patient is seen.** `is_breaching` compares
+the *actual* wait against the target, not the current wait against it. A board
+that went quiet the moment somebody walked over would let the department
+flatter its own numbers.
+
+**Every clock starts at arrival.** Not at triage, not at pathway activation. A
+stroke recognised forty minutes late has already spent forty minutes of its
+window, and a door-to-needle measured from recognition would hide precisely
+the delay that matters. `CriticalAlert` reports recognition time and
+door-to-intervention time *separately*, because a slow recognition is a triage
+problem and a slow intervention is a resource problem, and one figure cannot
+tell a department which it has.
+
+**Leaving without being seen is an outcome, not an absence.** LWBS is a
+quality metric a department is judged on and it only exists if somebody
+records it — otherwise the encounter simply goes quiet and the numbers
+improve.
+
+**A resuscitation entry is timestamped on creation and never edited.** A
+correction is another entry. A resus written afterwards from memory is not the
+thing a coroner reads, and a record that can be edited is a record that will
+be.
+
+**Two absences worth naming.** There is no endpoint that amends a triage
+assessment, and none that amends a resus entry. Both are deliberate.
+
+**Affects.** `apps/emergency/`, `config/settings/base.py`, `config/urls.py`.
+
+---
+
+## 116 - Identification was erasing how they arrived
+2026-09-03 · Emergency · fix · **important**
+
+The seed contradicted itself. Step 1 registered somebody with no name; step 8
+reported "0 arrived unidentified".
+
+`is_unidentified` was doing two jobs: recording that nobody could name them on
+arrival, and tracking whether that is *still* true. Identification cleared it,
+so the count of unidentified arrivals was zero for everybody eventually
+identified — which is to say, for almost everybody.
+
+The question "how many arrived unidentified last month?" is not academic. It
+drives the identity-band process, the police-liaison workload and the
+mortuary's paperwork, and the answer was permanently zero.
+
+Split into `arrived_unidentified`, set at arrival and never cleared, and
+`is_unidentified`, cleared on identification so a board can show who still
+needs naming. `identified_at` and `minutes_unidentified` came with it, because
+the gap is itself an operational number: an hour unidentified is an hour
+nobody can ring a relative or check an allergy.
+
+**The same class of error as three earlier fixes** — attendance status
+overwritten by later leave, bed occupancy as a flag, employment posting
+overwritten by a transfer. A fact about *what happened* and a fact about
+*what is true now* are different fields, and the giveaway is always the same:
+a count that reads zero when you know it should not.
+
+**Affects.** `apps/emergency/models.py`, `apps/emergency/services.py`.
+
+---
+
+## 117 - The emergency board
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Emergency.tsx`. A wall display as much as a screen: it
+hangs where the department can see it and is read at a glance by somebody
+walking past.
+
+**A full-height colour block per row**, in the red-orange-amber-green-blue
+order departments already read, so the board parses by colour from across the
+room before anybody reads a word.
+
+**It refreshes itself every thirty seconds.** A wait time that only updates on
+reload is a wait time nobody trusts.
+
+**A breaching row is red and stays red** after the patient is seen.
+
+**"Nobody can name them" is the default choice on the registration form**, not
+a checkbox behind the ordinary path. The commonest ambulance arrival is
+somebody nobody can name, and a form that makes that the awkward case gets
+used wrongly under pressure. The description field carries its own
+explanation.
+
+**Re-triaging to a sicker category demands a reason** before the button
+enables, and says so — the dialog states that it is recording a deterioration.
+
+**The disposition dialog explains what it is doing.** Choosing LWBS says why
+it is recorded rather than left blank; choosing "admitted" refuses without an
+admission reference and says why.
+
+**Affects.** `frontend/src/pages/Emergency.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+

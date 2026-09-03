@@ -25,6 +25,7 @@ import {
   Coins,
   BedDouble,
   Globe,
+  Siren,
   Users,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ import BillingPage from "@/pages/Billing";
 import ConsultationPage from "@/pages/Consultation";
 import CounterPage from "@/pages/Counter";
 import DiagnosticsPage from "@/pages/Diagnostics";
+import EmergencyPage from "@/pages/Emergency";
 import PatientsPage from "@/pages/Patients";
 import PlatformPage from "@/pages/Platform";
 import PeoplePage from "@/pages/People";
@@ -79,6 +81,7 @@ const NAV_GROUPS: {
     items: [
       { to: "/patients", label: "Patients", icon: Users },
       { to: "/queue", label: "Queue", icon: ListOrdered },
+      { to: "/emergency", label: "Emergency", icon: Siren },
       { to: "/wards", label: "Wards", icon: BedDouble },
       { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
     ],
@@ -314,6 +317,7 @@ export default function App() {
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/wards" element={<WardsPage />} />
           <Route path="/pharmacy" element={<PharmacyPage />} />
           <Route path="/counter" element={<CounterPage />} />

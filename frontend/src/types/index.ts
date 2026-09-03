@@ -2352,3 +2352,190 @@ export interface PlatformPlan {
   modules: string[];
   features: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Emergency
+// ---------------------------------------------------------------------------
+
+export interface TriageAssessment {
+  uuid: string;
+  arrival: string;
+  assessed_at: string;
+  category: number;
+  previous_category: number | null;
+  /** A lower number is sicker, so a fall in category is a worsening. */
+  is_deterioration: boolean;
+  assessed_by_name: string;
+  reason: string;
+  pulse: number | null;
+  systolic: number | null;
+  diastolic: number | null;
+  respiratory_rate: number | null;
+  temperature_c: string | null;
+  spo2: number | null;
+  gcs: number | null;
+  pain_score: number | null;
+  notes: string;
+}
+
+export interface CriticalAlert {
+  uuid: string;
+  arrival: string;
+  pathway: string;
+  activated_at: string;
+  activated_by_name: string;
+  target_minutes: number;
+  /** Arrival to somebody noticing. Often the whole delay. */
+  recognition_minutes: number;
+  intervention: string;
+  intervention_at: string | null;
+  door_to_intervention_minutes: number | null;
+  met_target: boolean | null;
+  stood_down_at: string | null;
+  stood_down_reason: string;
+  notes: string;
+}
+
+export interface ResuscitationEvent {
+  uuid: string;
+  arrival: string;
+  occurred_at: string;
+  event_type: string;
+  detail: string;
+  drug: string;
+  dose: string;
+  route: string;
+  joules: number | null;
+  rhythm: string;
+  recorded_by_name: string;
+}
+
+export interface ResuscitationRecord {
+  arrival: string;
+  started_at?: string;
+  duration_minutes: number;
+  shocks?: number;
+  drugs?: number;
+  rosc?: boolean;
+  events: {
+    at: string;
+    elapsed_minutes: number;
+    event_type: string;
+    detail: string;
+    drug: string;
+    dose: string;
+    route: string;
+    joules: number | null;
+    rhythm: string;
+    recorded_by: string;
+  }[];
+}
+
+export interface ArrivalSummary {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_name: string;
+  patient_mrn: string;
+  facility: string;
+  arrived_at: string;
+  arrival_mode: string;
+  presenting_complaint: string;
+  is_unidentified: boolean;
+  /** Stays true forever — identification must not erase how they arrived. */
+  arrived_unidentified: boolean;
+  provisional_description: string;
+  triage_category: number | null;
+  triaged_at: string | null;
+  first_seen_at: string | null;
+  seen_by_name: string;
+  waiting_minutes: number;
+  target_minutes: number | null;
+  minutes_to_breach: number | null;
+  is_breaching: boolean;
+  total_minutes: number;
+  disposition: string;
+  disposition_at: string | null;
+  is_open: boolean;
+  is_mlc: boolean;
+}
+
+export interface Arrival extends ArrivalSummary {
+  encounter: string | null;
+  department: string | null;
+  ambulance_reference: string;
+  brought_by: string;
+  brought_by_phone: string;
+  identified_at: string | null;
+  minutes_unidentified: number | null;
+  disposition_notes: string;
+  admission_reference: string;
+  referred_to: string;
+  mlc_number: string;
+  police_informed_at: string | null;
+  notes: string;
+  assessments: TriageAssessment[];
+  alerts: CriticalAlert[];
+}
+
+export interface BoardRow {
+  reference: string;
+  patient: string;
+  mrn: string;
+  is_unidentified: boolean;
+  minutes_unidentified: number | null;
+  description: string;
+  complaint: string;
+  arrival_mode: string;
+  arrived_at: string;
+  triage_category: number | null;
+  waiting_minutes: number;
+  target_minutes: number | null;
+  minutes_to_breach: number | null;
+  is_breaching: boolean;
+  seen: boolean;
+  seen_by: string;
+  is_mlc: boolean;
+  alerts: {
+    pathway: string;
+    target_minutes: number;
+    elapsed: number | null;
+    met_target: boolean | null;
+    stood_down: boolean;
+  }[];
+}
+
+export interface DepartmentSummary {
+  summary: {
+    since: string;
+    arrivals: number;
+    in_department: number;
+    by_disposition: Record<string, number>;
+    by_triage_category: Record<string, number>;
+    by_arrival_mode: Record<string, number>;
+    median_wait_minutes: number;
+    longest_wait_minutes: number;
+    breaches: number;
+    breach_percent: number;
+    breach_by_category: Record<
+      string,
+      { seen: number; breached: number; breach_percent: number }
+    >;
+    left_without_being_seen: number;
+    lwbs_percent: number;
+    arrived_unidentified: number;
+    still_unidentified: number;
+    medico_legal: number;
+  };
+  pathways: {
+    pathway: string;
+    target_minutes: number;
+    activations: number;
+    stood_down: number;
+    with_intervention: number;
+    met_target: number;
+    met_target_percent: number | null;
+    average_recognition_minutes: number | null;
+    average_door_to_intervention_minutes: number | null;
+  }[];
+}
