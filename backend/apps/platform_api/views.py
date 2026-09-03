@@ -32,6 +32,11 @@ from apps.provisioning.models import (
     FacilityChangeRequest,
 )
 from apps.provisioning.services import decide
+from apps.subscriptions.revenue import (
+    entitled_but_unbilled,
+    largest_customers,
+    platform_mrr,
+)
 from apps.subscriptions.models import Subscription, SubscriptionStatus
 from apps.tenancy.models import (
     FacilityRegistryEntry,
@@ -73,12 +78,10 @@ class PlatformDashboardView(APIView):
             .values_list("facility_type", "count")
         )
 
-        active_subscriptions = Subscription.objects.filter(
-            status__in=[SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING]
-        )
-        mrr = active_subscriptions.filter(
-            status=SubscriptionStatus.ACTIVE
-        ).aggregate(total=Sum("contracted_price"))["total"] or 0
+        # Real MRR, not a sum of contracted prices. See
+        # apps/subscriptions/revenue.py: intervals are normalised, add-ons are
+        # included and discounts are applied, none of which a plain Sum does.
+        revenue = platform_mrr()
 
         pending_requests = FacilityChangeRequest.objects.filter(
             status__in=list(OPEN_STATUSES)
@@ -102,14 +105,9 @@ class PlatformDashboardView(APIView):
                     "total": sum(facility_counts.values()),
                     "by_type": facility_counts,
                 },
-                "revenue": {
-                    "mrr": float(mrr),
-                    "arr": float(mrr) * 12,
-                    "currency": "NPR",
-                    "paying_customers": active_subscriptions.filter(
-                        status=SubscriptionStatus.ACTIVE
-                    ).count(),
-                },
+                "revenue": revenue,
+                "concentration": largest_customers(limit=5),
+                "entitled_but_unbilled": entitled_but_unbilled(),
                 "change_requests": {
                     "open": pending_requests.count(),
                     "awaiting_platform": pending_requests.filter(
@@ -147,6 +145,11 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
             Organization.objects.all()
             .select_related("database")
             .annotate(
+                # `distinct=True` on both, because two Count aggregations
+                # across two different reverse relations multiply each other.
+                # Without it a customer with 4 facilities and 6 members
+                # reported 24 facilities -- 4 x 6 -- which is the number the
+                # platform owner saw on the customer list.
                 facility_count=Count(
                     "facility_registry",
                     filter=Q(
@@ -155,6 +158,7 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
                             FacilityRegistryStatus.PENDING,
                         ]
                     ),
+                    distinct=True,
                 ),
                 member_count=Count("memberships", distinct=True),
             )

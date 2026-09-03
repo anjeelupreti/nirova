@@ -2202,3 +2202,153 @@ export interface FluidBalance {
   balance_ml: number;
   escalations: number;
 }
+
+// ---------------------------------------------------------------------------
+// Platform console
+// ---------------------------------------------------------------------------
+
+export interface PlatformRevenue {
+  mrr: string;
+  arr: string;
+  base_mrr: string;
+  /** Revenue above the plan the customer originally bought. */
+  expansion_mrr: string;
+  expansion_share_percent: number;
+  paying_customers: number;
+  arpu: string;
+  trial_customers: number;
+  /** Deliberately not added to MRR — a trial is a hope, not revenue. */
+  trial_potential_mrr: string;
+  by_plan: Record<string, string>;
+  by_billing_interval: Record<string, string>;
+  currency: string;
+}
+
+export interface PlatformDashboard {
+  generated_at: string;
+  organizations: {
+    total: number;
+    active: number;
+    trial: number;
+    past_due: number;
+    suspended: number;
+    cancelled: number;
+    pending_provisioning: number;
+  };
+  facilities: { total: number; by_type: Record<string, number> };
+  revenue: PlatformRevenue;
+  concentration: {
+    organization: string;
+    plan: string;
+    mrr: string;
+    share_percent: number;
+    expansion_mrr: string;
+  }[];
+  entitled_but_unbilled: {
+    organization: string;
+    organization_name: string;
+    plan: string;
+    status: string;
+    trial_ends_at: string | null;
+    grace_ends_at: string | null;
+    contracted_price: string;
+  }[];
+  change_requests: {
+    open: number;
+    awaiting_platform: number;
+    awaiting_organization: number;
+  };
+  infrastructure: {
+    tenant_databases: number;
+    ready: number;
+    failed: number;
+  };
+}
+
+export interface PlatformOrganization {
+  uuid: string;
+  slug: string;
+  legal_name: string;
+  display_name: string;
+  business_type: string;
+  status: string;
+  pan_number: string;
+  vat_number: string;
+  primary_email: string;
+  primary_phone: string;
+  province: string;
+  district: string;
+  municipality: string;
+  trial_ends_at: string | null;
+  activated_at: string | null;
+  suspended_at: string | null;
+  onboarding_completed_at: string | null;
+  created_at: string;
+  facility_count: number;
+  member_count: number;
+  database_status: string | null;
+  database_alias: string | null;
+}
+
+export interface PlatformSubscriptionAddOn {
+  uuid: string;
+  addon_code: string;
+  addon_name: string;
+  target_key: string;
+  increment: number;
+  quantity: number;
+  unit_price: string;
+  effective_from: string;
+  effective_to: string | null;
+  is_active: boolean;
+  source_reference: string;
+}
+
+export interface PlatformSubscription {
+  uuid: string;
+  organization_slug: string;
+  organization_name: string;
+  plan_code: string;
+  plan_name: string;
+  status: string;
+  is_entitled: boolean;
+  billing_interval: string;
+  currency: string;
+  contracted_price: string;
+  discount_percent: string;
+  started_at: string | null;
+  trial_ends_at: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  grace_ends_at: string | null;
+  cancel_at_period_end: boolean;
+  auto_renew: boolean;
+  addons: PlatformSubscriptionAddOn[];
+}
+
+export interface PlatformPlan {
+  uuid: string;
+  code: string;
+  name: string;
+  tagline: string;
+  description: string;
+  base_price: string;
+  currency: string;
+  billing_interval: string;
+  setup_fee: string;
+  trial_days: number;
+  grace_days: number;
+  is_public: boolean;
+  is_active: boolean;
+  version: number;
+  limits: {
+    key: string;
+    value: number | null;
+    is_unlimited: boolean;
+    enforcement: string;
+    overage_unit_price: string | null;
+    warn_at_percent: number;
+  }[];
+  modules: string[];
+  features: string[];
+}

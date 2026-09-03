@@ -3020,3 +3020,130 @@ not apply and why. A rule the user can see is a rule they trust.
 **Affects.** `frontend/src/pages/Wards.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+---
+
+## 111 - MRR was wrong three ways
+2026-09-03 · Platform · fix · **important**
+
+The platform dashboard reported MRR as
+`Sum(contracted_price)` over active subscriptions. It read 16,000. The real
+figure was 88,000.
+
+Three separate errors, compounding:
+
+**Add-ons were ignored.** The demo customer holds three add-ons worth 72,000 a
+month — a hospital module, an extra hospital facility, a radiology module —
+every one of them sold through the facility change-request flow this system is
+built around. Counting only the plan under-reported that customer by 450%. For
+a modular product, expansion revenue *is* the growth, and the number that hid
+it was the one on the front page.
+
+**Billing intervals were not normalised.** An annual subscription at 192,000
+is 16,000 of monthly recurring revenue. Summing contracted prices across mixed
+intervals reports an annual customer as twelve times their size — and the
+error grows as customers move to annual billing, which is the direction a
+maturing SaaS pushes them.
+
+**Discounts were not applied.** A contracted price with 20% off is not the
+contracted price. Reporting list price as revenue overstates the business by
+exactly what the sales team gave away.
+
+`apps/subscriptions/revenue.py` now computes it properly and returns the
+breakdown, not just the total — because "why did MRR move?" is the question
+that follows every MRR figure, and plan-versus-expansion is the first cut of
+the answer. It also reports **concentration**: a business where one customer
+is 40% of MRR is a different business from one where the largest is 4%, and
+the headline number is identical in both.
+
+**Trials are reported beside MRR and never inside it.** A trial is a hope, not
+revenue, and counting it is how a SaaS dashboard tells its owner the business
+is bigger than it is.
+
+**Affects.** `apps/subscriptions/revenue.py`, `apps/platform_api/views.py`.
+
+---
+
+## 112 - A customer with four facilities showed twenty-four
+2026-09-03 · Platform · fix
+
+The customer list annotated two counts across two different reverse relations:
+
+```python
+.annotate(
+    facility_count=Count("facility_registry", filter=...),
+    member_count=Count("memberships", distinct=True),
+)
+```
+
+Classic multi-join fanout. The two joins multiply: four facilities times six
+members is twenty-four. `member_count` had `distinct=True` and was right;
+`facility_count` did not and was six times too large.
+
+Nothing failed. The platform owner simply saw a customer six times the size
+they are — and would have kept seeing it, because the number is plausible and
+nobody counts a customer's hospitals by hand to check.
+
+**The general rule**, worth stating because Django makes it so easy to get
+wrong: **more than one aggregate over more than one relation needs
+`distinct=True` on every one of them.** The first one alone is always
+correct, which is exactly why the bug survives review.
+
+**Affects.** `apps/platform_api/views.py`.
+
+---
+
+## 113 - The platform console
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Platform.tsx`. The backend has had a full control plane
+since the first week and no way to look at it — the platform owner could not
+see their own business.
+
+Everything reads the control plane, never a tenant database. That is what the
+control plane is *for*: seeing how many hospitals customers run and what each
+is worth, without a single query touching a patient record.
+
+**MRR is split into plan and expansion on the front page**, with a bar, so the
+81.8% expansion share is visible rather than buried. **Concentration is a
+first-class table.** **Trial value sits beside MRR and never in it.**
+
+**"Using the product, not paying for it"** lists trials, grace periods and
+past-due accounts together. Each is a deliberate state; the reason it happened
+is rarely still remembered a month later.
+
+The plans tab states the fail-closed rule where the limits are shown: an
+unknown limit key resolves to zero, never unlimited, so a plan that forgot to
+mention a limit sells nothing rather than everything.
+
+**Affects.** `frontend/src/pages/Platform.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+
+---
+
+## 114 - Fourteen tabs in a row nobody scans
+2026-09-03 · Frontend · refactor
+
+The header held a flat row of fourteen navigation items and the product is
+still growing. Anything past about eight stops being scanned, and the ones
+pushed to the end are the ones nobody finds.
+
+Now a grouped sidebar: **Clinical, Supply, Money, People, Organization,
+Platform**. Grouped by *who uses it* rather than by module, so each list stays
+short enough to read — a receptionist lives in Clinical, a storekeeper in
+Supply, and neither walks past the other's screens to find their own.
+
+**Below the large breakpoint it collapses to a scrolling strip, not a
+hamburger.** A ward round happens on a tablet, and hiding the whole product
+behind one tap is worse than a strip that scrolls.
+
+**The console is hidden from customers, not merely refused.** A menu item that
+always errors teaches people to ignore errors.
+
+**Platform staff land on the console.** They hold no membership, so every
+tenant screen would be empty or refused; the redirect is not a convenience but
+the only page that means anything to them. The header shows "Platform
+operator" where an organization name would be, because a header that reads as
+blank suggests something failed to load when nothing was meant to.
+
+**Affects.** `frontend/src/App.tsx`.
+

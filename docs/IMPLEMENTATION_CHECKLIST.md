@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 44 of 132 | 639 |
-| Outstanding | 88 | 604 |
+| Done | 45 of 132 | 649 |
+| Outstanding | 87 | 604 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -58,6 +58,7 @@ rather than redesigning around it.
 - [x] Usage metering
 - [x] Facility change-request approval queue
 - [x] Platform audit of cross-tenant actions
+- [x] Platform console UI: overview, customers, subscriptions, plans
 - [ ] Billing the customer (invoices to organizations, not patients)
 - [ ] Payments and dunning
 - [ ] Revenue reporting (MRR movement, cohorts)
@@ -75,10 +76,17 @@ rather than redesigning around it.
 **SaaS KPIs**
 - [x] Total, active, trial, suspended, cancelled organizations
 - [x] Facilities by type across the estate
-- [x] MRR and ARR
+- [x] MRR and ARR, normalised across billing intervals
+- [x] Add-ons included and discounts applied
+- [x] Expansion MRR separated from plan MRR, with its share
+- [x] MRR by plan and by billing interval
+- [x] Revenue concentration — the largest customers and their share
+- [x] Trial value reported beside MRR, never inside it
+- [x] Entitled-but-unbilled list: trials, grace, past due
 - [x] Paying customer count
-- [ ] New / expansion / contraction / churned MRR
-- [ ] ARPU, lifetime value, acquisition cost
+- [x] ARPU
+- [ ] New / contraction / churned MRR movement
+- [ ] Lifetime value and acquisition cost
 - [ ] Gross and net revenue retention
 - [ ] Revenue growth trend
 
@@ -1779,6 +1787,11 @@ breaking one in a new module breaks the platform.
       constraint rather than by the job running once (log 107).
 - [ ] `get_queryset` returns a queryset. Computing a filter in Python is
       fine; returning the list is a 500 under DRF (log 109).
+- [x] More than one aggregate over more than one relation needs
+      `distinct=True` on every one — the first is always right, which is
+      why the bug survives review (log 112).
+- [x] A recurring price is normalised to a month before it is summed, and
+      a trial is never counted as revenue (log 111).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

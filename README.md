@@ -7,7 +7,8 @@ multi-branch group.
 > **Status: early.** Running today:
 >
 > - **Platform core** — tenancy, identity, RBAC, the subscription and
->   entitlement engine, and the facility lifecycle.
+>   entitlement engine, the facility lifecycle, and an owner's console
+>   showing MRR, expansion and concentration across every customer.
 > - **Clinical** — patients, appointments, the OPD queue, encounters with
 >   vitals and SOAP notes, prescribing with allergy and interaction checking,
 >   and laboratory and radiology ordering through to verified results.
@@ -255,6 +256,21 @@ Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
 
+### MRR counts what is actually recurring
+
+Add-ons included, billing intervals normalised to a month, discounts applied,
+trials excluded. The demo customer reads very differently once it is right:
+
+```
+mrr                  88,000     (was 16,000 — add-ons were ignored)
+base_mrr             16,000
+expansion_mrr        72,000     81.8% of revenue
+trial_potential_mrr       0     reported, never added in
+```
+
+Expansion being four fifths of revenue is the single most useful thing on that
+screen, and a plain `Sum(contracted_price)` hid it completely.
+
 ### A bed is occupied over an interval, not by a flag
 
 `BedAssignment` records who was in which bed from when to when, so a stay
@@ -442,6 +458,9 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/ipd/admissions/{ref}/transfer/` | Move, keeping the interval |
 | `GET /api/ipd/admissions/{ref}/blockers/` | Why they cannot go home |
 | `POST /api/ipd/accrue/` | The nightly bed-charge job — safe to re-run |
+| `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
+| `GET /api/platform/organizations/` | Every customer and their estate |
+| `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |

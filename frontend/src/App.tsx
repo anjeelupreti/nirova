@@ -24,6 +24,7 @@ import {
   CalendarClock,
   Coins,
   BedDouble,
+  Globe,
   Users,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ import ConsultationPage from "@/pages/Consultation";
 import CounterPage from "@/pages/Counter";
 import DiagnosticsPage from "@/pages/Diagnostics";
 import PatientsPage from "@/pages/Patients";
+import PlatformPage from "@/pages/Platform";
 import PeoplePage from "@/pages/People";
 import PayrollPage from "@/pages/Payroll";
 import TimePage from "@/pages/Time";
@@ -54,21 +56,68 @@ import {
   Select,
 } from "@/components/ui/primitives";
 
-const NAV = [
-  { to: "/patients", label: "Patients", icon: Users },
-  { to: "/queue", label: "Queue", icon: ListOrdered },
-  { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
-  { to: "/wards", label: "Wards", icon: BedDouble },
-  { to: "/pharmacy", label: "Pharmacy", icon: Package },
-  { to: "/counter", label: "Counter", icon: ShoppingCart },
-  { to: "/procurement", label: "Procurement", icon: Truck },
-  { to: "/people", label: "People", icon: UserCog },
-  { to: "/time", label: "Time", icon: CalendarClock },
-  { to: "/payroll", label: "Payroll", icon: Coins },
-  { to: "/billing", label: "Billing", icon: Receipt },
-  { to: "/facilities", label: "Facilities", icon: Building2 },
-  { to: "/capacity", label: "Capacity", icon: GaugeCircle },
-  { to: "/facility-requests", label: "Change requests", icon: ScrollText },
+/**
+ * Navigation, grouped.
+ *
+ * A flat row of fourteen tabs is a row nobody scans — and the product is
+ * still growing. Grouping by *who uses it* rather than by module keeps each
+ * list short enough to read: a receptionist lives in Clinical, a storekeeper
+ * in Supply, and neither has to walk past the other's screens to find their
+ * own.
+ *
+ * `platformOnly` marks the console that reads the control plane rather than a
+ * tenant. It is hidden from customers entirely, not merely refused on click:
+ * a menu item that always errors teaches people to ignore errors.
+ */
+const NAV_GROUPS: {
+  label: string;
+  platformOnly?: boolean;
+  items: { to: string; label: string; icon: typeof Users }[];
+}[] = [
+  {
+    label: "Clinical",
+    items: [
+      { to: "/patients", label: "Patients", icon: Users },
+      { to: "/queue", label: "Queue", icon: ListOrdered },
+      { to: "/wards", label: "Wards", icon: BedDouble },
+      { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
+    ],
+  },
+  {
+    label: "Supply",
+    items: [
+      { to: "/pharmacy", label: "Pharmacy", icon: Package },
+      { to: "/counter", label: "Counter", icon: ShoppingCart },
+      { to: "/procurement", label: "Procurement", icon: Truck },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { to: "/billing", label: "Billing", icon: Receipt },
+      { to: "/payroll", label: "Payroll", icon: Coins },
+    ],
+  },
+  {
+    label: "People",
+    items: [
+      { to: "/people", label: "Directory", icon: UserCog },
+      { to: "/time", label: "Time", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Organization",
+    items: [
+      { to: "/facilities", label: "Facilities", icon: Building2 },
+      { to: "/capacity", label: "Capacity", icon: GaugeCircle },
+      { to: "/facility-requests", label: "Change requests", icon: ScrollText },
+    ],
+  },
+  {
+    label: "Platform",
+    platformOnly: true,
+    items: [{ to: "/platform", label: "Console", icon: Globe }],
+  },
 ];
 
 export default function App() {
@@ -88,6 +137,12 @@ export default function App() {
 
   const { session: data } = session;
   const organization = data?.organization;
+  //: Where "/" goes. A platform operator with no membership has nothing to
+  //: see on a clinical screen, and a customer has no business on the console.
+  const isPlatformOnly =
+    Boolean(data?.user.is_platform_staff) &&
+    (data?.memberships.length ?? 0) === 0;
+  const home = isPlatformOnly ? "/platform" : "/patients";
   const memberships = data?.memberships ?? [];
 
   return (
@@ -128,11 +183,16 @@ export default function App() {
               <ChevronDown className="pointer-events-none -ml-7 h-4 w-4 text-muted-foreground" />
             </div>
           ) : (
-            organization && (
+            (organization ? (
               <span className="text-sm font-medium">
                 {organization.display_name}
               </span>
-            )
+            ) : isPlatformOnly ? (
+              // No organization name to show, so say what they are instead.
+              // A header that reads as blank suggests something failed to
+              // load, when in fact nothing was meant to.
+              <Badge variant="secondary">Platform operator</Badge>
+            ) : null)
           )}
 
           {data?.entitlements && (
@@ -152,33 +212,80 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="mx-auto flex max-w-7xl gap-1 px-4">
-          {NAV.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-2 border-b-2 px-3 py-2 text-sm transition-colors",
-                  isActive
-                    ? "border-primary font-medium text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )
-              }
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mx-auto flex max-w-[100rem] gap-6 px-4 py-6">
+        {/*
+          A sidebar rather than a row of tabs. Fourteen destinations do not fit
+          across a header, and the ones that get pushed off the end are the
+          ones nobody finds.
+        */}
+        <nav className="hidden w-52 shrink-0 space-y-5 lg:block">
+          {NAV_GROUPS.filter(
+            (group) => !group.platformOnly || data?.user.is_platform_staff,
+          ).map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                        isActive
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      )
+                    }
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    {label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/*
+          On a narrow screen the sidebar collapses to a scrolling strip. A
+          hamburger would hide the whole product behind one tap on the device
+          a ward round actually uses.
+        */}
+        <nav className="-mx-4 mb-2 flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
+          {NAV_GROUPS.filter(
+            (group) => !group.platformOnly || data?.user.is_platform_staff,
+          )
+            .flatMap((group) => group.items)
+            .map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors",
+                    isActive
+                      ? "border-primary bg-muted font-medium text-foreground"
+                      : "border-transparent text-muted-foreground",
+                  )
+                }
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </NavLink>
+            ))}
+        </nav>
+
+      <main className="min-w-0 flex-1">
         {/*
           A tenant that cannot be reached is a normal state during onboarding,
           not a crash — so it is explained rather than thrown.
         */}
-        {data?.tenant_error && (
+        {data?.tenant_error && !isPlatformOnly && (
           <Alert variant="warning" className="mb-6">
             <AlertTitle>This organization is not ready yet</AlertTitle>
             <AlertDescription>{data.tenant_error.message}</AlertDescription>
@@ -196,7 +303,12 @@ export default function App() {
         )}
 
         <Routes>
-          <Route path="/" element={<Navigate to="/patients" replace />} />
+          {/*
+            Platform staff have no memberships, so every tenant screen would
+            be empty or refused. Landing them on the console is not a
+            convenience — it is the only page that means anything to them.
+          */}
+          <Route path="/" element={<Navigate to={home} replace />} />
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/queue" element={<QueuePage />} />
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
@@ -212,9 +324,11 @@ export default function App() {
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />
-          <Route path="*" element={<Navigate to="/patients" replace />} />
+          <Route path="/platform" element={<PlatformPage />} />
+          <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
       </main>
+      </div>
     </div>
   );
 }
