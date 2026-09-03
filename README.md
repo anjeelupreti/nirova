@@ -31,9 +31,12 @@ multi-branch group.
 > - **Emergency** — a board ordered by how sick people are, triage that
 >   appends rather than overwrites, and registration of a patient nobody
 >   can name as the default path.
+> - **Theatre** — lists that show the idle gap rather than hiding it, the WHO
+>   safety checklist recorded and never enforced, and implant serials that can
+>   answer a recall with names and phone numbers.
 >
-> Theatre, ICU charting and the patient portal are not built yet.
-> 44 of the specification's 132 sections are complete; see
+> ICU charting and the patient portal are not built yet.
+> 45 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -148,6 +151,8 @@ backend/
                        shifts, rosters, attendance and leave
     payroll/           structures, runs, payslips, Nepal tax engine     [tenant]
     inpatient/         wards, beds, admissions, accrual, discharge      [tenant]
+    emergency/         arrivals, triage, pathways, resuscitation        [tenant]
+    theatre/           rooms, cases, the safety checklist, implants     [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -485,6 +490,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/ed/arrivals/{ref}/identify/` | Name them, merging the record |
 | `GET /api/ed/board/?facility=` | Sickest first, then longest waiting |
 | `GET /api/ed/summary/?facility=` | Breaches per category, LWBS, pathways |
+| `GET /api/ot/theatres/{uuid}/list/?date=` | One room's day, with the idle gaps |
+| `POST /api/ot/cases/{ref}/schedule/` | Book a slot — refuses an overlap |
+| `POST /api/ot/cases/{ref}/checklist/` | Record a WHO phase, or skip it with a reason |
+| `POST /api/ot/cases/{ref}/mark/` | One timing: wheels in, incision, closure |
+| `GET /api/ot/implants/` | The recall register: serial → patient and phone |
+| `GET /api/ot/safety/?facility=` | Incisions that happened without a time-out |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -544,18 +555,24 @@ Built:
 - [x] People: positions with budgeted headcount, the employee record,
       append-only employment history, credential verification that blocks
       practice, contracts, and login provisioning
+- [x] Time: shifts, rosters with rest-period enforcement, attendance derived
+      rather than asserted, leave as a ledger
+- [x] Payroll: structures, runs computed from real attendance, Nepal's tax
+      slabs and SSF held as effective-dated data
+- [x] Wards: beds occupied over an interval, idempotent nightly accrual,
+      transfers that keep the history, discharge blockers
+- [x] Emergency: five-level triage that appends, critical pathways clocked
+      from arrival, unidentified arrival as the default path
+- [x] Theatre: scheduling with the idle gap made visible, the WHO safety
+      checklist recorded and never enforced, implant serials for recalls
 
 Next, in dependency order:
 
-- [ ] Attendance, leave and roster
-- [ ] Payroll and the Nepal statutory engine
-- [ ] Referrals and the patient portal
-- [ ] Pharmacy OS: product master, batches, FEFO, expiry, POS
-- [ ] Inventory and procurement
+- [ ] ICU: charting, fluid balance, ventilator data, scoring
 - [ ] Finance: chart of accounts, ledger, revenue cycle
-- [ ] HRMS and Nepal payroll (SSF, PF, CIT, TDS)
-- [ ] Hospital OS: IPD, beds, wards, theatre, emergency
-- [ ] Laboratory (LIMS) and radiology (RIS/PACS)
+- [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
+- [ ] Insurance, claims and government schemes
+- [ ] Referrals and the patient portal
 - [ ] Analytics, reporting engine, command centres
 - [ ] Mobile apps and offline mode
 

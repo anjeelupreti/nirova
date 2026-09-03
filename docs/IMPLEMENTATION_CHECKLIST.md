@@ -1446,21 +1446,122 @@ rather than redesigning around it.
 - [ ] Critical alerts
 - [ ] ICU notes and scoring
 
-## §31 Operation theatre `[ ]`
+## §31 Operation theatre 🔷
 
-- [ ] Procedure request
-- [ ] Pre-operative assessment
-- [ ] Approval
-- [ ] Theatre scheduling
-- [ ] Surgical team assignment
-- [ ] Anaesthesia record
-- [ ] Procedure record
-- [ ] Implant tracking
-- [ ] Consumable and drug consumption
-- [ ] Recovery
-- [ ] Documentation
-- [ ] Theatre billing
-- [ ] Utilisation, duration, delay and cancellation analytics
+**The theatre itself**
+- [x] Theatre as a room with a code, unique per facility
+- [x] Session start and finish, so utilisation has a denominator
+- [x] Turnaround minutes per room — a gap the length of the cleaning time is
+      not waste, and a gap twice that is
+- [x] Specialty and equipment notes
+- [x] Laminar flow flagged, because it decides which cases may run there
+- [ ] Per-day session patterns (a room staffed on alternate afternoons)
+
+**Requesting and approving**
+- [x] Procedure request from an encounter, by a named surgeon
+- [x] Indication, planned procedure, procedure code
+- [x] Laterality as a required decision, never a blank — left/right/bilateral
+      or explicitly not applicable
+- [x] ASA grade and the planned duration the surgeon estimates
+- [x] Day case flagged at request, because it decides whether a bed is needed
+- [x] Urgency: elective, scheduled, urgent, emergency
+- [x] Approval by somebody other than the requester
+- [x] The waiting list: approved, no slot — the gap between the clinical
+      decision and the operational one
+- [ ] Pre-operative assessment clinic and fitness sign-off
+- [ ] Consent capture against the case
+
+**Scheduling**
+- [x] A slot is a start and an end, never one without the other
+- [x] Overlap detection against the room's other cases
+- [x] Turnaround respected — the next case cannot start while the room is
+      being cleaned
+- [x] Double-booking possible only with `theatre.override`, and recorded
+- [x] The day list per room, in order, with the idle gap between cases
+- [x] Overrun measured against the surgeon's own estimate
+- [ ] Surgeon and anaesthetist availability checked across rooms
+- [ ] Drag-to-reschedule on the list
+
+**The team**
+- [x] Named roles: surgeon, assistant, anaesthetist, scrub, circulating,
+      technician, perfusionist
+- [x] One primary surgeon and one anaesthetist per case, enforced
+- [x] Licensed roles go through the same practice check that refuses a
+      prescription — nobody operates on a lapsed registration
+- [x] `team_gaps` names the roles a case is still missing
+- [x] Registration number recorded on the case, not looked up later
+- [ ] Rota integration, so the assignment offers who is on duty
+
+**The surgical safety checklist**
+- [x] The WHO three phases — sign in, time out, sign out — as data, not as a
+      React component
+- [x] Each item answered yes or no by a named person at a recorded moment
+- [x] Unanswered items recorded as unanswered rather than blocking
+- [x] Negative answers surfaced; concerns recorded in words
+- [x] A phase may be skipped, but only with a reason
+- [x] `incision_without_timeout` — the finding the model exists to surface,
+      computed from the time-out's timestamp against the incision's
+- [x] Never enforced: a system that blocks the incision gets bypassed in a
+      week, and then there is no record at all
+- [x] Facility-wide safety audit: operations, breaches, breach rate, cases to
+      review
+
+**The case as it runs**
+- [x] Timings: sent for, wheels in, anaesthesia, incision, closure, wheels
+      out, left recovery
+- [x] Start delay against the booked time
+- [x] Operating minutes and theatre minutes reported separately — the room is
+      always occupied longer than the operation takes
+- [x] Performed procedure recorded separately from the planned one
+- [x] Findings, complications, blood loss, specimens, post-op instructions
+- [ ] Structured operation note templates per procedure
+
+**Anaesthesia**
+- [x] Technique and airway, intubation attempts, difficult airway flagged
+- [x] Fluids in and urine out
+- [x] Lowest systolic and lowest SpO₂ — the two numbers a later review asks for
+- [x] Adverse events, reversal, post-operative analgesia plan
+- [ ] Intra-operative observation charting at intervals
+
+**Recovery**
+- [x] Arrival and discharge from recovery, with minutes in recovery
+- [x] Aldrete and pain scores
+- [x] Nausea, shivering, complications
+- [x] Where the patient went: ward, ICU, HDU, home
+- [ ] Discharge criteria enforced as a checklist
+
+**Consumption and implants**
+- [x] Consumables, drugs, blood and implants recorded against the case
+- [x] Batch consumed from theatre stock through the existing ledger
+- [x] An implant demands a serial number — a recall asks which patients have
+      one, and a product code cannot answer that
+- [x] A serial already recorded against another patient is refused
+- [x] Implanted site recorded
+- [x] The recall register: serial → patient, MRN, phone, date, procedure
+- [x] Cost by kind, implants reported separately
+- [ ] Loan-set tracking and return
+
+**Billing**
+- [x] Each consumption raises a charge on the encounter
+- [x] Unbilled items counted, so nothing quietly stays free
+- [ ] Procedure and theatre-time charges from a tariff
+- [ ] Package pricing for a whole procedure
+
+**Cancellation**
+- [x] A countable reason rather than free text
+- [x] Avoidable cancellations distinguished from unavoidable ones — the
+      number a theatre committee acts on
+- [x] Postponement kept separate from cancellation
+- [x] The slot is released
+
+**Analytics**
+- [x] Booked and used utilisation reported separately — a room booked to 90%
+      that operates for 60% is not the same as one running perfectly
+- [x] Cases starting late, and the average delay
+- [x] Overruns against the surgeon's estimate
+- [x] Cancellations by reason, with the avoidable share
+- [x] Safety audit across the facility
+- [ ] Surgeon-level and procedure-level duration benchmarks
 
 ## §32 Specialty clinical services 🔷
 

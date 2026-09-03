@@ -3279,3 +3279,176 @@ admission reference and says why.
 **Affects.** `frontend/src/pages/Emergency.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+
+---
+
+## 118 - The operating theatre
+2026-09-03 · Backend · feature
+
+`apps/theatre/`. A hospital's most expensive room by the minute and its most
+dangerous by the incident. The module holds both halves: the scheduling that
+decides whether the room earns anything, and the checklist that decides
+whether the patient leaves with the right leg.
+
+**The theatre is a room with a session and a turnaround.** Utilisation without
+a denominator is a number nobody can act on, so `session_start`, `session_end`
+and `turnaround_minutes` sit on the room. Turnaround is the honest part: a
+twenty-minute gap in a room that takes twenty minutes to clean is not waste,
+and the same gap in a room that takes ten is ten minutes of theatre time
+nobody used. `day_list` computes the gap net of turnaround, so the screen can
+draw only the waste.
+
+**Laterality is a decision, never a blank.** `Laterality.NOT_APPLICABLE` is an
+explicit choice with its own value. A nullable field would let an
+appendicectomy and a knee replacement both store nothing, and wrong-side
+surgery starts exactly there.
+
+**A slot is both ends or neither.** `ot_case_slot_has_both_ends` is a database
+constraint, not a service check. A case with a start and no end is invisible
+to every overlap query ever written against it.
+
+**Booking checks the room, and `theatre.override` is the only way past it.**
+`overlapping_cases` accounts for turnaround, so the next case cannot start
+while the room is being cleaned. Forcing a double-booking is possible — an
+emergency at 2 a.m. is real — but it needs the permission and it is recorded.
+
+**Two singular roles, enforced by constraint.** `uniq_singular_role_per_case`
+allows any number of assistants and scrub nurses and exactly one primary
+surgeon and one anaesthetist. Licensed roles go through `assert_may_practise`,
+the same check that refuses a prescription: nobody operates on a lapsed
+registration. The case stores the registration number rather than looking it
+up afterwards, because registrations lapse between the operation and the
+audit.
+
+**The WHO checklist is data.** `CHECKLIST_ITEMS` holds the three phases and
+their items in the model layer, and the API serves the template to the client.
+A checklist whose contents live in a React component cannot be audited, and a
+regulator asking "what did the sign-in say in March?" needs an answer that
+does not involve reading git history.
+
+**The checklist is recorded, never enforced.** Items left unanswered are
+stored as unanswered. A phase may be skipped with a reason. Nothing blocks the
+incision. This is deliberate and it is the whole design: a system that refuses
+to let a bleeding patient be opened until a form is complete gets bypassed
+within a week — by pre-ticking, which destroys the evidence the checklist
+exists to create. So the system records that the incision happened without a
+time-out, and puts it on the audit.
+
+**`incision_without_timeout` compares timestamps, not booleans.** A time-out
+completed after the incision is not a time-out. It is paperwork.
+
+**An implant demands a serial number.** `uniq_implant_serial` refuses the same
+serial twice, and the service refuses it with a sentence naming the other
+patient. When a manufacturer issues a recall the question is "which patients
+have one", and the only acceptable answer is a list of names and phone
+numbers — which is what `implant_registry` returns.
+
+**Cancellation reasons are countable.** `AVOIDABLE_REASONS` marks the ones the
+hospital caused: no bed, no theatre time, no staff, no equipment,
+administrative. A cancelled list is a hospital's single largest waste, and
+"patient unfit" and "we had no bed" demand opposite responses from opposite
+people. Postponement is kept separate from cancellation, because a case that
+will be rebooked is not the same event as one that will not.
+
+**Booked and used utilisation are two numbers.** A room booked to 90% that
+operates for 60% has an hour a day of late starts and slow turnarounds, and a
+single "utilisation" figure would report it identically to a room running
+perfectly. Reporting one number would hide the only thing worth managing.
+
+**Affects.** `apps/theatre/models.py`, `apps/theatre/services.py`,
+`apps/theatre/api.py`, `apps/theatre/urls.py`, `apps/rbac/permissions.py`
+(`theatre.override`), `config/urls.py`.
+
+---
+
+## 119 - Every case looked checklisted
+2026-09-03 · Backend · bug
+
+`seed_theatre_demo` was written to leave seven of fourteen operations with an
+incision and no time-out, and the safety audit reported zero breaches.
+
+`complete_checklist` stamped `completed_at` with `timezone.now()`. The seed
+back-dates its cases across three months, so every checklist was completed
+today — after every incision it belonged to. The audit compares "time-out
+later than incision", and with every stamp landing at the same recent instant
+the comparison stopped separating the seven cases that breached from the seven
+that did not. Its one real finding became noise.
+
+Added an `at` parameter, defaulting to now. The seed passes the real moment.
+The audit then found exactly the seven cases the seed intended.
+
+This is the same shape as the accrual bugs: any function that records *when*
+something happened must accept the time as an argument, because sooner or
+later something back-dates it — a seed, a migration, a night-shift correction
+entered the following morning. `timezone.now()` inside a recording function is
+a bug waiting for its first import.
+
+**Affects.** `apps/theatre/services.py`.
+
+---
+
+## 120 - Two patients with the same knee
+2026-09-03 · Backend · bug
+
+The seed produced two implants with the same serial number, on two different
+patients. Nothing complained.
+
+A serial number identifies one physical device. Two patients cannot hold it.
+The recall register — the entire reason the field exists — silently returned
+two names for one device, which is worse than returning none: it looks like an
+answer.
+
+Added `uniq_implant_serial` (a partial unique index, since non-implants have
+no serial), plus a service-layer check that refuses with a readable sentence
+naming the case and patient already holding it. A constraint alone would give
+a theatre nurse an IntegrityError at the moment they are scrubbed and
+counting.
+
+One existing duplicate had to be cleaned before the migration would apply.
+
+**Affects.** `apps/theatre/models.py`, `apps/theatre/services.py`,
+`apps/theatre/migrations/`.
+
+---
+
+## 121 - The theatre screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Theatre.tsx`. Two audiences with opposite needs: a
+coordinator wants every room's list side by side, and a scrub team wants one
+case, its checklist and the button for the next timing. Four tabs — lists,
+waiting list, implants, performance — with the case detail replacing the whole
+view rather than opening in a panel, because inside a case the surrounding
+navigation is noise.
+
+**The idle gap is drawn, not implied.** Between two cases with a real gap the
+list shows a red rule reading "22 minutes idle", and the room's header carries
+the day's total. A calendar that merely stacks blocks in time order hides the
+hour nobody can use, which is the only number the coordinator can act on.
+
+**The safety checklist is the first card on a case**, above the timings, and
+`incision_without_timeout` is a red alert at the top of the page that says
+plainly that the system did not stop the case and did record what happened.
+There is no control anywhere on the screen that makes it go away.
+
+**The skip dialog argues its own case.** Choosing to skip a phase shows why a
+skipped phase with a reason is better than a blank one, and refuses a reason
+under ten characters. The checklist dialog states, next to the concerns box,
+why unanswered items are allowed — so the person filling it in knows the
+system is not asking them to lie.
+
+**The implant button will not enable without a serial number**, and the field
+says what the serial is for in one sentence about recalls.
+
+**Room occupancy versus operating time is spelled out in words** under the
+timings — "the room was occupied 47m longer than the operation took" — because
+the gap between those two numbers is the whole of theatre productivity, and a
+table of four figures does not make anyone notice it.
+
+**The performance tab leads with safety, not with utilisation.** Operations,
+incisions without a time-out, breach rate, and the case references to review.
+Utilisation follows, with booked and used side by side and a sentence saying
+why they are two numbers.
+
+**Affects.** `frontend/src/pages/Theatre.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.

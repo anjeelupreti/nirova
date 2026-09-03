@@ -2539,3 +2539,217 @@ export interface DepartmentSummary {
     average_door_to_intervention_minutes: number | null;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// Operating theatre
+// ---------------------------------------------------------------------------
+
+export interface OperatingTheatre {
+  uuid: string;
+  code: string;
+  name: string;
+  theatre_type: string;
+  facility: string;
+  department: string | null;
+  stock_location: string | null;
+  floor: string;
+  /** Per room — an orthopaedic theatre and an endoscopy room differ. */
+  turnaround_minutes: number;
+  session_starts_at: string | null;
+  session_ends_at: string | null;
+  has_laminar_flow: boolean;
+  has_image_intensifier: boolean;
+  has_microscope: boolean;
+  is_active: boolean;
+  notes: string;
+}
+
+export interface TheatreTeamMember {
+  uuid: string;
+  case: string;
+  employee: string | null;
+  role: string;
+  name: string;
+  registration_number: string;
+  scrubbed_in_at: string | null;
+  scrubbed_out_at: string | null;
+  notes: string;
+}
+
+export interface SafetyChecklistPhase {
+  phase: string;
+  label: string;
+  complete: boolean;
+  skipped: boolean;
+  skip_reason: string;
+  completed_at: string | null;
+  completed_by: string;
+  unanswered: string[];
+  concerns: string;
+  negative_answers: string[];
+}
+
+export interface ChecklistState {
+  state: {
+    case: string;
+    phases: SafetyChecklistPhase[];
+    all_complete: boolean;
+    /** The finding the whole model exists to surface. */
+    incision_without_timeout: boolean;
+  };
+  items: Record<string, string[]>;
+}
+
+export interface CaseConsumption {
+  uuid: string;
+  case: string;
+  kind: string;
+  product: string | null;
+  batch: string | null;
+  description: string;
+  batch_number: string;
+  serial_number: string;
+  manufacturer: string;
+  expires_on: string | null;
+  quantity: string;
+  unit_cost: string;
+  total_cost: string;
+  charge_uuid: string | null;
+  implanted_site: string;
+  recorded_by_name: string;
+  notes: string;
+}
+
+export interface SurgicalCaseSummary {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_name: string;
+  patient_mrn: string;
+  facility: string;
+  theatre: string | null;
+  theatre_code: string;
+  planned_procedure: string;
+  performed_procedure: string;
+  laterality: string;
+  urgency: string;
+  asa_grade: number | null;
+  status: string;
+  is_live: boolean;
+  is_day_case: boolean;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  planned_minutes: number;
+  wheels_in_at: string | null;
+  incision_at: string | null;
+  closure_at: string | null;
+  wheels_out_at: string | null;
+  theatre_minutes: number | null;
+  operating_minutes: number | null;
+  start_delay_minutes: number | null;
+  overran_minutes: number | null;
+  cancellation_reason: string;
+  was_avoidable_cancellation: boolean;
+}
+
+export interface SurgicalCase extends SurgicalCaseSummary {
+  encounter: string | null;
+  procedure_code: string;
+  indication: string;
+  requested_at: string;
+  requested_by_name: string;
+  approved_at: string | null;
+  approved_by_name: string;
+  sent_for_at: string | null;
+  anaesthesia_start_at: string | null;
+  recovery_out_at: string | null;
+  anaesthesia_minutes: number | null;
+  cancelled_at: string | null;
+  cancellation_notes: string;
+  findings: string;
+  complications: string;
+  blood_loss_ml: number | null;
+  specimen_sent: boolean;
+  specimen_detail: string;
+  post_op_instructions: string;
+  notes: string;
+  team: TheatreTeamMember[];
+  consumption: CaseConsumption[];
+}
+
+export interface TheatreListRow {
+  reference: string;
+  patient: string;
+  mrn: string;
+  procedure: string;
+  laterality: string;
+  urgency: string;
+  asa_grade: number | null;
+  status: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  planned_minutes: number;
+  gap_before_minutes: number | null;
+  /** Idle time beyond the room's turnaround — theatre time nobody can use. */
+  unused_gap_minutes: number | null;
+  actual_start: string | null;
+  start_delay_minutes: number | null;
+  theatre_minutes: number | null;
+  overran_minutes: number | null;
+}
+
+export interface TheatreUtilisation {
+  theatre: string;
+  from: string;
+  to: string;
+  cases: number;
+  completed: number;
+  cancelled: number;
+  avoidable_cancellations: number;
+  cancellation_reasons: Record<string, number>;
+  session_minutes: number;
+  booked_minutes: number;
+  used_minutes: number;
+  booked_percent: number | null;
+  used_percent: number | null;
+  average_start_delay_minutes: number | null;
+  cases_starting_late: number;
+  average_overrun_minutes: number | null;
+}
+
+export interface CaseCost {
+  case: string;
+  items: number;
+  by_kind: Record<string, string>;
+  total: string;
+  implants: {
+    description: string;
+    serial_number: string;
+    site: string;
+    cost: string;
+  }[];
+  unbilled: number;
+}
+
+export interface ImplantRecord {
+  patient: string;
+  mrn: string;
+  phone: string;
+  case: string;
+  operated_on: string | null;
+  procedure: string;
+  implant: string;
+  serial_number: string;
+  batch_number: string;
+  site: string;
+}
+
+export interface SafetyAudit {
+  since: string;
+  operations: number;
+  incisions_without_a_time_out: number;
+  breach_percent: number;
+  breaching_cases: string[];
+  phases_skipped: number;
+  fully_compliant_percent: number;
+}

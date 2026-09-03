@@ -118,6 +118,12 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("discharge.override", "Override a blocked discharge", "Clinical",
        is_sensitive=True),
     _p("bed.manage", "Manage wards and beds", "Clinical"),
+    # Double-booking a theatre is its own authority. It is a real decision an
+    # emergency sometimes requires, and one a theatre committee asks about
+    # afterwards, so it is given to a coordinator rather than to everybody who
+    # can book a case.
+    _p("theatre.override", "Double-book a theatre", "Clinical",
+       is_sensitive=True),
 
     # -- inventory --------------------------------------------------------
     _p("stock.read", "View stock", "Inventory"),

@@ -299,7 +299,7 @@ SYSTEM_ROLES = [
             "department.read", "department.manage", "config.read",
             "user.read", "user.invite", "role.read", "role.assign",
             "patient.read", "encounter.read", "bed.manage",
-            "discharge.override",
+            "discharge.override", "theatre.override",
             "stock.read", "stock.approve_adjustment", "stock.transfer",
             "purchase.read", "purchase.approve",
             "invoice.read", "payment.record", "refund.approve",
