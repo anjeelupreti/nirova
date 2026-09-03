@@ -3825,3 +3825,176 @@ payment that was never actually made.
 
 **Affects.** `frontend/src/pages/Finance.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 133 - Insurance, TPAs and the government schemes
+2026-09-04 · Backend · feature
+
+`apps/insurance/`. The whole design follows from one observation: **the
+hospital's claim and the payer's answer are different records, and the gap
+between them is the business.**
+
+**Claimed, approved, deducted and settled are four separate amounts** — not
+one amount with a status. An insurer approves 80,000 of a 100,000 claim,
+deducts 15,000 as non-payable and pays 78,000 six weeks later, and every one
+of those numbers has to be recoverable because the differences are what the
+hospital is arguing about.
+
+**A deduction has a reason from a fixed list, enforced by a check
+constraint.** "Rs 15,000 deducted" is not actionable; "Rs 15,000 deducted:
+consumables not covered under the package" is a policy the hospital can
+change. Free text produces a field nobody aggregates, and the aggregate is the
+only thing that improves the next claim. Fifteen reasons, served by the API so
+the vocabulary can be audited rather than living in a React component.
+
+**Cover is checked against the date of service.** `was_active_on` rather than
+`is_active`, deliberately. A policy that lapsed last week did not lapse before
+last month's admission, and a system that asks about today gets the wrong
+answer on every claim submitted late.
+
+**A pre-authorisation is a promise with an amount and an expiry**, and both
+are routinely lost. An approval for less than was asked is
+`partially_approved`, not `approved`, because the word "approved" does not say
+that the hospital is carrying the difference. `preauth_warnings` produces
+sentences *before* the operation about the two failures that are entirely
+predictable a week ahead: spending past the approved amount, and operating
+after the approval expired.
+
+**Submission deadlines are counted down, not discovered.** Per payer: some
+allow ninety days, some fifteen. Past the window `submit_claim` refuses rather
+than warns, because a claim submitted late is not a claim — it is a rejection
+with extra steps, and the hospital would believe it is owed money it is not.
+
+**The government schemes are not insurers.** Nepal's Health Insurance Board
+pays a fixed package per condition regardless of what the treatment cost.
+That is not a policy with a sum insured, and bending it into one produces a
+claim that is always over or under by the difference between cost and package
+rate — which is precisely the number a scheme hospital needs to manage. So
+`SchemePackage` is effective-dated (a government notice changes the rate, and
+claims already made keep the old one) and `package_margin` reports the gap in
+either direction.
+
+Two smaller decisions. `ClaimEvent` is append-only because a claim is a
+conversation conducted over months by people who leave, and the status field
+alone tells whoever picks it up nothing. And `queried` is its own state: a
+payer that has asked a question has not rejected the claim and is not
+processing it either, and folding that into "submitted" is how a claim sits
+for four months waiting for a document nobody knew was wanted.
+
+**Affects.** `apps/insurance/` (new app), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 134 - Three ways to claim for the wrong thing
+2026-09-04 · Backend · bug
+
+The seed died on `patient_id` being null: it had picked the most recent
+invoices, and the most recent invoices are pharmacy counter sales, which have
+no patient.
+
+That is not a data problem to route around. A retail sale has nobody for an
+insurer to check a policy against, so `create_claim` now refuses it with a
+sentence saying so. Accepting it would have let a walk-in purchase be billed
+to whichever policy happened to be selected.
+
+Fixing that exposed the more serious version. The seed had been pairing
+invoices with policies by list index, which meant one patient's treatment
+claimed against another patient's cover. That is fraud whether or not anybody
+meant it, and the commonest innocent version is a dependant's card used for
+the principal — so the service now refuses a policy whose patient is not the
+invoice's patient, and says that a dependant needs their own policy record
+naming the principal.
+
+The third was in the seed itself: it reported ageing and deduction analysis
+filtered to the hospital facility while every invoice it had claimed for came
+from the clinic, so both reports read zero beside a payer table showing
+Rs 6,450 outstanding. Two numbers on the same page disagreeing is the seed
+doing its job.
+
+**Affects.** `apps/insurance/services.py`,
+`apps/insurance/management/commands/seed_insurance_demo.py`.
+
+---
+
+## 135 - A written-off claim stopped being a rejection
+2026-09-04 · Backend · bug
+
+`payer_performance` counted rejections as `status=REJECTED`. The seed rejected
+a claim, then wrote it off — and the payer's rejection rate fell to zero.
+
+Read literally, that means a payer's rejection rate improves every time the
+hospital gives up on a claim, which is exactly backwards: giving up is the
+*consequence* of the rejection. Rejections are now counted from `ClaimEvent`,
+which is append-only and exists precisely so that a claim's history survives
+its current state.
+
+The same shape as several earlier fixes — a fact about what happened read off
+a field that records what is true now.
+
+**Affects.** `apps/insurance/services.py`.
+
+---
+
+## 136 - Query-string dates were never parsed
+2026-09-04 · Backend · bug
+
+`GET /api/insurance/eligibility/?on_date=2026-07-06` returned a 500.
+
+A query parameter is always a string. Passed into an ORM filter it works,
+because Django parses it; passed into arithmetic — `on_date < policy.valid_from`,
+`since - timedelta(days=1)`, `until - since` — it raises a TypeError. So the
+same value behaved differently depending on which line of the service touched
+it first, and the bug appeared only on the paths that compute rather than
+filter.
+
+Finance had the identical latent bug in `account_ledger` and `reconciliation`,
+written the same afternoon, and theatre's day list would have had it the first
+time somebody passed a malformed date.
+
+`apps/common/dates.py` parses at the API boundary and raises a DRF validation
+error rather than a TypeError, so `?since=lastweek` is a 400 with a sentence
+instead of a 500 with a traceback. Every service below the boundary can now
+assume it has a real date.
+
+**Affects.** `apps/common/dates.py` (new), `apps/insurance/api.py`,
+`apps/finance/api.py`, `apps/theatre/api.py`.
+
+---
+
+## 137 - The claims screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Claims.tsx`. Built around the same observation as the
+module: the claim and the answer are different records, so nothing on the
+screen shows a single "amount".
+
+**Every claim carries all four figures side by side** — claimed, approved,
+cut, settled — with the shortfall drawn as a number under the approved column
+rather than left to be worked out.
+
+**The submission deadline is a countdown on every draft**, in its own payer's
+window, amber under a week and red once gone. It disappears once the claim is
+submitted, because a red countdown on a settled claim trains people to ignore
+red.
+
+**Approvals about to expire are the banner above every tab**, with the days
+left and a sentence saying that treating against an expired approval is
+rejected as unauthorised. It is predictable a week ahead, so it is said a week
+ahead.
+
+**The response dialog will not submit a deduction without a reason.** The
+vocabulary comes from the API; a line with an amount and no reason turns red
+with a sentence explaining that a deduction nobody can aggregate cannot be
+argued with; the button stays disabled until every one has a reason.
+
+**The claim detail leads with the event timeline**, not the status, because a
+claim is a conversation conducted over months by people who leave.
+
+**The pre-authorisation list states the risk in money** — "Rs 33,000 at the
+hospital's risk" beside a partial approval — rather than leaving somebody to
+subtract two numbers.
+
+**Affects.** `frontend/src/pages/Claims.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.

@@ -26,6 +26,7 @@ from rest_framework.views import APIView
 
 # UUIDRelatedField: relations are published by UUID. With a database per
 # tenant an integer PK means a different row in every customer's database.
+from apps.common.dates import as_date, date_params
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
@@ -339,9 +340,7 @@ class AccountViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="ledger")
     def ledger(self, request, uuid=None):
         return Response(account_ledger(
-            self.get_object(),
-            since=request.query_params.get("since") or None,
-            until=request.query_params.get("until") or None,
+            self.get_object(), **date_params(request, "since", "until"),
         ))
 
 
@@ -549,9 +548,7 @@ class BankAccountViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="reconciliation")
     def reconcile(self, request, uuid=None):
         return Response(reconciliation(
-            self.get_object(),
-            since=request.query_params.get("since") or None,
-            until=request.query_params.get("until") or None,
+            self.get_object(), **date_params(request, "since", "until"),
         ))
 
     @action(detail=True, methods=["get"], url_path="statement")
@@ -591,8 +588,8 @@ class ReportView(APIView):
 
     def get(self, request):
         which = request.query_params.get("report", "trial_balance")
-        since = request.query_params.get("since") or None
-        until = request.query_params.get("until") or None
+        since = as_date(request.query_params.get("since"), "since")
+        until = as_date(request.query_params.get("until"), "until")
         facility = (
             get_object_or_404(Facility, uuid=request.query_params["facility"])
             if request.query_params.get("facility") else None

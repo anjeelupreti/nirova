@@ -18,6 +18,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.dates import as_date
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
@@ -341,7 +342,8 @@ class TheatreViewSet(viewsets.ModelViewSet):
     def day(self, request, uuid=None):
         """One room's list for one day, with the idle gaps between cases."""
         return Response(
-            day_list(self.get_object(), on_date=request.query_params.get("date"))
+            day_list(self.get_object(),
+                     on_date=as_date(request.query_params.get("date"), "date"))
         )
 
     @action(detail=True, methods=["get"], url_path="utilisation")

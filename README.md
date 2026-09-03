@@ -40,9 +40,12 @@ multi-branch group.
 > - **Finance** — double entry the database enforces, periods that close, and a
 >   receivables control account that is compared against the invoices rather
 >   than assumed to agree with them.
+> - **Insurance and claims** — cover checked on the date of service, four
+>   separate amounts per claim, and deductions with countable reasons instead
+>   of free text nobody can aggregate.
 >
-> The patient portal and insurance claims are not built yet.
-> 47 of the specification's 132 sections are complete; see
+> The patient portal and referrals are not built yet.
+> 48 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -161,6 +164,7 @@ backend/
     theatre/           rooms, cases, the safety checklist, implants     [tenant]
     icu/               stays, charting, infusions, scoring, alerts      [tenant]
     finance/           chart of accounts, ledger, periods, ageing       [tenant]
+    insurance/         payers, policies, pre-auth, claims, schemes      [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -516,6 +520,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `GET /api/finance/reports/?report=reconcile_receivables` | Do the books agree with the invoices? |
 | `POST /api/finance/periods/{uuid}/close/` | Stop the month |
 | `GET /api/finance/bank-accounts/{uuid}/reconciliation/` | Unmatched, both ways |
+| `GET /api/insurance/eligibility/?patient=&on_date=` | Cover on the day of treatment |
+| `POST /api/insurance/claims/create/` | Build a claim from an issued invoice |
+| `POST /api/insurance/claims/{ref}/response/` | What the payer allowed, and why not the rest |
+| `GET /api/insurance/reports/?report=deductions` | Why claims are being cut, ranked |
+| `GET /api/insurance/payers/performance/` | Approval rate, turnaround, write-offs |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -591,11 +600,13 @@ Built:
 - [x] Finance: chart of accounts, double entry enforced by the database,
       accounting periods, ageing on both sides, and reconciliation that
       compares two independent records rather than restating one
+- [x] Insurance and claims: payers that behave differently, eligibility on the
+      date of service, pre-authorisation with an expiry, four separate claim
+      amounts, countable deduction reasons, and government scheme packages
 
 Next, in dependency order:
 
 - [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
-- [ ] Insurance, claims and government schemes
 - [ ] Referrals and the patient portal
 - [ ] Analytics, reporting engine, command centres
 - [ ] Mobile apps and offline mode

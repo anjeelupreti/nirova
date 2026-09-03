@@ -3384,3 +3384,292 @@ export interface BankReconciliation {
   }[];
   matched: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Insurance and claims                                                        */
+/* -------------------------------------------------------------------------- */
+
+/** Money arrives as a string. Format it; never do arithmetic on it here. */
+
+export interface Payer {
+  uuid: string;
+  code: string;
+  name: string;
+  name_nepali: string;
+  kind: "insurer" | "tpa" | "government" | "corporate" | "embassy";
+  administers_for: string | null;
+  registration_number: string;
+  pan_number: string;
+  contact_name: string;
+  contact_phone: string;
+  contact_email: string;
+  address: string;
+  price_list_code: string;
+  /** Days from the date of service to submit. Missing it voids the claim. */
+  submission_window_days: number;
+  settlement_days: number;
+  requires_preauthorisation: boolean;
+  preauthorisation_threshold: string;
+  is_active: boolean;
+  notes: string;
+  is_scheme: boolean;
+}
+
+export interface Policy {
+  uuid: string;
+  policy_number: string;
+  payer: string;
+  payer_name: string;
+  patient: string;
+  patient_name: string;
+  principal_name: string;
+  relationship: string;
+  valid_from: string;
+  valid_to: string;
+  status: "active" | "lapsed" | "suspended" | "cancelled";
+  /** Null means uncapped, which is not the same as zero. */
+  sum_insured: string | null;
+  utilised: string;
+  remaining: string | null;
+  deductible: string;
+  co_payment_percent: string;
+  sub_limits: Record<string, number>;
+  exclusions: string[];
+  waiting_period_until: string | null;
+  card_number: string;
+  notes: string;
+}
+
+export interface EligibilityRow {
+  policy: string;
+  policy_number: string;
+  payer: string;
+  payer_kind: string;
+  valid_from: string;
+  valid_to: string;
+  eligible: boolean;
+  /** Sentences, so reception can tell the patient which card to hand over. */
+  problems: string[];
+  sum_insured: string | null;
+  remaining: string | null;
+  deductible: string;
+  co_payment_percent: string;
+  sub_limits: Record<string, number>;
+  exclusions: string[];
+}
+
+export interface Eligibility {
+  patient: string;
+  mrn: string;
+  as_at: string;
+  policies: EligibilityRow[];
+  any_eligible: boolean;
+}
+
+export interface CoverEstimate {
+  billed: string;
+  payer_pays: string;
+  patient_pays: string;
+  reductions: { reason: string; amount: string; detail: string }[];
+  eligible: boolean;
+}
+
+export interface PreAuthorisation {
+  uuid: string;
+  reference: string;
+  policy_number: string;
+  payer_name: string;
+  patient_name: string;
+  requested_at: string;
+  requested_by_name: string;
+  planned_treatment: string;
+  diagnosis: string;
+  diagnosis_code: string;
+  planned_admission_on: string | null;
+  estimated_days: number | null;
+  estimated_amount: string;
+  status:
+    | "requested"
+    | "approved"
+    | "partially_approved"
+    | "rejected"
+    | "expired"
+    | "used"
+    | "cancelled";
+  payer_reference: string;
+  responded_at: string | null;
+  approved_amount: string;
+  valid_until: string | null;
+  conditions: string;
+  rejection_reason: string;
+  notes: string;
+  is_usable: boolean;
+  days_until_expiry: number | null;
+  warnings: string[];
+}
+
+export interface ExpiringPreAuth {
+  reference: string;
+  patient: string;
+  mrn: string;
+  payer: string;
+  treatment: string;
+  approved: string;
+  valid_until: string;
+  days_left: number | null;
+  expired: boolean;
+}
+
+export interface ClaimLine {
+  uuid: string;
+  description: string;
+  service_code: string;
+  category: string;
+  quantity: string;
+  unit_price: string;
+  claimed_amount: string;
+  approved_amount: string;
+  deducted_amount: string;
+  /** From a fixed list — the only useful thing about a deduction. */
+  deduction_reason: string;
+  deduction_notes: string;
+}
+
+export interface ClaimEvent {
+  happened_at: string;
+  event: string;
+  detail: string;
+  amount: string | null;
+  actor_name: string;
+}
+
+export interface SubmissionDeadline {
+  window_days: number;
+  deadline: string;
+  days_left: number;
+  expired: boolean;
+  urgent: boolean;
+}
+
+export type ClaimStatus =
+  | "draft"
+  | "submitted"
+  | "queried"
+  | "approved"
+  | "partially_approved"
+  | "rejected"
+  | "appealed"
+  | "settled"
+  | "written_off";
+
+export interface ClaimSummary {
+  uuid: string;
+  reference: string;
+  payer_name: string;
+  patient_name: string;
+  patient_mrn: string;
+  invoice_number: string;
+  service_date: string;
+  discharge_date: string | null;
+  diagnosis: string;
+  status: ClaimStatus;
+  submitted_at: string | null;
+  submission_count: number;
+  payer_reference: string;
+  /** Four separate amounts, not one amount with a status. */
+  claimed_amount: string;
+  approved_amount: string;
+  deducted_amount: string;
+  settled_amount: string;
+  patient_liability: string;
+  outstanding: string;
+  shortfall: string;
+  days_since_submission: number | null;
+  rejection_reason: string;
+  query_text: string;
+  deadline: SubmissionDeadline;
+}
+
+export interface Claim extends ClaimSummary {
+  policy_number: string;
+  preauth_reference: string;
+  treatment_summary: string;
+  diagnosis_code: string;
+  responded_at: string | null;
+  settled_at: string | null;
+  query_raised_at: string | null;
+  query_answered_at: string | null;
+  notes: string;
+  lines: ClaimLine[];
+  events: ClaimEvent[];
+}
+
+export interface ClaimsAgeing {
+  buckets: Record<string, string>;
+  total: string;
+  /** Past the payer's own promised days, not a generic thirty. */
+  overdue: string;
+  claims: {
+    claim: string;
+    payer: string;
+    patient: string;
+    status: string;
+    submitted: string;
+    days: number;
+    promised_days: number;
+    past_promise: boolean;
+    claimed: string;
+    approved: string;
+    outstanding: string;
+  }[];
+}
+
+export interface DeductionAnalysis {
+  since: string;
+  total_deducted: string;
+  by_reason: {
+    reason: string;
+    amount: string;
+    lines: number;
+    share_percent: string | null;
+  }[];
+  by_category: Record<string, string>;
+}
+
+export interface PayerPerformance {
+  payer: string;
+  kind: string;
+  claims: number;
+  claimed: string;
+  approved: string;
+  settled: string;
+  outstanding: string;
+  approval_percent: string | null;
+  rejected: number;
+  rejection_percent: number;
+  resubmitted: number;
+  written_off: string;
+  median_days_to_respond: number | null;
+  promised_days: number;
+}
+
+export interface DeductionReason {
+  key: string;
+  label: string;
+}
+
+export interface SchemePackage {
+  uuid: string;
+  payer: string;
+  code: string;
+  name: string;
+  name_nepali: string;
+  category: string;
+  package_amount: string;
+  maximum_per_year: number | null;
+  includes: string;
+  excludes: string;
+  effective_from: string;
+  effective_to: string | null;
+  is_active: boolean;
+}

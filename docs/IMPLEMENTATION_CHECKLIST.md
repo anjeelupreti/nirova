@@ -621,18 +621,89 @@ rather than redesigning around it.
 - [ ] Write-offs
 - [ ] Receivable ageing report
 
-## §57 Insurance / TPA `[~]`
+## §57 Insurance / TPA 🔷
 
+**Payers**
+- [x] Insurer, TPA, government scheme, corporate and embassy as distinct
+      kinds — an insurer carries the risk, a TPA administers somebody else's,
+      and the Board pays fixed packages; one model with optional fields would
+      have unreachable branches
+- [x] A TPA names the insurer whose risk it administers
+- [x] Submission window and settlement days per payer, because they differ
+      wildly and a generic thirty is wrong in both directions
+- [x] Pre-authorisation requirement and its threshold, per payer
 - [x] Insurance as a payer category with its own price list
-- [x] Policy number on the patient
-- [ ] Insurer and TPA master
-- [ ] Policy and coverage records
-- [ ] Eligibility check
-- [ ] Pre-authorisation
-- [ ] Claims and claim lines
-- [ ] Submitted, approved, rejected and deducted amounts
-- [ ] Settlement tracking
-- [ ] Claim ageing and rejection analytics
+- [ ] Payer contract documents and tariff schedules
+
+**Policies**
+- [x] An interval, so cover is judged on the date of service
+- [x] Dependants: the principal named, and the relationship
+- [x] Sum insured, with null meaning uncapped rather than zero
+- [x] Utilisation as a cache over the claims, rebuilt rather than incremented
+- [x] Deductible, co-payment and per-category sub-limits
+- [x] Exclusions and waiting periods
+- [ ] Family floater sharing one sum insured across members
+- [ ] Card scan and OCR at reception
+
+**Eligibility**
+- [x] Checked against the date of service, never against today
+- [x] A sentence per policy saying why it does or does not apply
+- [x] An estimate applied in the payer's own order: sub-limits, deductible,
+      co-payment, then the remaining sum insured
+- [x] Every reduction carries its reason, so the patient can be told the split
+- [ ] Live eligibility against a payer's API
+
+**Pre-authorisation**
+- [x] A request with a planned treatment, diagnosis, dates and an estimate
+- [x] An approval for less than was asked is its own state, because
+      "approved" does not say the hospital is carrying the difference
+- [x] An expiry date, defaulted rather than left blank
+- [x] Warnings before the treatment: expiring soon, and spending past the
+      approved amount
+- [x] The approval is consumed when the claim goes out
+- [x] A facility-wide list of approvals about to become worthless
+- [ ] Extension requests against an existing approval
+
+**Claims**
+- [x] Built from an issued invoice, with the lines copied rather than
+      referenced — the invoice is statutory and cannot change
+- [x] Refused for an invoice with no patient: a counter sale has nobody for an
+      insurer to check
+- [x] Refused when the policy belongs to a different patient
+- [x] One claim per invoice per payer, enforced by constraint
+- [x] Claimed, approved, deducted and settled as four separate amounts
+- [x] Patient liability computed and stored at submission, because the terms
+      may change afterwards and the patient was quoted a number
+- [x] Submission refused past the payer's window, and without a required
+      pre-authorisation
+- [x] Resubmission counted rather than overwriting
+- [x] Queried as its own state — neither processing nor rejected
+- [x] Appeal as its own state, so the appeal rate is countable
+- [x] Part settlements accumulate; over-settlement refused
+- [x] Write-off is explicit and carries a reason
+- [x] Every state change appends an event; the history is the claim
+- [ ] Claim document attachments and payer file formats
+
+**Deductions**
+- [x] A fixed vocabulary of fifteen reasons, served by the API rather than
+      hard-coded in the client
+- [x] A deduction without a reason is refused, by constraint and by service
+- [x] Per line, with the category it falls under
+- [x] Ranked analysis by reason and by category — the point of the module
+- [ ] Automatic sub-limit checking against the policy at submission
+
+**Government schemes**
+- [x] Packages with a fixed amount per condition, effective-dated
+- [x] Margin against what the treatment actually cost, in either direction
+- [ ] Per-scheme claim formats and the Board's portal
+- [ ] Annual episode caps enforced
+
+**Analytics**
+- [x] Claim ageing against each payer's own promised days
+- [x] Approval rate, rejection rate, resubmission count and median days to
+      answer, per payer
+- [x] Written-off totals per payer
+- [ ] Denial trend over time, and per-doctor deduction attribution
 
 ## §58 Hospital billing `[~]`
 

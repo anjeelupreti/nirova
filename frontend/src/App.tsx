@@ -29,6 +29,7 @@ import {
   Scissors,
   HeartPulse,
   Scale,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 
@@ -52,6 +53,7 @@ import WardsPage from "@/pages/Wards";
 import PharmacyPage from "@/pages/Pharmacy";
 import ProcurementPage from "@/pages/Procurement";
 import QueuePage from "@/pages/Queue";
+import ClaimsPage from "@/pages/Claims";
 import FinancePage from "@/pages/Finance";
 import IcuPage from "@/pages/Icu";
 import TheatrePage from "@/pages/Theatre";
@@ -107,6 +109,7 @@ const NAV_GROUPS: {
     items: [
       { to: "/billing", label: "Billing", icon: Receipt },
       { to: "/finance", label: "Finance", icon: Scale },
+      { to: "/claims", label: "Claims", icon: ShieldCheck },
       { to: "/payroll", label: "Payroll", icon: Coins },
     ],
   },
@@ -326,6 +329,7 @@ export default function App() {
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/finance" element={<FinancePage />} />
+          <Route path="/claims" element={<ClaimsPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/wards" element={<WardsPage />} />
