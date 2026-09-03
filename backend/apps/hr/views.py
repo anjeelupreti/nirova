@@ -84,10 +84,15 @@ class PositionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Position.objects.select_related("facility", "department")
         if self.request.query_params.get("vacant") == "true":
-            # Filtered in Python: `vacancies` counts employees per position,
-            # which is a property rather than a column. The set is small --
-            # an organization has tens of positions, not thousands.
-            return [p for p in queryset.order_by("title") if p.vacancies > 0]
+            # `vacancies` counts employees per position, so the decision is
+            # made in Python -- the set is small, tens of positions rather
+            # than thousands. The result is narrowed back to a queryset
+            # because DRF's filter backend and paginator both reach for
+            # `.model` on whatever this returns.
+            vacant = [
+                position.pk for position in queryset if position.vacancies > 0
+            ]
+            return queryset.filter(pk__in=vacant).order_by("title")
         return queryset.order_by("title")
 
     def perform_create(self, serializer):

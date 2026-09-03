@@ -2872,3 +2872,151 @@ looking at it.
 **Affects.** `frontend/src/pages/Payroll.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+---
+
+## 107 - Inpatient: wards, beds, admissions and daily accrual
+2026-09-03 · Inpatient · feature
+
+**What.** `apps.inpatient`: `Ward`, `Bed`, `Admission`, `BedAssignment`,
+`DailyAccrual`, `DischargeClearance`, `NursingRound`. Implements §26, §27 and
+the nursing half of §28.
+
+**An outpatient encounter is an event; an admission is a duration**, and
+almost every decision here follows from that.
+
+**A bed is occupied over an interval, not by a flag.** `BedAssignment` records
+who was in which bed from when to when. A boolean `is_occupied` would answer
+"is it free now?" and permanently destroy "who was in bed 4 on the night of
+the 14th?" -- which is asked after a fall, an infection outbreak or a billing
+dispute. Two database constraints back this up: one live assignment per bed,
+one live bed per admission. Two patients in one bed is a data error that
+produces a real safety incident, so the database refuses it rather than
+trusting the service layer alone.
+
+**Physical status is kept apart from occupancy.** A bed being cleaned and a
+bed with a broken rail are both unoccupied and neither can take a patient.
+Collapsing them into "free" is how a patient is sent to a bed with the
+previous patient's linen on it. A vacated bed goes to `cleaning`, never
+straight to `available`.
+
+**Occupancy counts against total beds.** A ward with half its beds broken is
+not "100% occupied" -- it is a ward with a maintenance problem, and reporting
+it as full sends a manager to the wrong conversation.
+
+**Accrual is idempotent per admission, per day, per kind**, enforced by a
+unique constraint rather than by hoping the nightly job runs exactly once. It
+can be re-run for a missed night, run twice by mistake, or backfilled for a
+hospital that starts using the system mid-stay, and none of those double a
+bill. A stay spanning two wards is charged day by day at the rate captured on
+each assignment -- the rate is frozen onto the assignment, so a price revision
+next month does not move what a patient was charged last Tuesday.
+
+**Discharge is a process, not a status change.** Five named clearances --
+clinical, nursing, pharmacy, billing, records -- plus an outstanding-balance
+check, each with a person attached, so a discharge stuck for two hours has a
+reason somebody can act on. `DISCHARGE_INITIATED` is a state of its own,
+because the gap between "the consultant said home today" and the patient
+actually leaving is where a hospital's bed-turnaround time is lost, and it is
+worth being able to measure.
+
+**The override is a permission of its own.** `discharge.override` exists
+separately from the authority to discharge, so it can be given to few people
+and audited on all of them. A death or a LAMA skips the balance check
+entirely: refusing to release a body over an unpaid bill is not a policy
+anybody should be able to configure.
+
+**Outcomes are enumerated distinctly.** A mortality rate, a LAMA rate and an
+absconder rate are three different conversations with a regulator, so
+"discharged", "died", "left against medical advice", "absconded" and
+"transferred out" are separate statuses rather than one flag plus free text.
+
+**Affects.** `apps/inpatient/`, `apps/rbac/`, `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 108 - Every discharge was billing one night too many
+2026-09-03 · Inpatient · fix · **important**
+
+The seed printed two figures beside each other and they disagreed: four
+bed-days accrued against a three-night stay.
+
+A patient admitted on the 31st and discharged on the 3rd sleeps three nights.
+`accrue_day` already refuses to charge on or after the discharge date -- the
+bed is free that night -- but a backfill run *earlier the same day*, before
+the discharge, had already accrued the 3rd. Nothing subsequently removed it.
+
+One bed-day of overcharge on every discharge, at ICU rates twelve thousand
+rupees a time. It is exactly the class of error that survives for years,
+because no individual bill looks wrong: a four-night charge on a stay that
+felt like four days is entirely plausible to the person paying it.
+
+`reverse_accruals_from` now runs at discharge, removing accruals dated on or
+after the discharge date and **cancelling** their charges rather than deleting
+them -- a charge that existed is part of the record, and billing already has a
+reversal for exactly this.
+
+**A second inconsistency the same fix exposed.** `stay_charges` then reported
+`accrued 15,000` against `charged 27,000`: it was counting the cancelled
+charge. A cancelled charge is not money anybody owes. Excluding them makes the
+two figures agree, which is the point of printing them together.
+
+**What made both visible.** The seed reports the accrual count and the night
+count side by side, and asserts they match. Neither would have been caught by
+a test asserting the code's own output.
+
+**Affects.** `apps/inpatient/services.py`.
+
+---
+
+## 109 - A queryset method that returned a list
+2026-09-03 · API · fix
+
+`GET /api/ipd/beds/?available=true` returned a 500:
+`AttributeError: 'list' object has no attribute 'model'`.
+
+`get_queryset` returned the Python list that `available_beds()` produces,
+because assignability depends on properties rather than columns. DRF's filter
+backend and its paginator both reach for `.model` on whatever `get_queryset`
+returns, so a list is a 500 at the first request that also filters or
+paginates -- which is every request from a real client.
+
+Both now narrow back to a queryset with `filter(pk__in=...)`: the decision is
+still made in Python, but what leaves the method is a queryset.
+
+**The same bug was already in `PositionViewSet`** with `?vacant=true`, written
+the same way an hour earlier and not yet exercised. Fixed at the same time.
+Worth noting as a pattern: computing a filter in Python is fine, *returning*
+the result of that computation is not.
+
+**Affects.** `apps/inpatient/api.py`, `apps/hr/views.py`.
+
+---
+
+## 110 - The ward screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Wards.tsx`.
+
+**Built for two people who never sit down.** A nurse coming on shift opens the
+bed board and needs the whole ward at a glance -- occupant, state, anything
+unusual -- without clicking into six beds, so the occupants come back with the
+beds in one request. A ward clerk chasing a discharge needs to know which
+department to ring, so a blocked discharge names the department rather than
+saying "blocked".
+
+**An unusable bed is drawn in its own state**, not as available and not as
+occupied. Cleaning is amber, maintenance is red, and the reason is printed on
+the tile.
+
+**Bed history is on the patient, as a timeline.** A transfer writes an
+interval; the stay shows the intervals with the rate that applied to each,
+because that is what makes a two-ward bill explicable.
+
+**The discharge dialog states which check it is skipping.** Choosing "died" or
+"left against medical advice" says, in the dialog, that the balance check does
+not apply and why. A rule the user can see is a rule they trust.
+
+**Affects.** `frontend/src/pages/Wards.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+

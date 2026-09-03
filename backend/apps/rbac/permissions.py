@@ -109,6 +109,16 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("prescription.dispense", "Dispense prescriptions", "Clinical",
        is_sensitive=True),
 
+    # -- inpatient --------------------------------------------------------
+    #
+    # Forcing past a blocked discharge is a permission of its own, separate
+    # from the authority to discharge at all. It is the control that stops a
+    # patient leaving with an unreconciled bill, so it is given to few people
+    # and every use of it is logged.
+    _p("discharge.override", "Override a blocked discharge", "Clinical",
+       is_sensitive=True),
+    _p("bed.manage", "Manage wards and beds", "Clinical"),
+
     # -- inventory --------------------------------------------------------
     _p("stock.read", "View stock", "Inventory"),
     _p("stock.adjust", "Raise stock adjustments", "Inventory"),

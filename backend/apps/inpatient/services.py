@@ -646,7 +646,13 @@ def stay_charges(admission: Admission) -> dict:
     )
     accrued_total = accruals.aggregate(t=models.Sum("amount"))["t"] or ZERO
 
-    charges = Charge.objects.filter(encounter=admission.encounter)
+    # Cancelled charges are excluded. A charge that was raised and then
+    # reversed -- the discharge-day bed charge, most often -- is not money
+    # anybody owes, and counting it showed a bill 12,000 higher than the
+    # accruals it came from.
+    charges = Charge.objects.filter(encounter=admission.encounter).exclude(
+        status=ChargeStatus.CANCELLED
+    )
     by_category = list(
         charges.values("service__category")
         .annotate(total=models.Sum("total"), count=models.Count("id"))

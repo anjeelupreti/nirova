@@ -24,9 +24,12 @@ multi-branch group.
 > - **Payroll** — salary structures, runs computed from real attendance,
 >   and Nepal's tax slabs and SSF contributions held as effective-dated
 >   data rather than code.
+> - **Wards** — beds whose occupancy is an interval rather than a flag,
+>   idempotent daily bed-charge accrual, and a discharge that names the
+>   department blocking it.
 >
-> The hospital inpatient modules are not built yet.
-> 42 of the specification's 132 sections are complete; see
+> Theatre, ICU charting and the patient portal are not built yet.
+> 44 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -76,6 +79,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_hr_demo          # a workforce, and its rules
 .venv/Scripts/python.exe manage.py seed_attendance_demo  # a rostered week and leave
 .venv/Scripts/python.exe manage.py seed_payroll_demo     # a run, checked by hand
+.venv/Scripts/python.exe manage.py seed_inpatient_demo   # admit, move, charge, discharge
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -138,6 +142,7 @@ backend/
     hr/                positions, employees, credentials, contracts,    [tenant]
                        shifts, rosters, attendance and leave
     payroll/           structures, runs, payslips, Nepal tax engine     [tenant]
+    inpatient/         wards, beds, admissions, accrual, discharge      [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -249,6 +254,21 @@ Nepal Pharma Distributors   total 4300.00  units 500 (free   0)  per unit 8.60
 Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
+
+### A bed is occupied over an interval, not by a flag
+
+`BedAssignment` records who was in which bed from when to when, so a stay
+across two wards bills correctly day by day and "who was in bed 4 on the night
+of the 14th?" has an answer:
+
+```
+GW-A/GW-A-02  from 31 Aug 09:14 to 02 Sep 09:14 at 1500.00/day
+ICU/ICU-02    from 02 Sep 09:14 to still there   at 12000.00/day
+```
+
+Accrual is idempotent per day, so the nightly job can be re-run for a missed
+night without double-charging anybody — and the discharge day is reversed,
+because the bed was free that night.
 
 ### Nepal's tax rules are data, and checked by hand
 
@@ -416,6 +436,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `GET /api/payroll/runs/{ref}/statutory/` | Tax and contributions to remit |
 | `GET /api/payroll/payslips/mine/` | Your own payslips, without `salary.read` |
 | `GET /api/payroll/tax-slabs/` | The bands, as editable data |
+| `GET /api/ipd/census/?facility=` | Who is in, and where |
+| `GET /api/ipd/wards/{uuid}/beds/` | The bed board, occupants included |
+| `POST /api/ipd/admissions/` | Admit — takes the first assignable bed |
+| `POST /api/ipd/admissions/{ref}/transfer/` | Move, keeping the interval |
+| `GET /api/ipd/admissions/{ref}/blockers/` | Why they cannot go home |
+| `POST /api/ipd/accrue/` | The nightly bed-charge job — safe to re-run |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |

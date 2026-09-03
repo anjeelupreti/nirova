@@ -1978,3 +1978,227 @@ export interface BankFileRow {
   /** Non-empty when this row cannot be paid — named, never silently dropped. */
   problem: string;
 }
+
+// ---------------------------------------------------------------------------
+// Inpatient
+// ---------------------------------------------------------------------------
+
+export interface Ward {
+  uuid: string;
+  code: string;
+  name: string;
+  ward_type: string;
+  facility: string;
+  department: string | null;
+  unit: string | null;
+  floor: string;
+  building: string;
+  bed_count: number;
+  is_critical_care: boolean;
+  nurse_to_patient_ratio: string;
+  is_gender_segregated: boolean;
+  allows_attendant: boolean;
+  visiting_hours: string;
+  is_active: boolean;
+  notes: string;
+}
+
+export interface Bed {
+  uuid: string;
+  ward: string;
+  ward_name: string;
+  ward_type: string;
+  code: string;
+  bay: string;
+  /** Physical state — clean, dirty, broken. Not the same as occupancy. */
+  status: string;
+  status_reason: string;
+  status_changed_at: string;
+  gender_restriction: "any" | "male" | "female";
+  has_oxygen: boolean;
+  has_suction: boolean;
+  has_monitor: boolean;
+  has_ventilator: boolean;
+  is_isolation: boolean;
+  daily_rate: string;
+  service_code: string;
+  is_active: boolean;
+  is_occupied: boolean;
+  is_assignable: boolean;
+  occupant_name: string;
+  occupant_admission: string;
+  notes: string;
+}
+
+export interface WardOccupancy {
+  ward: string;
+  ward_name: string;
+  ward_type: string;
+  total_beds: number;
+  occupied: number;
+  available: number;
+  /** Beds that exist and cannot take a patient — cleaning, broken, blocked. */
+  unusable: number;
+  by_status: Record<string, number>;
+  occupancy_percent: number;
+  nurse_to_patient_ratio: string;
+  nurses_needed: number | null;
+}
+
+export interface BedAssignment {
+  uuid: string;
+  admission: string;
+  bed: string;
+  bed_code: string;
+  ward: string;
+  ward_name: string;
+  occupied_at: string;
+  vacated_at: string | null;
+  is_current: boolean;
+  nights: number;
+  daily_rate: string;
+  reason: string;
+  assigned_by_name: string;
+}
+
+export interface DischargeClearance {
+  uuid: string;
+  admission: string;
+  kind: string;
+  is_cleared: boolean;
+  cleared_by_name: string;
+  cleared_at: string | null;
+  blocking_reason: string;
+  notes: string;
+}
+
+export interface DailyAccrual {
+  uuid: string;
+  admission: string;
+  accrual_date: string;
+  kind: string;
+  bed_assignment: string | null;
+  service_code: string;
+  description: string;
+  quantity: string;
+  unit_rate: string;
+  amount: string;
+  charge_uuid: string | null;
+  notes: string;
+}
+
+export interface NursingRound {
+  uuid: string;
+  admission: string;
+  recorded_at: string;
+  shift: string;
+  nurse_name: string;
+  intake_ml: number;
+  output_ml: number;
+  balance_ml: number;
+  pain_score: number | null;
+  observations: string;
+  interventions: string;
+  escalated: boolean;
+  escalation_reason: string;
+}
+
+export interface AdmissionSummary {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_name: string;
+  patient_mrn: string;
+  facility: string;
+  status: string;
+  source: string;
+  admitted_at: string;
+  discharged_at: string | null;
+  expected_discharge: string | null;
+  consultant_name: string;
+  admitting_diagnosis: string;
+  bed_code: string;
+  ward_name: string;
+  length_of_stay_days: number;
+  is_in_house: boolean;
+  /** Past the expected discharge date and still here. */
+  is_overstaying: boolean;
+  is_mlc: boolean;
+}
+
+export interface Admission extends AdmissionSummary {
+  encounter: string | null;
+  department: string | null;
+  provisional_diagnosis: string;
+  final_diagnosis: string;
+  attendant_name: string;
+  attendant_phone: string;
+  attendant_relation: string;
+  deposit_expected: string;
+  diet_plan: string;
+  mlc_number: string;
+  police_informed_at: string | null;
+  outcome_notes: string;
+  discharge_summary: string;
+  discharge_advice: string;
+  follow_up_on: string | null;
+  cancelled_reason: string;
+  notes: string;
+  bed_assignments: BedAssignment[];
+  clearances: DischargeClearance[];
+}
+
+export interface StayCharges {
+  admission: string;
+  nights: number;
+  accrued_total: string;
+  accruals_by_kind: Record<string, string>;
+  charge_total: string;
+  charges_by_category: {
+    "service__category": string;
+    total: string;
+    count: number;
+  }[];
+  uninvoiced: string;
+  invoiced: string;
+  paid: string;
+  outstanding: string;
+  unbilled_accruals: number;
+}
+
+export interface DischargeBlockers {
+  admission: string;
+  can_discharge: boolean;
+  blockers: { code: string; message: string }[];
+}
+
+export interface Census {
+  date: string;
+  in_house: number;
+  awaiting_a_bed: number;
+  total_beds: number;
+  occupied: number;
+  available: number;
+  unusable: number;
+  occupancy_percent: number;
+  admitted_today: number;
+  discharged_today: number;
+  discharge_in_progress: number;
+  overstaying: {
+    reference: string;
+    patient: string;
+    expected: string | null;
+    nights: number;
+  }[];
+  by_ward: WardOccupancy[];
+}
+
+export interface FluidBalance {
+  admission: string;
+  hours: number;
+  rounds: number;
+  intake_ml: number;
+  output_ml: number;
+  balance_ml: number;
+  escalations: number;
+}

@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 42 of 132 | 592 |
-| Outstanding | 90 | 611 |
+| Done | 44 of 132 | 639 |
+| Outstanding | 88 | 604 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -1268,35 +1268,86 @@ rather than redesigning around it.
 
 # Phase 6 — Hospital OS `[ ]`
 
-## §26 IPD / admission `[ ]`
+## §26 IPD / admission `[~]`
 
-- [ ] Admission request
-- [ ] Admission approval
-- [ ] Bed assignment
-- [ ] Planned, emergency, observation and referral admission
-- [ ] Consultant and attending physician
-- [ ] Care team
-- [ ] Deposit and advance
-- [ ] Insurance linkage
-- [ ] Ward transfer
-- [ ] Discharge summary
-- [ ] Discharge against medical advice
+**Admitting**
+- [x] Admission linked to an inpatient encounter, so notes, prescriptions and
+      orders work unchanged
+- [x] Admission sources: OPD, emergency, referral, transfer, direct, birth
+- [x] Admission without a bed — `pending`, which is a real state
+- [x] Ward chosen, first assignable bed taken automatically
+- [x] A second live admission for the same patient refused
+- [x] Admission against a merged patient record refused
+- [x] Consultant, admitting diagnosis, expected discharge
+- [x] Attendant name, phone and relationship
+- [x] Deposit expected
+- [x] Medico-legal case flagged, with a police-informed timestamp
+- [ ] Admission request and bed booking ahead of arrival
+- [ ] Insurance pre-authorisation
 
-## §27 Bed and ward `[ ]`
+**During the stay**
+- [x] Transfer between beds and wards, recorded as an interval
+- [x] Nursing rounds with shift, intake, output and pain score
+- [x] Fluid balance over a window, cumulative
+- [x] Nursing escalation flagged and listable
+- [x] Length of stay counted in nights
+- [x] Overstay detected against the expected discharge date
+- [ ] Doctor's ward-round notes distinct from nursing
+- [ ] Care plans
+- [ ] Diet orders passed to the kitchen
 
-- [ ] Building → floor → ward → room → bed hierarchy
-- [ ] Eight bed statuses
-- [ ] Bed transfer
-- [ ] Bed reservation
-- [ ] Bed release
-- [ ] Isolation beds
-- [ ] Cleaning workflow and turnaround
-- [ ] Occupancy analytics
-- [ ] Bed turnover and average length of stay
-- [ ] Revenue per bed
-- [ ] ICU and ward utilisation
+**Leaving**
+- [x] Discharge initiated as a distinct state, so turnaround time is
+      measurable
+- [x] Five named clearances, each with a person and a blocking reason
+- [x] Outstanding balance and uninvoiced charges block a discharge
+- [x] Override behind its own permission, with a stated reason, audited
+- [x] Death and LAMA skip the balance check
+- [x] Outcomes recorded distinctly: discharged, died, LAMA, absconded,
+      transferred out
+- [x] Discharge summary, advice and follow-up date
+- [x] The encounter closes with the admission
+- [x] The bed is released to cleaning, not to available
+- [ ] Discharge summary template and printing
+- [ ] Death certificate
+- [ ] LAMA form capture
 
-## §28 Nursing `[ ]`
+**Money**
+- [x] Daily accrual per admission, per day, per kind
+- [x] Idempotent — re-running charges nothing again
+- [x] Backfill for a missed night or a mid-stay migration
+- [x] Rate captured on the bed assignment, so a stay across two wards is
+      charged correctly day by day
+- [x] Accruals post real billing charges, traceable both ways
+- [x] Discharge-day accruals reversed and their charges cancelled
+- [x] A bed with no rate is reported, not silently free
+- [x] Stay total by category, with uninvoiced and outstanding separated
+- [ ] Interim billing during a long stay
+- [ ] Deposit applied at discharge
+- [ ] Package and per-procedure pricing
+
+## §27 Bed and ward `[~]`
+
+- [x] Wards by type: general, private, semi-private, deluxe, ICU, NICU, PICU,
+      HDU, maternity, isolation, burns, psychiatric, day care, emergency
+- [x] Beds with code, bay, floor and building
+- [x] Bed physical status separate from occupancy: available, occupied,
+      reserved, cleaning, maintenance, blocked
+- [x] Gender-restricted beds, enforced at admission and at transfer
+- [x] Bed facilities: oxygen, suction, monitor, ventilator, isolation
+- [x] Per-bed daily rate and billable service
+- [x] Nurse-to-patient ratio per ward, and nurses needed computed from it
+- [x] Real-time occupancy per ward and per facility, computed not stored
+- [x] Occupancy measured against total beds, so broken beds read as a
+      maintenance problem
+- [x] Bed board with occupants in one request
+- [x] Census: in house, waiting, admitted today, discharged today, overstaying
+- [x] Outcomes report with mortality, LAMA and average length of stay
+- [ ] Bed reservation ahead of an admission
+- [ ] Housekeeping workflow and turnaround timing
+- [ ] Ward transfer between facilities
+
+## §28 Nursing `[~]`
 
 - [ ] Ward census
 - [ ] Nurse assignment
@@ -1722,6 +1773,12 @@ breaking one in a new module breaks the platform.
       deployment is not a way to obey it (log 104).
 - [x] A figure people will dispute carries its own derivation (log 104).
 - [x] Rounding happens once, at the end, never per line (log 104).
+- [x] Occupancy of anything is an interval, never a flag — "who was in
+      that bed on the 14th?" has to be answerable (log 107).
+- [x] A recurring charge is idempotent per period, enforced by a unique
+      constraint rather than by the job running once (log 107).
+- [ ] `get_queryset` returns a queryset. Computing a filter in Python is
+      fine; returning the list is a 500 under DRF (log 109).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 
