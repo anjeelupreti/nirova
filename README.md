@@ -43,9 +43,12 @@ multi-branch group.
 > - **Insurance and claims** — cover checked on the date of service, four
 >   separate amounts per claim, and deductions with countable reasons instead
 >   of free text nobody can aggregate.
+> - **Blood bank** — two people group every donation, untested is not
+>   negative, issue refuses rather than warns, and a look-back answers which
+>   patients received a given donor's blood.
 >
 > The patient portal and referrals are not built yet.
-> 48 of the specification's 132 sections are complete; see
+> 49 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -165,6 +168,7 @@ backend/
     icu/               stays, charting, infusions, scoring, alerts      [tenant]
     finance/           chart of accounts, ledger, periods, ageing       [tenant]
     insurance/         payers, policies, pre-auth, claims, schemes      [tenant]
+    bloodbank/         donors, donations, units, matching, reactions    [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -525,6 +529,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/insurance/claims/{ref}/response/` | What the payer allowed, and why not the rest |
 | `GET /api/insurance/reports/?report=deductions` | Why claims are being cut, ranked |
 | `GET /api/insurance/payers/performance/` | Approval rate, turnaround, write-offs |
+| `GET /api/blood/reports/?report=stock&facility=` | The shelf, by group and component |
+| `POST /api/blood/cross-match/` | One unit against one patient; expires in 72h |
+| `POST /api/blood/units/{no}/issue/` | Refuses; there is no override |
+| `POST /api/blood/units/{no}/issue-emergency/` | The uncross-matched path, named separately |
+| `GET /api/blood/donors/{no}/look-back/` | Who received this donor's blood |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -603,6 +612,9 @@ Built:
 - [x] Insurance and claims: payers that behave differently, eligibility on the
       date of service, pre-authorisation with an expiry, four separate claim
       amounts, countable deduction reasons, and government scheme packages
+- [x] Blood bank: donors, two-person grouping, per-infection screening,
+      components with their own expiries, cross-matching that expires, issue
+      that refuses, and look-back in both directions
 
 Next, in dependency order:
 

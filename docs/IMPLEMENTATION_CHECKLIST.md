@@ -784,20 +784,117 @@ rather than redesigning around it.
 - [ ] Critical findings workflow distinct from laboratory criticals
 - [ ] Scheduling against modality capacity
 
-## §36 Blood bank `[ ]`
+## §36 Blood bank 🔷
 
-- [ ] Donor registry
-- [ ] Donation and collection
-- [ ] Blood grouping
-- [ ] Component separation
-- [ ] Transfusion-transmissible infection screening
-- [ ] Storage and inventory
-- [ ] Reservation
-- [ ] Cross-matching
-- [ ] Issue and return
-- [ ] Expiry management
-- [ ] Transfusion record
-- [ ] Adverse reaction reporting
+**Donors**
+- [x] A donor is not a patient — different record, different consent,
+      different privacy, and not in the patient index
+- [x] A phone number is required: a donor who cannot be reached cannot be told
+      about a reactive result
+- [x] Voluntary, replacement, directed and autologous kept distinct
+- [x] Eligibility answered as sentences, not a boolean — a permanent deferral
+      and "you gave five weeks ago" are different conversations
+- [x] The donation interval enforced from the last donation, ninety days for
+      men and a hundred and twenty for women
+- [x] Deferral with a reason and an end date; permanent deferral has neither
+- [x] Donation count as a cache over the donations, rebuilt not incremented
+- [x] Call list by group, ordered by when each becomes eligible
+- [ ] Donor cards, appointment reminders and campaign tracking
+
+**Collection**
+- [x] Haemoglobin below 12.5 g/dL refuses the donation — it harms the donor
+- [x] Weight below 45 kg refuses a 450 ml collection
+- [x] Mobile drives flagged, because that is where labelling errors
+      concentrate
+- [x] Adverse events during collection recorded, because they decide whether
+      the donor is called again
+- [ ] Bag lot tracking and collection-set traceability
+
+**Grouping**
+- [x] Two determinations by two different people before anything is labelled
+- [x] The same person cannot provide the second, enforced by constraint
+- [x] Forward and reverse results stored separately
+- [x] Weak D recorded, because a weak-D donor is positive and a weak-D
+      recipient is negative
+- [x] A disagreement stops the donation; it is a finding, not a vote
+- [ ] Automated analyser interface
+
+**Screening**
+- [x] Results per infection, not one pass/fail
+- [x] Untested is not negative, and is reported separately from reactive
+- [x] Verification by a second person, who cannot be the one who ran it
+- [x] The panel is data — adding malaria screening is a row, not a column
+- [x] A reactive result on HIV, hepatitis B or C discards the donation *and*
+      defers the donor permanently, in one step
+- [ ] NAT testing and confirmatory-result workflow
+
+**Components**
+- [x] A donation and a component are different objects
+- [x] Shelf life and storage range per component, copied onto the unit so it
+      records the rule that applied when it was made
+- [x] Platelets five days, red cells thirty-five, plasma a year
+- [x] Units are created quarantined and released only through one gate
+- [x] Release refuses on any blocker and lists them all at once
+- [ ] Irradiation, leucodepletion and washed-cell products
+
+**Inventory**
+- [x] Stock by group and component, not one total
+- [x] Expiring within seven days surfaced per cell
+- [x] Expiry sweep selects on the date, so running it twice is a no-operation
+- [x] Wastage by reason: expiry is a stock problem, a broken cold chain is a
+      process problem, and a reactive screen is the system working
+- [ ] Fridge temperature logging and alarm integration
+- [ ] Inter-facility transfer of units
+
+**Requests, reservation and cross-matching**
+- [x] A request states the indication, because over-transfusion is the
+      commonest quality finding and is invisible without one
+- [x] Reservation and cross-match are different states
+- [x] A cross-match is between one unit and one patient, and expires after 72
+      hours
+- [x] Separate compatibility tables for red cells and plasma — they run in
+      opposite directions
+- [x] An ABO-incompatible pairing is refused outright, not filed as a result
+- [x] Compatible units listed oldest-first
+- [ ] Antibody-identification panels and phenotype matching
+- [ ] Platelet-specific compatibility (currently uses the red-cell table)
+
+**Issue**
+- [x] `issue_unit` has no override parameter and no endpoint flag
+- [x] Blockers listed before the button, not after the click
+- [x] The emergency path is a separate function and a separate endpoint,
+      demanding a named authoriser and a reason
+- [x] Emergency issue still refuses an expired unit and a non-universal group
+- [x] Return only within the thirty-minute cold-chain window; beyond it the
+      unit is discarded and that discard survives the refusal
+- [ ] Blood-fridge issue via a card reader
+
+**Transfusion**
+- [x] Bedside check by two named people, and the database refuses the two
+      names being the same
+- [x] Observations appended to the transfusion chart, never edited
+- [x] Outcome distinguishes completed from stopped, with the volume actually
+      given
+- [x] The unit-to-patient link is permanent, which is what makes a look-back
+      possible
+- [ ] Timed observation prompts during the transfusion
+
+**Reactions**
+- [x] A fixed list of reportable categories, served by the API
+- [x] Severity from mild to fatal
+- [x] Minutes into the transfusion — the most diagnostic fact on the form
+- [x] The investigation recorded: repeat grouping, repeat cross-match,
+      culture, unit returned
+- [x] Clerical errors counted separately, because they are the preventable
+      category
+- [x] Haemovigilance return with rate, type, severity and what has not been
+      reported to the authority
+- [ ] Direct submission to the national haemovigilance system
+
+**Traceability**
+- [x] Look-back from a donor to every recipient, with phone numbers
+- [x] Trace from a patient back to every donor
+- [ ] Barcode and ISBT 128 labelling
 
 ---
 

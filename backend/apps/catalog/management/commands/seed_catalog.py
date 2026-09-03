@@ -212,6 +212,8 @@ ADDONS = [
      ModuleCode.RADIOLOGY, 1, Decimal("12000.00")),
     ("module_insurance", "Insurance and TPA module", AddOnKind.MODULE,
      ModuleCode.INSURANCE, 1, Decimal("9000.00")),
+    ("module_blood_bank", "Blood bank module", AddOnKind.MODULE,
+     ModuleCode.BLOOD_BANK, 1, Decimal("11000.00")),
 ]
 
 METERS = [

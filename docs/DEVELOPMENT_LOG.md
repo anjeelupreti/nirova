@@ -3998,3 +3998,173 @@ subtract two numbers.
 
 **Affects.** `frontend/src/pages/Claims.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 138 - The blood bank
+2026-09-04 · Backend · feature
+
+`apps/bloodbank/`. Everywhere else in this system a data error costs money or
+time. Here a unit of group A issued against a group B cross-match kills the
+patient within minutes, and the error is not recoverable. So this module is
+built around refusals rather than warnings, and around traceability that runs
+in both directions.
+
+**A donation and a component are different objects.** One bag becomes red
+cells, plasma and platelets, each with its own expiry, its own storage
+temperature and its own destination. `COMPONENT_SHELF_LIFE` gives platelets
+five days and red cells thirty-five; one expiry on the parent bag would be
+wrong for two of the three and always in the dangerous direction for
+platelets. The range is copied onto the unit, so a unit records the rule that
+applied when it was made.
+
+**Group is determined twice, by two people, before anything is labelled.**
+`uniq_grouping_per_person` stops the same person entering the second result —
+one person confirming their own reading is not a second check, it is the same
+check twice with the same error in it. `confirmed_group` returns nothing when
+the two disagree: a disagreement is a finding that stops the donation, not a
+vote.
+
+**Missing is not negative.** Screening results are stored per infection.
+`release_blockers` reports untested separately from reactive because they are
+opposite problems: one is a laboratory that lost a sample, the other is a
+donor who must be told and permanently deferred. `record_screening` does both
+halves of that in one step, because discarding the unit without stopping the
+donor is how a hepatitis-positive donor is invited back next month.
+
+**Red cells and plasma have separate compatibility tables.** They run in
+opposite directions — AB plasma suits everyone and AB red cells suit almost
+nobody — and one table used for both is the classic fatal shortcut. Both are
+data rather than computed from antigens, because the table is what clinicians
+check against and a bug in an antigen calculation would be invisible.
+
+**A cross-match is between one unit and one patient, and it expires.**
+Seventy-two hours, held in `CROSSMATCH_VALID_HOURS`. The patient may have been
+transfused since and developed antibodies, so a compatible cross-match from
+four days ago is not a compatible cross-match. An ABO-incompatible pairing is
+refused outright rather than filed as an incompatible result: entering it at
+all means the wrong unit was pulled, and the useful response is to check the
+label.
+
+**`issue_unit` has no override parameter and will not get one.** Every other
+guard in this system can be overridden by somebody with the right permission
+and a reason, because the alternative is that people work around it. Here the
+alternative is a death. The emergency case is real and is served by
+`issue_emergency` — a different function, a different endpoint, a required
+named authoriser, and still a refusal for an expired unit or a non-universal
+group. Separate rather than a flag, so that no request body can turn an
+ordinary issue into an uncross-matched one.
+
+**The bedside check needs two different people**, enforced in the serializer,
+the service and a database constraint. Three layers because it is the last
+barrier before a fatal error and a form makes entering one name twice
+trivially easy.
+
+**Every transfusion links a unit to a patient permanently.** That link is what
+makes `look_back` possible: a donor who seroconverts means finding every
+patient who received their earlier donations, and without it the answer is
+that nobody knows and the hospital has to contact everybody or nobody.
+
+**Affects.** `apps/bloodbank/` (new app), `apps/catalog/management/commands/
+seed_catalog.py` (a blood-bank module add-on), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 139 - The refusal rolled back the record that justified it
+2026-09-04 · Backend · bug
+
+`return_unit` was wrapped in `tenant_atomic_method`. Out of the cold-chain
+window it discarded the unit and then raised — and the raise rolled the
+discard back.
+
+So the system told the operator the unit had been discarded for a broken cold
+chain, and left it sitting there issued and reusable. The message and the
+database said opposite things, and the message was the one nobody could act
+on.
+
+The seed caught it because it checked the unit's state after the refusal
+rather than trusting the exception text: `expected discarded, got issued`.
+
+`return_unit` is no longer atomic. `discard_unit` opens and commits its own
+transaction, and the exception is raised afterwards. The successful path is a
+single row update and needs no transaction of its own.
+
+The general lesson is worth writing down: a function that both *records* a
+consequence and *refuses* cannot do the recording inside the transaction the
+refusal aborts.
+
+**Affects.** `apps/bloodbank/services.py`.
+
+---
+
+## 140 - A gate that read a stale row
+2026-09-04 · Backend · bug
+
+`release_blockers` read `getattr(donation, "screening", None)` — Django's
+cached reverse relation. A donation object held across a re-screen carried the
+old result, so a donation whose panel had just been completed still reported
+three infections untested, and `release_units` refused it.
+
+Harmless in that direction. The same cache would have been harmless in exactly
+one direction only: had the stale row been the *permissive* one, a donation
+with a reactive result would have been released on a cached non-reactive
+screening.
+
+This function is the single gate between a bag of blood and a patient, so it
+now queries `Screening.objects.filter(donation=...)` rather than trusting an
+instance. It is the one place where reading a stale row is unacceptable in
+either direction.
+
+**Affects.** `apps/bloodbank/services.py`.
+
+---
+
+## 141 - Two error types from one layer
+2026-09-04 · Backend · refinement
+
+`report_reaction` called the model's `validate_reaction_type`, which raises
+Django's `ValidationError`, while everything else in the module raises
+`BloodBankError`. The seed caught an unhandled traceback: it was catching the
+module's own error type, which is what every caller does.
+
+A service that raises one library's exception for one input and its own for
+the next makes every caller catch two things or miss one. `report_reaction`
+now checks the vocabulary itself and raises `BloodBankError` with the list of
+acceptable categories. The model helper stays for model-level validation.
+
+**Affects.** `apps/bloodbank/services.py`.
+
+---
+
+## 142 - The blood bank screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Blood.tsx`. Built the way the module is: around refusals,
+and around showing the reason before anybody walks to the fridge.
+
+**The shelf is a grid, not a total.** Group down the side, component across
+the top, with what expires this week in red under each cell and a zero in an
+available column drawn in red. Forty units of O positive expiring on Thursday
+and none of A negative is a crisis that a single number hides.
+
+**A quarantined donation shows every blocker at once**, with the screening
+results as individual badges — reactive in red, not-tested in grey — so the
+two are never confused. They are opposite problems.
+
+**Issue blockers appear in the unit dialog**, listed from the refusal's own
+`detail.blockers`, because "cannot be issued" is not actionable and "there is
+no cross-match against this patient" is.
+
+**The emergency path is visually separate and deliberately unattractive**: a
+dashed border, a muted ghost button, and once opened a red panel that says in
+words that this is a risk the hospital is accepting rather than a step being
+skipped. It is offered only on a unit already held for a named patient, with a
+sentence explaining that a unit issued to nobody cannot be traced back.
+
+**The look-back opens from the donor registry** and highlights the rows with a
+recipient, with their phone numbers — because that is the form the answer has
+to take.
+
+**Affects.** `frontend/src/pages/Blood.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`, `backend/apps/bloodbank/api.py`.

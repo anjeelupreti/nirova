@@ -3673,3 +3673,280 @@ export interface SchemePackage {
   effective_to: string | null;
   is_active: boolean;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Blood bank                                                                  */
+/* -------------------------------------------------------------------------- */
+
+export type BloodGroup =
+  | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-" | "O+" | "O-";
+
+export type BloodComponent =
+  | "whole_blood" | "red_cells" | "plasma" | "platelets" | "cryo";
+
+export type UnitStatus =
+  | "quarantined" | "available" | "reserved" | "crossmatched"
+  | "issued" | "transfused" | "returned" | "expired" | "discarded";
+
+export interface Donor {
+  uuid: string;
+  donor_number: string;
+  full_name: string;
+  full_name_nepali: string;
+  date_of_birth: string | null;
+  gender: string;
+  blood_group: BloodGroup | "";
+  phone: string;
+  alternate_phone: string;
+  email: string;
+  address: string;
+  citizenship_number: string;
+  donor_type: string;
+  status: "active" | "temporary" | "permanent" | "deceased";
+  deferral_reason: string;
+  deferred_until: string | null;
+  deferred_by_name: string;
+  donation_count: number;
+  last_donated_on: string | null;
+  is_contactable: boolean;
+  notes: string;
+  eligible_now: boolean;
+  /** Sentences, so the desk can tell the donor something. */
+  problems: string[];
+}
+
+export interface DonorCallRow {
+  donor_number: string;
+  name: string;
+  phone: string;
+  blood_group: string;
+  donations: number;
+  last_donated: string | null;
+  eligible_now: boolean;
+  problems: string[];
+}
+
+export interface Grouping {
+  uuid: string;
+  blood_group: BloodGroup;
+  forward_result: string;
+  reverse_result: string;
+  is_weak_d: boolean;
+  antibody_screen: string;
+  performed_at: string;
+  performed_by_name: string;
+  method: string;
+}
+
+export interface Screening {
+  uuid: string;
+  results: Record<string, string>;
+  values: Record<string, string>;
+  performed_at: string;
+  performed_by_name: string;
+  verified_by_name: string;
+  verified_at: string | null;
+  kit_lot_number: string;
+  notes: string;
+  /** Missing is not negative — these are the infections with no result. */
+  untested: string[];
+  reactive: string[];
+  is_complete: boolean;
+  is_safe: boolean;
+}
+
+export interface Donation {
+  uuid: string;
+  donation_number: string;
+  donor_name: string;
+  donor_number: string;
+  collected_at: string;
+  collected_by_name: string;
+  collection_site: string;
+  is_mobile_drive: boolean;
+  volume_ml: number;
+  bag_type: string;
+  haemoglobin: string | null;
+  donor_weight_kg: string | null;
+  had_adverse_event: boolean;
+  adverse_event_detail: string;
+  status: "collected" | "processed" | "discarded";
+  discard_reason: string;
+  notes: string;
+  groupings: Grouping[];
+  screening: Screening | null;
+  /** Empty until two people have grouped it and agreed. */
+  group: string;
+  blockers: string[];
+  units: {
+    uuid: string;
+    unit_number: string;
+    component: BloodComponent;
+    status: UnitStatus;
+    expires_on: string;
+  }[];
+}
+
+export interface BloodUnit {
+  uuid: string;
+  unit_number: string;
+  donation_number: string;
+  component: BloodComponent;
+  blood_group: BloodGroup;
+  volume_ml: number;
+  prepared_at: string;
+  expires_on: string;
+  days_to_expiry: number;
+  is_expired: boolean;
+  storage_location: string;
+  storage_min_c: string;
+  storage_max_c: string;
+  status: UnitStatus;
+  reserved_for: string | null;
+  reserved_for_name: string;
+  reserved_until: string | null;
+  reserved_reason: string;
+  issued_at: string | null;
+  issued_to_name: string;
+  left_storage_at: string | null;
+  returned_at: string | null;
+  discard_reason: string;
+  notes: string;
+}
+
+export interface CrossMatch {
+  uuid: string;
+  unit_number: string;
+  unit_group: BloodGroup;
+  patient_name: string;
+  performed_at: string;
+  performed_by_name: string;
+  valid_until: string;
+  result: "compatible" | "incompatible" | "caution";
+  method: string;
+  patient_group: string;
+  antibody_screen: string;
+  incompatibility_detail: string;
+  notes: string;
+  is_valid: boolean;
+}
+
+export interface BloodRequest {
+  uuid: string;
+  reference: string;
+  patient_name: string;
+  patient_mrn: string;
+  requested_at: string;
+  requested_by_name: string;
+  required_by: string | null;
+  urgency: "routine" | "urgent" | "emergency";
+  component: BloodComponent;
+  units_requested: number;
+  units_given: number;
+  indication: string;
+  stated_group: string;
+  haemoglobin: string | null;
+  status: "pending" | "part_filled" | "filled" | "cancelled";
+  cancelled_reason: string;
+  notes: string;
+}
+
+export interface TransfusionReaction {
+  uuid: string;
+  reported_at: string;
+  reported_by_name: string;
+  minutes_into_transfusion: number | null;
+  reaction_type: string;
+  severity: "mild" | "moderate" | "severe" | "life_threatening" | "fatal";
+  symptoms: string;
+  transfusion_stopped: boolean;
+  volume_transfused_ml: number | null;
+  treatment_given: string;
+  unit_returned_to_bank: boolean;
+  repeat_grouping_done: boolean;
+  repeat_crossmatch_done: boolean;
+  culture_sent: boolean;
+  investigation_findings: string;
+  is_clerical_error: boolean;
+  reported_to_authority: boolean;
+  reported_to_authority_at: string | null;
+  notes: string;
+}
+
+export interface Transfusion {
+  uuid: string;
+  unit_number: string;
+  unit_group: BloodGroup;
+  component: BloodComponent;
+  patient_name: string;
+  started_at: string;
+  finished_at: string | null;
+  volume_given_ml: number | null;
+  outcome: "completed" | "stopped" | "not_started";
+  checked_by_first: string;
+  checked_by_second: string;
+  identity_confirmed: boolean;
+  observations: Record<string, string>[];
+  notes: string;
+  reactions: TransfusionReaction[];
+}
+
+export interface BloodStock {
+  facility: string;
+  total: number;
+  available: number;
+  held: number;
+  expiring_within_7_days: number;
+  quarantined: number;
+  /** component → group → counts. The shape, not the total. */
+  by_component: Record<
+    string,
+    Record<string, { available: number; held: number; expiring: number }>
+  >;
+}
+
+export interface BloodWastage {
+  since: string;
+  discarded: number;
+  issued: number;
+  wastage_percent: number | null;
+  by_reason: Record<string, number>;
+}
+
+export interface Haemovigilance {
+  since: string;
+  transfusions: number;
+  reactions: number;
+  reaction_rate_percent: number | null;
+  by_type: Record<string, number>;
+  by_severity: Record<string, number>;
+  clerical_errors: number;
+  not_reported_to_authority: number;
+}
+
+export interface LookBackRow {
+  donation: string;
+  collected_on: string;
+  unit: string;
+  component: string;
+  status: string;
+  patient: string | null;
+  mrn: string | null;
+  phone: string | null;
+  transfused_on: string | null;
+}
+
+export interface LookBack {
+  donor: string;
+  donor_number: string;
+  donations: number;
+  units: number;
+  recipients: number;
+  rows: LookBackRow[];
+}
+
+export interface ScreeningPanelItem {
+  key: string;
+  label: string;
+  permanent_deferral: boolean;
+}
