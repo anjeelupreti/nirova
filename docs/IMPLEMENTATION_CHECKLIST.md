@@ -17,8 +17,8 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 39 of 132 | 536 |
-| Outstanding | 93 | 636 |
+| Done | 42 of 132 | 592 |
+| Outstanding | 90 | 611 |
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -1120,36 +1120,64 @@ rather than redesigning around it.
 - [ ] Blackout periods
 - [ ] Half-day handling beyond a single flag
 
-## §66 Payroll `[ ]`
+## §66 Payroll `[~]`
 
-**Earnings**
-- [ ] Payroll periods
-- [ ] Basic pay
-- [ ] Allowances
-- [ ] Overtime calculation
-- [ ] Shift allowance
-- [ ] Incentives and commission
-- [ ] Bonus
-- [ ] Benefits
+**Setup**
+- [x] Pay components: earning, deduction, employer contribution, tax,
+      reimbursement
+- [x] Calculation bases: fixed, percent of basic, percent of gross, per day,
+      per hour, engine formula
+- [x] Taxable and non-taxable components
+- [x] Components that count towards the contribution base, distinct from gross
+- [x] Pro-rated and non-pro-rated components
+- [x] Salary structures, with per-structure rate overrides
+- [x] Employee payroll profile: structure, scheme, tax regime, declarations
+- [ ] Component visibility rules per employee grade
+- [ ] Loan and advance recovery
 
-**Deductions**
-- [ ] General deductions
-- [ ] SSF contributions
-- [ ] Provident fund
-- [ ] Citizen Investment Trust
-- [ ] TDS
-- [ ] Loans and advances
-- [ ] Loss of pay
+**Running**
+- [x] Open a run for a facility and period
+- [x] One live run per facility per period enforced
+- [x] Calculate from real attendance and leave
+- [x] Recalculation replaces rather than appends
+- [x] Payable days from attendance, with weekly offs and holidays paid
+- [x] Unpaid leave and absence reduce pay
+- [x] Part-period pro-rating for joiners and leavers
+- [x] Employee with no contract held, with a stated reason
+- [x] Employee on hold excluded from pay but present in the run
+- [x] Submit for approval
+- [x] Approval refused for whoever calculated it
+- [x] Approved run immutable; corrections are a supplementary run
+- [x] Cancel an unpaid run with a reason
+- [ ] Off-cycle and bonus runs
+- [ ] Arrears and retrospective adjustment
 
-**Processing**
-- [ ] Arrears and retroactive adjustment
-- [ ] Salary hold
-- [ ] Partial payment
-- [ ] Payroll correction
-- [ ] Final settlement
-- [ ] Payslip generation
-- [ ] Bank transfer file
-- [ ] Process ≠ approve (permissions already declared) 🔷
+**Payslips**
+- [x] Payslip per employee with the employee's details snapshotted
+- [x] Line per component with basis, rate and base amount
+- [x] Explanation string per line
+- [x] Attendance figures snapshotted onto the payslip
+- [x] Tax derivation stored on the payslip
+- [x] Employees see their own payslips without `salary.read`
+- [x] Only approved runs visible to the employee
+- [ ] PDF payslip
+- [ ] E-mail distribution
+
+**Payment**
+- [x] Payment batches, so a run can be paid in tranches
+- [x] Bank file rows, naming what cannot be paid
+- [x] Confirm payment separately from generating the file
+- [x] Run marked paid only when every payslip is
+- [ ] Bank format export (CSV/XML per bank)
+- [ ] Cash and cheque payment recording
+
+**Reporting**
+- [x] Run summary by component
+- [x] Statutory return: tax and contributions reported separately
+- [x] Total cost to the organization, distinct from net pay
+- [ ] Month-on-month comparison
+- [ ] Departmental salary cost
+- [ ] Year-to-date per employee
 
 ## §67 Compensation `[ ]`
 
@@ -1159,31 +1187,38 @@ rather than redesigning around it.
 - [ ] Component structure per grade
 - [ ] Revision history
 
-## §68 Payroll rule engine `[ ]`
+## §68 Payroll rule engine `[~]`
 
-- [ ] Formula-based components
-- [ ] Eligibility rules
-- [ ] Taxability rules
-- [ ] Contribution rules
-- [ ] Effective dating
-- [ ] Expiry
-- [ ] Employee-group targeting
-- [ ] Facility, position and grade targeting
-- [ ] Several concurrent payroll structures
+- [x] Components configurable per organization, not hard-coded
+- [x] Calculation basis per component
+- [x] Structure-level rate and amount overrides
+- [x] Sequenced calculation, so tax runs after every earning is known
+- [x] Statutory components flagged and undeletable from a structure
+- [ ] Conditional components (applies only when a condition holds)
+- [ ] Formula expressions beyond the built-in bases
+- [ ] Simulation: what a change would cost before applying it
 
-## §69 Nepal tax and statutory engine `[ ]`
+## §69 Nepal tax and statutory engine `[~]`
 
-- [ ] PAN handling
-- [ ] VAT configuration
-- [ ] TDS slabs
-- [ ] Taxable and exempt income classification
-- [ ] Tax deductions
-- [ ] Fiscal year with effective dating (base implementation exists in billing) 🔷
-- [ ] SSF employer and employee contributions
-- [ ] PF employer and employee contributions
-- [ ] CIT
-- [ ] Configurable without a code change
-- [ ] Statutory report generation
+- [x] Income-tax slabs as effective-dated data, per fiscal year
+- [x] Individual and married-couple regimes with different thresholds
+- [x] Progressive banding — each band taxes only the income inside it
+- [x] Annualisation before the progressive rate is applied
+- [x] Months-remaining projection for a mid-year joiner
+- [x] Social Security Fund: 11% employee, 20% employer, on basic
+- [x] Provident Fund and Citizen Investment Trust schemes
+- [x] The 1% social security tax waived for SSF contributors
+- [x] Retirement deduction capped by the lower of a flat ceiling and one
+      third of assessable income
+- [x] Life and health insurance premiums deductible, capped separately
+- [x] Remote-area allowance by category
+- [x] Disability exemption as a multiple of the first band
+- [x] Full derivation stored on the payslip
+- [x] Falls back to the most recent year on file rather than computing zero
+- [ ] Gratuity accrual
+- [ ] Annual TDS return (E-TDS) export
+- [ ] SSF monthly contribution return export
+- [ ] Withholding on non-employee payments
 
 ## §70 Expense and claims `[ ]`
 
@@ -1683,6 +1718,10 @@ breaking one in a new module breaks the platform.
 - [ ] Two figures compared against each other measure the same thing —
       clock time against paid hours manufactured a day's overtime for
       every employee (log 102).
+- [x] A statutory rate is data, not code — the law changes yearly and a
+      deployment is not a way to obey it (log 104).
+- [x] A figure people will dispute carries its own derivation (log 104).
+- [x] Rounding happens once, at the end, never per line (log 104).
 - [ ] Every error uses the standard envelope, with a stable `code`.
 - [ ] Every change gets an entry in `DEVELOPMENT_LOG.md`.
 

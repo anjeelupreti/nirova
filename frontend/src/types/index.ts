@@ -1728,3 +1728,253 @@ export interface AttendanceSummary {
     overtime: string;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// Payroll
+// ---------------------------------------------------------------------------
+
+export interface PayComponent {
+  uuid: string;
+  code: string;
+  name: string;
+  component_type: "earning" | "deduction" | "employer" | "tax" | "reimbursement";
+  basis: string;
+  rate: string;
+  amount: string;
+  is_taxable: boolean;
+  /** In Nepal, SSF and PF are on basic salary, not gross. */
+  counts_towards_contribution_base: boolean;
+  is_prorated: boolean;
+  sequence: number;
+  is_statutory: boolean;
+  is_active: boolean;
+  notes: string;
+}
+
+export interface SalaryStructure {
+  uuid: string;
+  code: string;
+  name: string;
+  description: string;
+  facility: string | null;
+  components: PayComponent[];
+  is_active: boolean;
+}
+
+export interface TaxSlab {
+  uuid: string;
+  fiscal_year: string;
+  regime: "individual" | "couple";
+  sequence: number;
+  lower_bound: string;
+  upper_bound: string | null;
+  width: string | null;
+  rate_percent: string;
+  /** The 1% band is Nepal's social security tax, replaced by an SSF contribution. */
+  waived_for_ssf_contributors: boolean;
+  label: string;
+}
+
+export interface ContributionScheme {
+  uuid: string;
+  code: string;
+  name: string;
+  fiscal_year: string;
+  employee_percent: string;
+  employer_percent: string;
+  total_percent: string;
+  on_basic: boolean;
+  is_tax_deductible: boolean;
+  annual_deduction_ceiling: string;
+  replaces_social_security_tax: boolean;
+  is_active: boolean;
+  notes: string;
+}
+
+export interface PayrollRun {
+  uuid: string;
+  reference: string;
+  facility: string;
+  facility_name: string;
+  fiscal_year: string;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  status:
+    | "draft"
+    | "calculated"
+    | "pending_approval"
+    | "approved"
+    | "paid"
+    | "cancelled";
+  is_editable: boolean;
+  corrects: string | null;
+  calculated_at: string | null;
+  approved_at: string | null;
+  approved_by_name: string;
+  paid_at: string | null;
+  employee_count: number;
+  gross_total: string;
+  deduction_total: string;
+  tax_total: string;
+  net_total: string;
+  /** What the organization pays on top of salaries — not part of net pay. */
+  employer_cost_total: string;
+  total_cost: string;
+  notes: string;
+  cancellation_reason: string;
+}
+
+export interface PayslipLine {
+  uuid: string;
+  component: string | null;
+  code: string;
+  name: string;
+  component_type: string;
+  basis: string;
+  rate: string;
+  base_amount: string;
+  amount: string;
+  is_taxable: boolean;
+  sequence: number;
+  /** How the figure was arrived at — "10% of 45,000" answers what "4,500" does not. */
+  explanation: string;
+}
+
+export interface PayslipSummary {
+  uuid: string;
+  reference: string;
+  run: string;
+  period_label: string;
+  employee: string;
+  employee_code: string;
+  employee_name: string;
+  position_title: string;
+  department_name: string;
+  payable_days: string;
+  gross: string;
+  deductions: string;
+  tax: string;
+  net: string;
+  employer_cost: string;
+  is_held: boolean;
+  hold_reason: string;
+}
+
+export interface Payslip extends PayslipSummary {
+  run_reference: string;
+  run_status: string;
+  bank_name: string;
+  bank_account_number: string;
+  pan_number: string;
+  basic_salary: string;
+  days_in_period: string;
+  days_present: string;
+  days_paid_leave: string;
+  days_unpaid_leave: string;
+  days_absent: string;
+  overtime_hours: string;
+  taxable_gross: string;
+  /** The whole tax derivation, so a payslip explains itself. */
+  tax_workings: {
+    fiscal_year?: string;
+    regime?: string;
+    months_projected?: string;
+    annual_gross?: string;
+    taxable_income?: string;
+    annual_tax?: string;
+    monthly_tax?: string;
+    ssf_contributor?: boolean;
+    slabs_missing?: boolean;
+    remote_area_allowance?: string;
+    disability_allowance?: string;
+    retirement?: {
+      contributed: string;
+      flat_ceiling: string;
+      one_third_of_income: string;
+      deductible: string;
+      binding_cap: string;
+    };
+    insurance?: {
+      life_premium: string;
+      life_deductible: string;
+      life_cap: string;
+      health_premium: string;
+      health_deductible: string;
+      health_cap: string;
+      total: string;
+    };
+    bands?: {
+      band: string;
+      lower: string;
+      upper: string | null;
+      rate_percent: string;
+      amount_taxed: string;
+      tax: string;
+      waived: boolean;
+      waiver_reason: string;
+    }[];
+  };
+  notes: string;
+  lines: PayslipLine[];
+}
+
+export interface PayrollSummary {
+  reference: string;
+  period: string;
+  status: string;
+  employees: number;
+  gross: string;
+  deductions: string;
+  tax: string;
+  net: string;
+  employer_cost: string;
+  total_cost: string;
+  held: number;
+  held_reasons: [string, string][];
+  missing_bank_details: number;
+  by_component: {
+    code: string;
+    name: string;
+    component_type: string;
+    total: string;
+    count: number;
+  }[];
+}
+
+export interface StatutoryReturn {
+  period: string;
+  fiscal_year: string;
+  income_tax: string;
+  employee_contributions: string;
+  employer_contributions: string;
+  total_contributions: string;
+  employees: number;
+}
+
+export interface PaymentBatch {
+  uuid: string;
+  reference: string;
+  run: string;
+  run_reference: string;
+  method: string;
+  status: string;
+  total: string;
+  count: number;
+  bank_name: string;
+  exported_at: string | null;
+  confirmed_at: string | null;
+  value_date: string;
+  notes: string;
+}
+
+export interface BankFileRow {
+  employee_code: string;
+  employee_name: string;
+  bank_name: string;
+  account_number: string;
+  amount: string;
+  reference: string;
+  /** Non-empty when this row cannot be paid — named, never silently dropped. */
+  problem: string;
+}

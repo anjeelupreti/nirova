@@ -22,6 +22,7 @@ import {
   Truck,
   UserCog,
   CalendarClock,
+  Coins,
   Users,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ import CounterPage from "@/pages/Counter";
 import DiagnosticsPage from "@/pages/Diagnostics";
 import PatientsPage from "@/pages/Patients";
 import PeoplePage from "@/pages/People";
+import PayrollPage from "@/pages/Payroll";
 import TimePage from "@/pages/Time";
 import PharmacyPage from "@/pages/Pharmacy";
 import ProcurementPage from "@/pages/Procurement";
@@ -59,6 +61,7 @@ const NAV = [
   { to: "/procurement", label: "Procurement", icon: Truck },
   { to: "/people", label: "People", icon: UserCog },
   { to: "/time", label: "Time", icon: CalendarClock },
+  { to: "/payroll", label: "Payroll", icon: Coins },
   { to: "/billing", label: "Billing", icon: Receipt },
   { to: "/facilities", label: "Facilities", icon: Building2 },
   { to: "/capacity", label: "Capacity", icon: GaugeCircle },
@@ -201,6 +204,7 @@ export default function App() {
           <Route path="/procurement" element={<ProcurementPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />
+          <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />
           <Route path="/capacity" element={<CapacityPage />} />
           <Route path="/facility-requests" element={<FacilityRequestsPage />} />

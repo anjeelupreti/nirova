@@ -21,9 +21,12 @@ multi-branch group.
 > - **Time** — shifts and rosters with rest-period enforcement, attendance
 >   whose status is derived rather than asserted, and leave balances kept
 >   as a ledger.
+> - **Payroll** — salary structures, runs computed from real attendance,
+>   and Nepal's tax slabs and SSF contributions held as effective-dated
+>   data rather than code.
 >
-> Payroll and the hospital inpatient modules are not built yet.
-> 39 of the specification's 132 sections are complete; see
+> The hospital inpatient modules are not built yet.
+> 42 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -72,6 +75,7 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_pos_demo         # a shift at the counter
 .venv/Scripts/python.exe manage.py seed_hr_demo          # a workforce, and its rules
 .venv/Scripts/python.exe manage.py seed_attendance_demo  # a rostered week and leave
+.venv/Scripts/python.exe manage.py seed_payroll_demo     # a run, checked by hand
 .venv/Scripts/python.exe manage.py runserver
 
 # 3. Frontend
@@ -133,6 +137,7 @@ backend/
     pos/               till sessions, counter sales, returns, cash-up   [tenant]
     hr/                positions, employees, credentials, contracts,    [tenant]
                        shifts, rosters, attendance and leave
+    payroll/           structures, runs, payslips, Nepal tax engine     [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -244,6 +249,23 @@ Nepal Pharma Distributors   total 4300.00  units 500 (free   0)  per unit 8.60
 Choosing the dearer quotation is allowed and requires a stated reason —
 an unexplained preference for a costlier supplier is what procurement fraud
 looks like.
+
+### Nepal's tax rules are data, and checked by hand
+
+The slabs move with every budget, so they are effective-dated rows rather than
+code. The seed checks the engine against arithmetic stated independently:
+
+```
+1,200,000 a year, no SSF:
+  1% of 500,000 + 10% of 200,000 + 20% of 300,000 + 30% of 200,000 = 145,000
+contributing to the SSF:
+  140,000 — exactly 5,000 less, which is the 1% social security band
+retirement deduction on 300,000 income contributing 150,000:
+  capped at 100,000 by the one-third rule, not by the 500,000 ceiling
+```
+
+A payslip carries its own derivation, so "why is my tax 4,200?" is answerable
+from the payslip rather than by somebody re-deriving it.
 
 ### Saturday is the weekend
 
@@ -388,6 +410,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/hr/leave/` | Apply — overlaps and short balances refused |
 | `POST /api/hr/leave/{ref}/decide/` | Approve — never your own |
 | `GET /api/hr/leave-calendar/?facility=` | Who is away, for planning |
+| `POST /api/payroll/runs/` | Open a run for a period |
+| `POST /api/payroll/runs/{ref}/calculate/` | Compute every payslip |
+| `POST /api/payroll/runs/{ref}/approve/` | Sign off — never the person who ran it |
+| `GET /api/payroll/runs/{ref}/statutory/` | Tax and contributions to remit |
+| `GET /api/payroll/payslips/mine/` | Your own payslips, without `salary.read` |
+| `GET /api/payroll/tax-slabs/` | The bands, as editable data |
 | `GET /api/platform/dashboard/` | SaaS metrics across all customers |
 | `GET /api/platform/change-requests/queue/` | The platform approval queue |
 | `POST /api/platform/change-requests/{ref}/decide/` | Platform decision, with capacity |

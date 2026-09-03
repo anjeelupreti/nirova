@@ -2736,3 +2736,139 @@ are punctual.
 **Affects.** `frontend/src/pages/Time.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
 
+---
+
+## 104 - Payroll, and the Nepal statutory engine
+2026-09-03 · Payroll · feature
+
+**What.** `apps.payroll`: `PayComponent`, `SalaryStructure`, `TaxSlab`,
+`ContributionScheme`, `EmployeePayroll`, `PayrollRun`, `Payslip`,
+`PayslipLine`, `SalaryPaymentBatch`, with `nepal.py` holding the statutory
+calculation. Implements §66 through §69.
+
+**Rates are data, not code.** Nepal's income-tax slabs, the SSF percentages
+and the deduction ceilings change with the budget, every year. A rate compiled
+into a service means a code deployment to obey a law that took effect last
+Shrawan. `TaxSlab` and `ContributionScheme` are effective-dated rows;
+`nepal.py` holds only the *shape* of the calculation — the order the rules
+apply in, what is capped against what, which exemption displaces which — and
+that shape has not changed in a decade while the numbers move most years.
+
+**The order of calculation is the design.**
+
+    payable days -> earnings -> gross -> contributions
+                 -> taxable gross -> tax -> net
+
+Contributions come before tax because the employee's share reduces taxable
+income. Tax comes last among deductions because it is computed on everything
+above it. Getting this order wrong does not crash. It quietly pays everybody
+the wrong amount, which is the failure mode the whole module is arranged
+against.
+
+**Annualise before applying a progressive rate.** A progressive table applied
+to one month's pay puts everybody in the wrong band twelve times over. The
+engine projects the year, taxes it, and divides back down — and projects over
+the months *remaining* for a mid-year joiner, who would otherwise be pushed
+into a band they never reach and over-deducted every month until somebody
+noticed at year end.
+
+**The 1% band is waived, not deleted.** Nepal's first band is a social
+security tax that an SSF contributor does not pay — the contribution replaces
+it. Skipping the band for contributors keeps the table honest for everybody
+else, and the payslip says *why* the line is zero rather than silently
+omitting it.
+
+**Two caps on the retirement deduction, and the lower wins.** A flat rupee
+ceiling and one third of assessable income. Applying only the flat cap
+over-deducts for a low earner making a large voluntary contribution, which is
+exactly the case the fraction exists to catch. The seed proves it: on 300,000
+a year contributing 150,000, the one-third rule binds at 100,000, not the
+500,000 ceiling.
+
+**Insurance premiums cap separately, not jointly.** 60,000 of life premium and
+5,000 of health deducts 40,000 + 5,000, not 65,000 against a combined limit.
+
+**Rounding happens once.** Components are computed at full precision and the
+payslip is quantised at the end. Rounding each line and summing drifts by
+rupees across a payroll of hundreds.
+
+**An approved run is immutable.** It is the basis of a tax filing and a set of
+bank transfers, so it is corrected by a supplementary run — exactly as an
+invoice is corrected by a credit note. Whoever calculated it may not approve
+it; that is the single highest-value control in the module.
+
+**Held, not omitted.** An employee with no contract in force gets a payslip
+marked held with a stated reason, rather than being left out or paid zero. A
+payroll with fewer people than the facility employs is one nobody can
+reconcile.
+
+**The bank file names what it cannot pay.** Missing account details are
+reported as rows with a problem rather than filtered out: a transfer file that
+quietly drops three people pays three people nothing, and nobody finds out
+until they ask.
+
+**The engine is checked by hand in the seed**, against arithmetic stated
+independently of the code:
+
+```
+1,200,000 a year, no SSF: 1% of 500,000 + 10% of 200,000 + 20% of 300,000
+                          + 30% of 200,000 = 145,000  — matches
+contributing to the SSF:  140,000 — exactly 5,000 less, which is the 1% band
+retirement deduction:     capped by one third of income, not the flat ceiling
+insurance:                40,000 + 5,000, not 65,000
+```
+
+**Affects.** `apps/payroll/`, `config/settings/base.py`, `config/urls.py`.
+
+---
+
+## 105 - Decimal into a JSON field
+2026-09-03 · Payroll · fix
+
+`Payslip.tax_workings` stores the whole tax derivation so a payslip can
+explain itself. The first run failed with `Object of type Decimal is not JSON
+serializable`.
+
+The obvious fix — letting the encoder use `float` — would have worked and
+would have defeated the point. The workings exist so somebody can check the
+arithmetic, and an explanation whose numbers drifted in serialisation explains
+nothing. `jsonable()` walks the structure and renders every `Decimal` as a
+string.
+
+Same reasoning as log 089, in a different place: `Decimal` is used everywhere
+in this system precisely so money never becomes a float, and every boundary
+where it might is worth a deliberate conversion rather than a default one.
+
+**Affects.** `apps/payroll/nepal.py`, `apps/payroll/services.py`.
+
+---
+
+## 106 - The payroll screen
+2026-09-03 · Frontend · feature
+
+`frontend/src/pages/Payroll.tsx`.
+
+**Every number leads somewhere.** A payroll figure nobody can explain is a
+payroll figure nobody should pay, so a run opens to its component breakdown, a
+payslip line carries the rate and base it came from, and the tax opens to the
+band-by-band derivation. "Why is my tax 4,200?" is asked by somebody holding
+the payslip, and it has to be answerable from the payslip.
+
+**An approved run offers no edit button.** The lock is in the service layer,
+but a control the UI still shows is a control users learn to distrust. The
+workflow buttons appear only in the state where they apply.
+
+**Employer cost sits beside net, never inside it.** It is what the
+organization spends, not what anybody is paid, and mixing the two is how a
+board is told the wrong salary bill.
+
+**Held payslips are shown with the reason**, greyed rather than hidden.
+
+**The rates tab is editable, and says why.** Holding the slabs as data means a
+budget change is an edit rather than a deployment — and the screen states that
+where the table is, because the person who will need it in Shrawan is the one
+looking at it.
+
+**Affects.** `frontend/src/pages/Payroll.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
+
