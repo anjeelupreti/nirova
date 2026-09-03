@@ -1,0 +1,8 @@
+from django.apps import AppConfig
+
+
+class IcuConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.icu"
+    label = "icu"
+    verbose_name = "Intensive care"

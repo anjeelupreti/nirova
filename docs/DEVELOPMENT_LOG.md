@@ -3452,3 +3452,156 @@ why they are two numbers.
 
 **Affects.** `frontend/src/pages/Theatre.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 122 - Intensive care: the ward where the chart is the treatment
+2026-09-04 · Backend · feature
+
+`apps/icu/`. Everywhere else in this system the clinical record documents what
+was decided. Here the record is the instrument: the noradrenaline rate is
+changed because the last blood pressure was 78, and the next blood pressure is
+the reason it is changed again. Every question intensive care actually asks —
+why did the pressure fall, how much fluid is this patient up over three days,
+how many ventilator days does this unit have — is a question about history, so
+a schema that stores "current" values answers none of them.
+
+Six decisions, each a place where the obvious design is wrong.
+
+**An ICU stay is an interval on the admission, not a flag.** A patient goes
+ward → ICU → ward → ICU, and each episode has its own severity, its own
+support days and its own outcome. `patient.in_icu` can hold none of that, and
+folding the episode into the admission would make "ICU length of stay" the
+length of the hospital stay — a different and much larger number. This is the
+fifth time this exact shape has come up: bed occupancy, employment postings,
+attendance status, `arrived_unidentified`, and now this.
+
+**The unit borrows the ward's beds.** An ICU bed that is not a `Bed` would
+need its own occupancy, its own cleaning state and its own daily rate, and the
+census would then have to add up two incompatible bed boards. `admit_to_icu`
+moves the patient through `inpatient.transfer_bed`.
+
+**A rate change is an event.** Titratable drugs change every few minutes;
+overwriting the rate destroys the dose history that explains the pressure.
+`InfusionRate` rows are append-only and each applies until the next one, so
+the interval's end needs no second write to go wrong. Volume infused is
+integrated from that history — and returns *nothing* for a mcg/kg/min rate,
+because that integrates to a dose and a number that looked like millilitres
+would be worse than none.
+
+**Set is not measured.** `set_tidal_volume` is what was asked for;
+`expired_tidal_volume` is what came back. One `tidal_volume` field would
+answer both questions with whichever number somebody typed, and the difference
+between them is a cuff leak.
+
+**Missing is not normal, and this is the module's central rule.** SOFA assigns
+0 to a normal value, so a missing bilirubin scores identically to a healthy
+liver — the error always runs in the same direction, towards a patient who
+looks less sick than they are. `score_sofa` stores `missing_components` and
+the frozen inputs, so a partial score is usable at the bedside and excludable
+from analysis. The same rule shapes `gcs_total`, which returns None rather
+than summing the parts it has, and `urine_ml_per_kg_per_hour`, which returns
+None rather than assuming 70kg.
+
+**A device reading is not a validated reading.** An arterial line reads
+300/150 while it is flushed. Device rows are stored, marked, alerted on with
+`from_unvalidated_device`, and stay unvalidated until a person says otherwise.
+Validation adds a fact; it never filters, because a run of impossible values
+is how a failing transducer gets noticed.
+
+Two smaller decisions that matter at three in the morning. A line or tube is
+an interval so that *line-days* exist — the denominator without which "six
+infections" is not a rate. And the alert text names the ceiling of care when
+the patient is not for resuscitation, because that is the most important thing
+to know before responding and the least likely to be to hand.
+
+**Affects.** `apps/icu/` (new app), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 123 - Step-down blockers were one undifferentiated list
+2026-09-04 · Backend · refinement
+
+The seed stopped the vasopressors, extubated the patient, and step-down was
+still refused: five critical alerts nobody had acknowledged.
+
+That is not wrong — a patient should not leave the unit with critical
+derangements unreviewed. But it was presented as the same kind of fact as
+"still on noradrenaline", and it is not. One says the patient is unfit for a
+ward. The other says a piece of reviewing is unfinished. A charge nurse
+reading three undifferentiated sentences learns to skim all three.
+
+`step_down_blockers` now returns `{kind, detail}` with `kind` either
+`clinical` or `record`. Both still stop a step-down and both are still
+overridable with the reasons written into the audit trail — the classification
+changes how they are argued, not whether they bite.
+
+**Affects.** `apps/icu/services.py`, `frontend/src/pages/Icu.tsx`.
+
+---
+
+## 124 - The ICU seed borrowed patients it did not own
+2026-09-04 · Backend · bug
+
+`seed_icu_demo` took the first three currently-admitted patients. On a
+database where `seed_inpatient_demo` had already run to completion there were
+none — every patient had been discharged — and the seed printed a warning and
+stopped.
+
+Two further failures came out of the same fix. Closing an ICU episode does not
+vacate the bed: the two are deliberately separate, since a patient whose ICU
+care has ended is often still physically in the unit waiting for a ward bed.
+So the second run found the beds occupied by people who were no longer in the
+unit. And moving them back put a man into a bed reserved for women, because
+the cleanup took the first empty bed rather than asking `available_beds`.
+
+The seed now admits its own patients, moves out anything an earlier run left
+behind, and respects gender segregation doing it. All three bugs are the same
+bug: a seed that depends on another seed's leftovers works once and then
+reports something different every time, which is the opposite of what a
+narrated seed is for.
+
+**Affects.** `apps/icu/management/commands/seed_icu_demo.py`.
+
+---
+
+## 125 - The ICU screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Icu.tsx`. Two screens with opposite jobs: the board is read
+from the doorway by a charge nurse deciding where to stand, and must parse by
+colour and shape before anybody reads a word; the chart is read at the bedside
+by somebody who needs to know what changed in the last hour and why.
+
+**A partial SOFA is drawn differently from a complete one** — a dashed amber
+bar rather than a solid one, an asterisk on the number, and a line naming the
+systems that had no data and saying plainly that the real score is higher.
+Drawing it identically would undo the entire reason the backend tracks gaps.
+
+**Stale charting is a state, not an absence.** Every board card says when the
+patient was last charted, in amber past ninety minutes and red past four
+hours. An empty column looks like a well patient.
+
+**Unvalidated device rows are amber in the table and amber dots on the
+trend**, with a Validate button rather than a delete.
+
+**"Not for resuscitation" is the first thing on the chart**, above the alerts,
+with who set the ceiling and when.
+
+**The SOFA dialog argues with the person using it.** Leaving a lab value blank
+shows what will happen: the score is stored and marked partial, naming what
+was missing, and explicitly *not* recorded as normal — with the reason spelled
+out in a sentence.
+
+**The observation dialog explains the not-testable checkbox** rather than
+offering it silently, because charting a verbal score of 1 for an intubated
+patient is the commonest way a sedated patient is made to look moribund.
+
+The board refreshes every thirty seconds. Vasopressors sort to the top of the
+infusion panel and are drawn in red. The cumulative fluid balance is a bar per
+ICU day, because the cumulative figure is the one nobody has and the one that
+matters.
+
+**Affects.** `frontend/src/pages/Icu.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.

@@ -34,9 +34,12 @@ multi-branch group.
 > - **Theatre** — lists that show the idle gap rather than hiding it, the WHO
 >   safety checklist recorded and never enforced, and implant serials that can
 >   answer a recall with names and phone numbers.
+> - **Intensive care** — a chart that appends rather than overwrites, infusion
+>   rates as events so the dose history survives, and severity scores that name
+>   the organ systems they could not see.
 >
-> ICU charting and the patient portal are not built yet.
-> 45 of the specification's 132 sections are complete; see
+> The patient portal and the finance ledger are not built yet.
+> 46 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -153,6 +156,7 @@ backend/
     inpatient/         wards, beds, admissions, accrual, discharge      [tenant]
     emergency/         arrivals, triage, pathways, resuscitation        [tenant]
     theatre/           rooms, cases, the safety checklist, implants     [tenant]
+    icu/               stays, charting, infusions, scoring, alerts      [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -496,6 +500,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/ot/cases/{ref}/mark/` | One timing: wheels in, incision, closure |
 | `GET /api/ot/implants/` | The recall register: serial → patient and phone |
 | `GET /api/ot/safety/?facility=` | Incisions that happened without a time-out |
+| `GET /api/icu/board/?ward=` | The unit, sickest and least-attended first |
+| `POST /api/icu/stays/{uuid}/observations/` | Chart a set of vitals — appends |
+| `POST /api/icu/stays/{uuid}/infusions/{uuid}/rate/` | Titrate; the history is the rate |
+| `POST /api/icu/stays/{uuid}/sofa/` | Score, naming what it could not see |
+| `GET /api/icu/stays/{uuid}/blockers/` | What still holds them in the unit |
+| `GET /api/icu/summary/?facility=` | Mortality, ventilator days, line-days |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -565,10 +575,12 @@ Built:
       from arrival, unidentified arrival as the default path
 - [x] Theatre: scheduling with the idle gap made visible, the WHO safety
       checklist recorded and never enforced, implant serials for recalls
+- [x] Intensive care: charting that appends, infusion rates as events, fluid
+      balance from a ledger, ventilator set-versus-measured, line-days, and
+      severity scores that name their gaps
 
 Next, in dependency order:
 
-- [ ] ICU: charting, fluid balance, ventilator data, scoring
 - [ ] Finance: chart of accounts, ledger, revenue cycle
 - [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
 - [ ] Insurance, claims and government schemes

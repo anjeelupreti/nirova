@@ -2753,3 +2753,369 @@ export interface SafetyAudit {
   phases_skipped: number;
   fully_compliant_percent: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Intensive care                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Decimals arrive as strings. The API renders every `Decimal` as a string so
+ * that a rate of 0.050 mcg/kg/min does not become 0.05000000000000000277 on
+ * the way through JSON. Format them; never do arithmetic on them here.
+ */
+
+export interface IcuObservation {
+  uuid: string;
+  recorded_at: string;
+  source: "manual" | "device" | "calculated";
+  device_identifier: string;
+  validated_by_name: string;
+  validated_at: string | null;
+  is_validated: boolean;
+  heart_rate: number | null;
+  systolic: number | null;
+  diastolic: number | null;
+  mean_arterial_pressure: number | null;
+  map_value: number | null;
+  respiratory_rate: number | null;
+  spo2: number | null;
+  temperature: string | null;
+  gcs_eye: number | null;
+  gcs_verbal: number | null;
+  gcs_motor: number | null;
+  gcs_verbal_not_testable: boolean;
+  gcs_total: number | null;
+  pupil_left_mm: number | null;
+  pupil_right_mm: number | null;
+  pupils_reactive: boolean | null;
+  rass: number | null;
+  pain_score: number | null;
+  blood_glucose: string | null;
+  lactate: string | null;
+  notes: string;
+}
+
+export interface FluidEntry {
+  uuid: string;
+  recorded_at: string;
+  direction: "in" | "out";
+  route: string;
+  volume_ml: number;
+  signed_ml: number;
+  description: string;
+  recorded_by_name: string;
+  is_reversed: boolean;
+}
+
+export interface FluidBalance {
+  hours: number;
+  intake_ml: number;
+  output_ml: number;
+  balance_ml: number;
+  urine_ml: number;
+  /** Null when no weight is recorded — never a guess. */
+  urine_ml_per_kg_per_hour: string | null;
+  by_route: Record<string, number>;
+  entries: number;
+}
+
+export interface CumulativeBalanceDay {
+  icu_day: number;
+  from: string;
+  intake_ml: number;
+  output_ml: number;
+  balance_ml: number;
+  cumulative_ml: number;
+}
+
+export interface RunningInfusion {
+  uuid: string;
+  drug_name: string;
+  concentration: string;
+  rate: string | null;
+  rate_unit: string;
+  status: "running" | "paused" | "stopped";
+  is_titratable: boolean;
+  is_vasopressor: boolean;
+  target: string;
+  maximum_rate: string | null;
+  started_at: string;
+  last_changed_at: string | null;
+  changes: number;
+  /** Null for a rate that integrates to a dose rather than a volume. */
+  volume_ml: string | null;
+}
+
+export interface InfusionRate {
+  rate: string;
+  changed_at: string;
+  reason: string;
+  changed_by_name: string;
+}
+
+export interface Infusion {
+  uuid: string;
+  drug_name: string;
+  concentration: string;
+  rate_unit: string;
+  route: string;
+  is_titratable: boolean;
+  target: string;
+  maximum_rate: string | null;
+  status: "running" | "paused" | "stopped";
+  started_at: string;
+  stopped_at: string | null;
+  stop_reason: string;
+  prescribed_by_name: string;
+  notes: string;
+  rates: InfusionRate[];
+}
+
+export interface VentilationRecord {
+  uuid: string;
+  recorded_at: string;
+  mode: string;
+  is_invasive: boolean;
+  set_rate: number | null;
+  set_tidal_volume: number | null;
+  peep: string | null;
+  pressure_support: string | null;
+  fio2: number | null;
+  measured_rate: number | null;
+  expired_tidal_volume: number | null;
+  peak_pressure: string | null;
+  plateau_pressure: string | null;
+  minute_volume: string | null;
+  etco2: number | null;
+  pao2: string | null;
+  paco2: string | null;
+  ph: string | null;
+  pf_ratio: string | null;
+  driving_pressure: string | null;
+  source: string;
+  notes: string;
+}
+
+export interface VentilatorSummary {
+  invasive_hours: string;
+  non_invasive_hours: string;
+  invasive_days?: string;
+  records: number;
+  current_mode: string | null;
+  current_fio2?: number | null;
+  current_peep?: string | null;
+  pf_ratio?: string | null;
+  driving_pressure?: string | null;
+}
+
+export interface InvasiveDevice {
+  uuid: string;
+  device_type: string;
+  site: string;
+  size: string;
+  inserted_at: string;
+  inserted_by_name: string;
+  inserted_in_emergency: boolean;
+  removed_at: string | null;
+  removal_reason: string;
+  was_infected: boolean;
+  next_change_due: string | null;
+  days_in_situ: string;
+  notes: string;
+}
+
+export interface OverdueDevice {
+  uuid: string;
+  device: string;
+  site: string;
+  due: string | null;
+  days_in_situ: string;
+  reason: string;
+}
+
+export interface IcuAlert {
+  uuid: string;
+  raised_at: string;
+  severity: "warning" | "critical";
+  parameter: string;
+  value: string;
+  threshold: string;
+  message: string;
+  from_unvalidated_device: boolean;
+  acknowledged_at: string | null;
+  acknowledged_by_name: string;
+  action_taken: string;
+  is_acknowledged: boolean;
+  minutes_to_acknowledge: number | null;
+}
+
+export interface AlertSummary {
+  hours: number;
+  total: number;
+  critical: number;
+  unacknowledged: number;
+  from_unvalidated_devices: number;
+  median_minutes_to_acknowledge: number | null;
+  by_parameter: Record<string, number>;
+}
+
+export interface IcuRound {
+  uuid: string;
+  round_at: string;
+  icu_day: number;
+  consultant_name: string;
+  assessment: string;
+  plan: string;
+  fasthug: Record<string, boolean>;
+  fasthug_reasons: Record<string, string>;
+  /** Items nobody answered either way — not the same as answered "no". */
+  missed_items: string[];
+  negative_items: string[];
+  is_ready_for_sedation_hold: boolean | null;
+  is_ready_for_weaning_trial: boolean | null;
+  is_ready_for_step_down: boolean;
+  step_down_blockers: string;
+  family_updated: boolean;
+  family_update_notes: string;
+}
+
+export interface SofaDay {
+  icu_day: number;
+  date: string;
+  total: number;
+  respiratory: number;
+  coagulation: number;
+  liver: number;
+  cardiovascular: number;
+  neurological: number;
+  renal: number;
+  /** False when a system had no data. A partial score is not comparable. */
+  complete: boolean;
+  missing: string[];
+}
+
+export interface StepDownBlocker {
+  kind: "clinical" | "record";
+  detail: string;
+}
+
+export interface IcuStaySummary {
+  uuid: string;
+  patient_name: string;
+  patient_mrn: string;
+  admission: string;
+  ward_name: string;
+  bed_code: string;
+  admitted_at: string;
+  discharged_at: string | null;
+  hours: string;
+  icu_day: number;
+  route: string;
+  reason: string;
+  primary_diagnosis: string;
+  consultant_name: string;
+  outcome: string;
+  apache_ii: number | null;
+  is_for_resuscitation: boolean;
+  weight_kg: string | null;
+}
+
+export interface IcuStay extends IcuStaySummary {
+  height_cm: number | null;
+  ceiling_of_care: string;
+  ceiling_set_by: string;
+  ceiling_set_at: string | null;
+  outcome_notes: string;
+  notes: string;
+  observations: IcuObservation[];
+  infusions: RunningInfusion[];
+  ventilation: VentilationRecord[];
+  devices: InvasiveDevice[];
+  alerts: IcuAlert[];
+  rounds: IcuRound[];
+  balance: FluidBalance;
+  ventilator: VentilatorSummary;
+  blockers: StepDownBlocker[];
+  sofa: SofaDay[];
+}
+
+export interface UnitBoardRow {
+  stay: string;
+  bed: string;
+  patient: string;
+  mrn: string;
+  admission: string;
+  icu_day: number;
+  hours: string;
+  diagnosis: string;
+  consultant: string;
+  sofa: number | null;
+  sofa_complete: boolean | null;
+  ventilated: boolean;
+  mode: string | null;
+  fio2: number | null;
+  vasopressors: string[];
+  for_resuscitation: boolean;
+  ceiling_of_care: string;
+  last_observation_at: string | null;
+  unacknowledged_alerts: number;
+  critical_alerts: number;
+  balance_24h_ml: number;
+}
+
+export interface UnitStatistics {
+  since: string;
+  admissions: number;
+  current: number;
+  completed: number;
+  died: number;
+  mortality_percent: number | null;
+  transferred_out: number;
+  left_against_advice: number;
+  outcome_unknown: number;
+  median_hours: number | null;
+  ventilated: number;
+  invasive_ventilator_days: string;
+  readmissions_within_48h: number;
+  readmission_percent: number | null;
+  by_route: Record<string, number>;
+}
+
+export interface DeviceSurveillance {
+  from: string;
+  to: string;
+  by_type: Record<
+    string,
+    {
+      device_days: string;
+      devices: number;
+      infections: number;
+      per_thousand_device_days: string | null;
+    }
+  >;
+}
+
+export interface FasthugCompliance {
+  since: string;
+  rounds: number;
+  items: {
+    item: string;
+    answered: number;
+    not_answered: number;
+    answered_percent: number | null;
+    declined: number;
+  }[];
+}
+
+export interface IcuSummary {
+  unit: UnitStatistics;
+  devices: DeviceSurveillance;
+  fasthug: FasthugCompliance;
+}
+
+export interface TrendPoint {
+  at: string;
+  value: number | string;
+  source: string;
+  validated: boolean;
+}

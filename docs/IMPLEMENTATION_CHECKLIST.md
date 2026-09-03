@@ -1433,18 +1433,132 @@ rather than redesigning around it.
 - [ ] Hourly arrival profile for staffing
 - [ ] Time-to-first-analgesia and other condition-specific measures
 
-## §30 ICU `[ ]`
+## §30 ICU 🔷
 
-- [ ] ICU bed management
-- [ ] Continuous monitoring
-- [ ] Fluid balance
-- [ ] Infusion management
-- [ ] Ventilator data
-- [ ] Monitor device integration
-- [ ] ICU nursing
-- [ ] Consultant rounds
-- [ ] Critical alerts
-- [ ] ICU notes and scoring
+**The stay**
+- [x] An ICU episode is an interval on the admission, not a flag — a patient
+      goes ward → ICU → ward → ICU, and each episode has its own severity,
+      support days and outcome
+- [x] The unit borrows the ward's beds; there is one bed board
+- [x] Several units per hospital (general, cardiac, neonatal, HDU) with their
+      own boards and their own numbers
+- [x] Admission route recorded: emergency, ward deterioration, post-operative,
+      referral, direct
+- [x] Weight and height on the stay, because vasopressors are dosed per kilo
+      and a weight from two years ago is a dosing error
+- [x] Outcome as a fixed set, with transferred-out and left-against-advice
+      kept separate from died and stepped-down
+- [x] APACHE II on admission, stored with its components
+- [x] Ceiling of care and resuscitation status, named and timestamped
+- [ ] Bed-day billing at the ICU tariff through the existing accrual
+- [ ] Nurse-to-patient ratio enforced against the roster
+
+**Observations**
+- [x] Append-only; nothing is edited
+- [x] A row per observation round, not per measurement
+- [x] GCS stored in its three parts, with "verbal not testable" as its own
+      fact — a sedated patient is not a moribund one
+- [x] GCS total returns nothing when a part is missing, rather than summing
+      what is present and reading as sicker
+- [x] Measured MAP kept separate from the estimate derived from the cuff
+- [x] RASS as a signed value, pupils, pain, glucose, lactate
+- [x] Device readings marked as device-sourced and unvalidated until a person
+      confirms them; the row survives either way
+- [x] Trend endpoint per parameter, for a shape rather than a number
+- [ ] Live monitor feed (the ingestion contract exists; no driver yet)
+
+**Fluid balance**
+- [x] A ledger of volumes in and out; the balance is computed, never stored
+- [x] Broken down by route — two litres positive from maintenance fluid and
+      two litres positive from anuria are the same figure and opposite
+      problems
+- [x] Corrections reverse an entry rather than editing it
+- [x] Cumulative balance per ICU day — the figure nobody has and the one that
+      matters
+- [x] Urine in ml/kg/hr, or nothing when no weight is recorded
+- [ ] A configurable unit day (07:00–07:00) for the charted 24-hour block
+
+**Infusions**
+- [x] A rate change is an event; the current rate is the last row
+- [x] Volume infused computed from the rate history, never a counter
+- [x] Volume returns nothing for a rate that integrates to a dose rather than
+      millilitres
+- [x] The rate's unit stored with it — mcg/kg/min and mg/hr are not
+      interchangeable
+- [x] A titratable infusion must say what it is titrated to
+- [x] Prescribed maximum enforced at the bedside
+- [x] Every change carries its reason, so "what was she on when the pressure
+      dropped" has an answer
+- [ ] Syringe-driver integration and volume-remaining alarms
+
+**Ventilation**
+- [x] Set values and measured values as separate fields — the gap between
+      them is a leak or a stiff lung
+- [x] Modes ordered from full support to none
+- [x] Invasive kept distinct from NIV and high-flow, and forced for the modes
+      where it cannot be true
+- [x] PF ratio and driving pressure computed, or nothing when a half is
+      missing
+- [x] Blood gas alongside the settings
+- [x] Ventilator-hours and ventilator-days from the charted record
+- [x] An impossible FiO2 is refused with a sentence naming the likely mistake
+- [ ] Weaning protocol and spontaneous-breathing-trial records
+
+**Lines and tubes**
+- [x] An interval from insertion to removal, so line-days exist as a
+      denominator
+- [x] Emergency insertions flagged and given a change date automatically
+- [x] Removal records whether infection was suspected
+- [x] Overdue and still-in emergency lines surfaced per patient
+- [x] Device-days and infections per thousand device-days, per type
+- [ ] Dressing-change and line-care task scheduling
+
+**The daily round**
+- [x] One consultant round per ICU day, enforced
+- [x] FASTHUG as data, served to the client rather than hard-coded in a form
+- [x] An unanswered item is unanswered, not false
+- [x] An item answered "no" must say why
+- [x] Sedation hold and weaning trial asked every day
+- [x] Family update recorded
+- [x] Per-item compliance across the unit, because the items fail differently
+- [ ] Multidisciplinary notes (physio, dietetics, microbiology) on the round
+
+**Scoring**
+- [x] SOFA computed daily from what is charted, with components frozen
+- [x] Missing systems named — a score with gaps is stored and flagged, never
+      silently scored as normal
+- [x] Vasopressor support beats blood pressure in the cardiovascular
+      component
+- [x] A sedated patient's GCS excluded rather than scored as brain failure
+- [x] Oliguria can beat the creatinine, which lags a day behind the kidney
+- [x] Severity trajectory per day, with partial days marked
+- [ ] APACHE II calculated rather than entered; SAPS III
+
+**Alerts**
+- [x] Raised at the moment of charting, not by a sweep
+- [x] Per-unit defaults as data, with per-patient overrides that must say why
+- [x] Alerts never self-clear — a night of self-clearing desaturations is what
+      a morning review needs to see
+- [x] Alerts from unvalidated device data marked as such
+- [x] The alert text names the ceiling of care when the patient is not for
+      resuscitation
+- [x] Acknowledgement names a person, a time and optionally what was done
+- [x] Time-to-acknowledge reported, because it says whether the alerting is
+      trusted
+- [ ] Escalation to a pager or phone when nobody acknowledges
+
+**Step-down and the unit**
+- [x] Blockers as sentences, labelled clinical or record
+- [x] Step-down refused by default, overridable with the reasons written into
+      the audit trail
+- [x] Running infusions stopped when the stay closes
+- [x] Board ordered by unacknowledged critical alerts, then severity — never
+      by bed number
+- [x] Stale charting shown as a state rather than an empty column
+- [x] Mortality reported beside the outcome-unknown count
+- [x] Readmission within 48 hours, the number that says whether step-down is
+      too early
+- [ ] Occupancy and refused-admission tracking
 
 ## §31 Operation theatre 🔷
 
