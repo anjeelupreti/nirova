@@ -31,6 +31,7 @@ import {
   Scale,
   ShieldCheck,
   Droplet,
+  Send,
   Users,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ import PharmacyPage from "@/pages/Pharmacy";
 import ProcurementPage from "@/pages/Procurement";
 import QueuePage from "@/pages/Queue";
 import BloodPage from "@/pages/Blood";
+import ReferralsPage from "@/pages/Referrals";
 import ClaimsPage from "@/pages/Claims";
 import FinancePage from "@/pages/Finance";
 import IcuPage from "@/pages/Icu";
@@ -97,6 +99,7 @@ const NAV_GROUPS: {
       { to: "/icu", label: "ICU", icon: HeartPulse },
       { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
       { to: "/blood", label: "Blood bank", icon: Droplet },
+      { to: "/referrals", label: "Referrals", icon: Send },
     ],
   },
   {
@@ -335,6 +338,7 @@ export default function App() {
           <Route path="/claims" element={<ClaimsPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/blood" element={<BloodPage />} />
+          <Route path="/referrals" element={<ReferralsPage />} />
           <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/wards" element={<WardsPage />} />
           <Route path="/theatre" element={<TheatrePage />} />

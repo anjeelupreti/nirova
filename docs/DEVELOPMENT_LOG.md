@@ -4168,3 +4168,158 @@ to take.
 
 **Affects.** `frontend/src/pages/Blood.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`, `backend/apps/bloodbank/api.py`.
+
+---
+
+## 143 - Referrals, and the loop that never closes
+2026-09-04 · Backend · feature
+
+`apps/referrals/`. Almost every clinical system can send a referral. What goes
+wrong is afterwards: the patient is referred, and nobody at the referring end
+ever learns whether they went, whether they were seen, or what was found. So
+this module is built around the loop rather than the letter.
+
+**Sent, acknowledged, accepted, seen and answered are five states, not one.**
+A front desk logging receipt has not read the referral; a consultant seeing
+the patient has not told the referrer anything. Each of those pairs is a place
+where a referral silently stops, and collapsing them into "in progress" is
+exactly how one sits for four months with everybody assuming somebody else is
+chasing it.
+
+**A referral must ask a question.** `send_referral` refuses without one, and
+says why: "chronic cough" is a reason, not a question, and a specialist who is
+not asked something specific answers with something unspecific. `question` is
+a separate field from `reason`, the response is checked against it, and the
+screen shows it on the worklist row, on the unanswered list and above the
+reply box.
+
+**A second open referral for the same patient and specialty is refused.** The
+commonest duplicate in any hospital: three clinicians refer the same patient
+to cardiology in a fortnight, and the department sees them three times or —
+because each assumes another is the real one — not at all.
+
+**The letter is assembled and frozen.** Allergies, conditions and medications
+are pulled from the record at the moment of sending and written onto the
+referral. A letter regenerated six months later from live data is a different
+letter carrying the same date.
+
+**A referral cannot be marked sent by a route that does not exist.** Emailing
+a provider whose `accepts_email` is false is refused, because marking it sent
+would record a referral that never left the building.
+
+**Declining carries a reason from a fixed list.** Forty referrals declined for
+"insufficient information" is a template problem, not forty individual
+mistakes — and that is only visible if the reason can be counted.
+
+**`lapsed` is written, not judged at read time.** A sweep moves untouched
+referrals past their target into the state, with a thirty-day grace period
+because one day late is late and not abandoned. Idempotent, so a second run in
+a day changes nothing.
+
+The report that matters is `unanswered`: patients who were seen and whose
+referrer has still been told nothing. Every other status is somebody waiting
+for something to happen; that one is something having happened that nobody
+passed on, and it is invisible in any list ordered by status.
+
+**Affects.** `apps/referrals/` (new app), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 144 - A median wait of minus thirteen days
+2026-09-04 · Backend · bug
+
+The seed reported `median_days_to_be_seen: -13.5`.
+
+Nothing refused a referral seen before it was sent. The waiting time is
+`seen_at - sent_at`, so one reversed pair puts a negative number into the
+median and the breach rate — and a negative wait is not obviously wrong to
+anybody reading a report, which is precisely why it would have survived.
+
+Three layers, because the statistics are what the module is for: a
+`seen_after_sent` check constraint, a refusal in `mark_seen` that names both
+dates, and a data migration to repair the rows that already had it. The repair
+pulls `seen_at` forward to `sent_at` — the earliest moment the sighting could
+defensibly have happened — which makes the wait zero rather than negative.
+
+**Affects.** `apps/referrals/models.py`, `apps/referrals/services.py`,
+`apps/referrals/migrations/0002_referral_seen_after_sent.py`.
+
+---
+
+## 145 - The repair broke the ordering next to it
+2026-09-04 · Backend · bug
+
+With the constraint in place the seed reported
+`median_days_to_answer: -11.5`.
+
+The previous migration had pulled `seen_at` forward to `sent_at`. On any row
+that had already been answered, that pushed the sighting past its own
+response — so a referral was now answered eighteen days before it was seen,
+and the time-to-answer went negative instead.
+
+A repair to one ordering broke the one beside it. Both are now stated:
+`answer_after_seen` as a constraint, a refusal in `respond` naming both dates,
+and a migration that straightens the referrals *and* the response rows, which
+carry their own timestamps and had the same reversal.
+
+The general lesson: when a data repair moves a timestamp, every other
+timestamp ordered against it has to be checked in the same migration. Adding
+the second constraint separately is what surfaced this, and only because the
+seed reads its own numbers back.
+
+**Affects.** `apps/referrals/models.py`, `apps/referrals/services.py`,
+`apps/referrals/migrations/0003_referral_answer_after_seen.py`.
+
+---
+
+## 146 - `.using()` does not travel to the instance
+2026-09-04 · Backend · bug
+
+The repair migration failed with `TenantRoutingError: referrals.Referral is a
+tenant model but no organization is active`.
+
+`Referral.objects.using(alias).filter(...)` routes the query, but the model
+instances it returns carry no database. `instance.save(update_fields=[...])`
+goes back through the router, which refuses to guess during a migration
+because no tenant is bound.
+
+`save(using=alias, ...)`. Worth writing down because every future data
+migration on a tenant model will hit it, and the error message points at the
+router rather than at the missing argument.
+
+**Affects.** `apps/referrals/migrations/0002_referral_seen_after_sent.py`,
+`apps/referrals/migrations/0003_referral_answer_after_seen.py`.
+
+---
+
+## 147 - The referrals screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Referrals.tsx`. Built around the loop, like the module.
+
+**"Nobody told the referrer" is its own tab, with a count badge on it.** Every
+other status is somebody waiting for something to happen; that one is
+something having happened that nobody passed on, and it is invisible in any
+list ordered by status.
+
+**The referrer's question appears wherever the referral does** — as a column
+on the worklist, as a column on the unanswered list, and in a bordered block
+directly above the reply box. A referral with no question shows "none asked"
+in red.
+
+**A breach stays red after the patient is seen**, with the detail page saying
+in words that it stays counted. A row that turns green the moment somebody
+deals with it is a breach nobody counts.
+
+**The answer dialog separates the answer from the findings**, and asks
+explicitly whether care is being handed back and whether this is an interim
+opinion — because a letter that does not say leaves both ends assuming the
+other is following up.
+
+**The provider directory says how each can be reached**, and marks a
+post-only provider with the reason: a referral recorded as emailed there never
+left the building.
+
+**Affects.** `frontend/src/pages/Referrals.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.

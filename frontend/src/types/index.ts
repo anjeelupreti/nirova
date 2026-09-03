@@ -3950,3 +3950,193 @@ export interface ScreeningPanelItem {
   label: string;
   permanent_deferral: boolean;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Referrals                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type ReferralStatus =
+  | "draft" | "sent" | "acknowledged" | "accepted" | "declined" | "booked"
+  | "seen" | "responded" | "completed" | "dna" | "cancelled" | "lapsed";
+
+export type ReferralUrgency = "routine" | "soon" | "urgent" | "emergency";
+
+export type ReferralDirection = "internal" | "outbound" | "inbound";
+
+export interface ExternalProvider {
+  uuid: string;
+  code: string;
+  name: string;
+  name_nepali: string;
+  provider_type: string;
+  specialties: string[];
+  contact_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  district: string;
+  /** A referral emailed to somebody with no email never left the building. */
+  accepts_email: boolean;
+  accepts_paper: boolean;
+  notes: string;
+  is_active: boolean;
+}
+
+export interface ReferralResponse {
+  uuid: string;
+  responded_at: string;
+  responder_name: string;
+  /** The answer to the referrer's question, kept apart from the findings. */
+  answer: string;
+  findings: string;
+  diagnosis: string;
+  treatment: string;
+  advice_to_referrer: string;
+  care_handed_back: boolean;
+  follow_up_here: boolean;
+  follow_up_on: string | null;
+  is_interim: boolean;
+  attachments: unknown[];
+}
+
+export interface ReferralEvent {
+  happened_at: string;
+  event: string;
+  detail: string;
+  actor_name: string;
+}
+
+export interface ReferralSummary {
+  uuid: string;
+  reference: string;
+  patient_name: string;
+  patient_mrn: string;
+  direction: ReferralDirection;
+  specialty: string;
+  urgency: ReferralUrgency;
+  status: ReferralStatus;
+  reason: string;
+  /** The specific thing the referrer wants to know. */
+  question: string;
+  referrer_name: string;
+  to_provider_name: string;
+  to_department_name: string;
+  to_clinician_name: string;
+  created_on: string;
+  sent_at: string | null;
+  acknowledged_at: string | null;
+  accepted_at: string | null;
+  declined_at: string | null;
+  decline_reason: string;
+  decline_notes: string;
+  booked_for: string | null;
+  seen_at: string | null;
+  responded_at: string | null;
+  closed_at: string | null;
+  target_date: string | null;
+  days_waiting: number | null;
+  days_to_target: number | null;
+  /** Stays true after a late sighting — a breach nobody counts is no breach. */
+  is_breaching: boolean;
+  /** Seen, and the referrer has still been told nothing. */
+  awaiting_answer: boolean;
+  is_open: boolean;
+}
+
+export interface Referral extends ReferralSummary {
+  patient: string;
+  clinical_summary: string;
+  provisional_diagnosis: string;
+  diagnosis_code: string;
+  referrer_registration: string;
+  referrer_contact: string;
+  /** Frozen at the moment of sending. */
+  letter: Record<string, unknown>;
+  letter_generated_at: string | null;
+  sent_by_method: string;
+  sent_notes: string;
+  cancelled_reason: string;
+  notes: string;
+  responses: ReferralResponse[];
+  events: ReferralEvent[];
+}
+
+export interface ReferralWorklistRow {
+  reference: string;
+  patient: string;
+  mrn: string;
+  specialty: string;
+  urgency: ReferralUrgency;
+  status: ReferralStatus;
+  direction: ReferralDirection;
+  referrer: string;
+  sent_at: string | null;
+  days_waiting: number | null;
+  target_date: string | null;
+  days_to_target: number | null;
+  breaching: boolean;
+  awaiting_answer: boolean;
+  question: string;
+}
+
+export interface UnansweredReferral {
+  reference: string;
+  patient: string;
+  mrn: string;
+  specialty: string;
+  referrer: string;
+  seen_at: string;
+  days_since_seen: number;
+  question: string;
+}
+
+export interface ReferralSummaryReport {
+  since: string;
+  total: number;
+  sent: number;
+  seen: number;
+  breached: number;
+  breach_percent: number | null;
+  declined: number;
+  decline_reasons: Record<string, number>;
+  lapsed: number;
+  did_not_attend: number;
+  answered: number;
+  answered_percent: number | null;
+  seen_but_unanswered: number;
+  median_days_to_be_seen: number | null;
+  median_days_to_answer: number | null;
+  by_specialty: Record<
+    string,
+    { sent: number; seen: number; breached: number; answered: number }
+  >;
+}
+
+export interface ReferralHistoryRow {
+  reference: string;
+  specialty: string;
+  created_on: string;
+  status: ReferralStatus;
+  urgency: ReferralUrgency;
+  reason: string;
+  question: string;
+  seen_at: string | null;
+  answers: {
+    responded_at: string;
+    responder: string;
+    answer: string;
+    diagnosis: string;
+    handed_back: boolean;
+    interim: boolean;
+  }[];
+}
+
+export interface DeclineReason {
+  key: string;
+  label: string;
+}
+
+export interface ReferralTarget {
+  urgency: ReferralUrgency;
+  days: number;
+}

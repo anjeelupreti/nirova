@@ -473,19 +473,69 @@ rather than redesigning around it.
 - [ ] Electronic transmission to a pharmacy
 - [ ] Licensed interaction database (a small curated set today)
 
-## §24 Referral management `[ ]`
+## §24 Referral management 🔷
 
-- [ ] Doctor → doctor
-- [ ] Clinic → hospital
-- [ ] Hospital → specialist
-- [ ] Internal department referral
-- [ ] External referral
-- [ ] Referrer and destination
-- [ ] Reason and urgency
-- [ ] Status tracking
-- [ ] Appointment linkage
-- [ ] Result and feedback loop
-- [ ] Referral letter generation
+**Shapes**
+- [x] Internal, outbound and inbound as three genuinely different workflows
+      rather than one with optional fields
+- [x] Doctor → doctor, clinic → hospital, hospital → specialist
+- [x] Internal department referral, with the destination department named
+- [x] A directory of external providers, so "how many did we send there, and
+      how many came back with an answer" is a question with an answer
+- [x] A provider records how it can actually be reached; a referral marked
+      emailed to somebody with no email never left the building
+- [ ] Referral networks and agreed pathways between organizations
+
+**Raising one**
+- [x] Referrer, destination, reason and urgency
+- [x] A *question* separate from the reason — a referral that asks nothing
+      gets an answer that says nothing
+- [x] Sending is refused without one
+- [x] A second open referral for the same patient and specialty is refused
+- [x] An outbound referral with no destination is refused
+- [x] Urgency carries a target date, held as data
+- [ ] Referral templates per specialty with required investigations
+
+**The letter**
+- [x] Assembled from the record — allergies, conditions, medications — rather
+      than typed
+- [x] Frozen at the moment of sending; a letter regenerated later from live
+      data is a different letter with the same date
+- [x] A draft shows a preview, clearly labelled as not yet a record
+- [ ] PDF rendering and print layout
+- [ ] Attaching results and images
+
+**Status tracking**
+- [x] Sent, acknowledged, accepted, booked, seen and answered as separate
+      states — each pair is a place where referrals silently stop
+- [x] Declined, with a reason from a countable list
+- [x] Did not attend as an outcome rather than an absence
+- [x] Lapsed: written by a sweep, so referrals that quietly stopped mattering
+      are a number rather than an impression
+- [x] Every state change appends an event; the history is the referral
+- [x] A referral cannot be seen before it was sent, or answered before it was
+      seen — both enforced by constraint, because either reversal makes the
+      waiting-time statistics negative
+- [ ] Appointment-module linkage on booking
+
+**The feedback loop**
+- [x] A response is its own record with its own author and date
+- [x] More than one is possible — an interim opinion, then a definitive one
+- [x] The answer is kept apart from the findings, and checked against the
+      question
+- [x] Care handed back or kept, stated explicitly rather than left to be
+      inferred
+- [x] Advice to the referrer, which is the half that makes a reply actionable
+- [x] "Seen but the referrer has been told nothing" as its own report
+- [ ] Notifying the referrer when an answer arrives
+
+**Analytics**
+- [x] Worklist ordered by breach then target, not by arrival
+- [x] Breach rate, decline reasons, median days to be seen and to answer
+- [x] Answered percentage and the unanswered count
+- [x] Per specialty
+- [x] A patient's referral history, leading with what came back
+- [ ] Per-referrer and per-provider league tables
 
 ## §85 Medical records / HIM `[~]`
 

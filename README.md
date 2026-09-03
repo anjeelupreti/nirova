@@ -46,9 +46,12 @@ multi-branch group.
 > - **Blood bank** — two people group every donation, untested is not
 >   negative, issue refuses rather than warns, and a look-back answers which
 >   patients received a given donor's blood.
+> - **Referrals** — a referral must ask a question, the letter is frozen when
+>   it is sent, and "seen but nobody told the referrer" is a report rather
+>   than a silence.
 >
-> The patient portal and referrals are not built yet.
-> 49 of the specification's 132 sections are complete; see
+> The patient portal is not built yet.
+> 50 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -169,6 +172,7 @@ backend/
     finance/           chart of accounts, ledger, periods, ageing       [tenant]
     insurance/         payers, policies, pre-auth, claims, schemes      [tenant]
     bloodbank/         donors, donations, units, matching, reactions    [tenant]
+    referrals/         providers, referrals, responses, the loop        [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -534,6 +538,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/blood/units/{no}/issue/` | Refuses; there is no override |
 | `POST /api/blood/units/{no}/issue-emergency/` | The uncross-matched path, named separately |
 | `GET /api/blood/donors/{no}/look-back/` | Who received this donor's blood |
+| `POST /api/referrals/{ref}/send/` | Refuses without a question |
+| `POST /api/referrals/{ref}/respond/` | Answer the referrer's actual question |
+| `GET /api/referrals/reports/?report=unanswered` | Seen, and nobody told the referrer |
+| `GET /api/referrals/reports/?report=worklist` | Breach first, then target |
+| `GET /api/referrals/{ref}/letter/` | The letter as frozen when it was sent |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -615,11 +624,14 @@ Built:
 - [x] Blood bank: donors, two-person grouping, per-infection screening,
       components with their own expiries, cross-matching that expires, issue
       that refuses, and look-back in both directions
+- [x] Referrals: a question that must be asked, a letter frozen when sent,
+      five distinct states, countable decline reasons, and the unanswered
+      pile as a report
 
 Next, in dependency order:
 
 - [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
-- [ ] Referrals and the patient portal
+- [ ] The patient portal and employee self-service
 - [ ] Analytics, reporting engine, command centres
 - [ ] Mobile apps and offline mode
 
