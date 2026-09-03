@@ -47,6 +47,7 @@ from apps.hr.models import (
     EmployeeStatus,
     Holiday,
     LeaveLedgerEntry,
+    LeaveRequest,
     LeaveType,
     RosterEntry,
     Shift,
@@ -422,12 +423,27 @@ class Command(BaseCommand):
             "for today"
         )
 
-        request = apply_for_leave(
-            employee, sick, today, today,
-            reason="Fever; saw a doctor this morning.", actor=employee,
-        )
-        decide_leave(request, actor=manager, approve=True,
-                     notes="Certificate seen.")
+        # A request from an earlier run already covers today, and the
+        # overlap check correctly refuses a second. Reuse it rather than
+        # crashing: the point being demonstrated is what approval does to the
+        # attendance record, not that a duplicate is refused.
+        existing = LeaveRequest.objects.filter(
+            employee=employee, starts_on__lte=today, ends_on__gte=today
+        ).exclude(status__in=["rejected", "cancelled"]).first()
+        if existing is not None:
+            request = existing
+            self.stdout.write(
+                f"   {request.reference} from an earlier run already covers "
+                "today — reused"
+            )
+        else:
+            request = apply_for_leave(
+                employee, sick, today, today,
+                reason="Fever; saw a doctor this morning.", actor=employee,
+            )
+        if request.status == "pending":
+            decide_leave(request, actor=manager, approve=True,
+                         notes="Certificate seen.")
 
         blank.refresh_from_db()
         self.stdout.write(

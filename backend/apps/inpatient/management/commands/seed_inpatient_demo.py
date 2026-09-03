@@ -174,6 +174,23 @@ class Command(BaseCommand):
         female_bed.gender_restriction = Gender.FEMALE
         female_bed.save(update_fields=["gender_restriction", "updated_at"])
 
+        # Housekeeping. Every discharge leaves a bed in `cleaning`, and
+        # without somebody turning them round the ward fills up with empty
+        # unusable beds — which is exactly what happens in a real hospital
+        # when portering is short, and exactly what the state exists to make
+        # visible.
+        turned_round = 0
+        for bed in Bed.objects.filter(
+            ward__facility=facility, status=BedStatus.CLEANING
+        ):
+            set_bed_status(bed, BedStatus.AVAILABLE)
+            turned_round += 1
+        if turned_round:
+            self.stdout.write(
+                f"   housekeeping turned round {turned_round} bed(s) left "
+                "dirty by an earlier stay"
+            )
+
         occupancy = ward_occupancy(general)
         self.stdout.write(
             f"   {len(WARDS)} wards, "

@@ -329,6 +329,16 @@ class Command(BaseCommand):
             officer.department.name if officer.department else "—"
         )
         consultant = Position.objects.get(code="POS-MED-01")
+        if officer.position_id == consultant.pk:
+            # Already promoted by an earlier run. The service correctly
+            # refuses a move that changes nothing; the seed should notice
+            # rather than crash.
+            self.stdout.write(
+                f"   {officer.full_name} is already {consultant.title} — "
+                "promotion skipped on a re-run"
+            )
+            self._show_history(officer)
+            return
         transfer(
             officer,
             actor=hr_manager,
@@ -337,16 +347,7 @@ class Command(BaseCommand):
         )
         officer.refresh_from_db()
 
-        history = list(officer.events.all())
-        self.stdout.write(
-            f"   {officer.full_name} is now {officer.position.title}; "
-            f"{len(history)} events on the record"
-        )
-        for event in history:
-            self.stdout.write(
-                f"     {event.effective_on} "
-                f"{event.get_event_type_display().lower():<24} {event.summary}"
-            )
+        self._show_history(officer)
         self.stdout.write(
             f"   the old posting survives in the history ({before_department}), "
             "which a mutated row could not have told us"
@@ -358,6 +359,18 @@ class Command(BaseCommand):
                 f"   a position change was filed as {latest.event_type} — "
                 "internal-mobility reporting would miss it"
             ))
+
+    def _show_history(self, employee):
+        history = list(employee.events.all())
+        self.stdout.write(
+            f"   {employee.full_name} is now {employee.position.title}; "
+            f"{len(history)} events on the record"
+        )
+        for event in history:
+            self.stdout.write(
+                f"     {event.effective_on} "
+                f"{event.get_event_type_display().lower():<24} {event.summary}"
+            )
 
     def _contracts(self, people, hr_manager):
         self.stdout.write(self.style.MIGRATE_HEADING("\n6. Terms"))
