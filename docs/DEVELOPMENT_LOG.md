@@ -3605,3 +3605,223 @@ matters.
 
 **Affects.** `frontend/src/pages/Icu.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 126 - The general ledger
+2026-09-04 · Backend · feature
+
+`apps/finance/`. Every module above this one records what happened to a
+patient, a drug or an employee. This one records what happened to the money,
+and it has a property none of the others do: it is checkable. A patient record
+can be incomplete and still useful. A ledger that does not balance is not a
+partial ledger, it is a wrong one.
+
+**The entry balances, or it does not exist.** `total_debit` and `total_credit`
+sit on the header and a `CheckConstraint` requires them equal. Balancing in
+the service layer alone means the first bulk import, migration or admin action
+writes an unbalanced entry, and from that moment every report is wrong by an
+amount nobody can find. `journal_line_is_one_sided` is the same argument at
+the line level: a line is a debit or a credit, never both and never neither.
+
+**A journal names its source document, uniquely.** `(source,
+source_reference)` is a unique constraint, so a nightly job that runs twice, a
+retried webhook and a double-clicked button all produce one entry. Every
+automatic posting goes through `post_document`, which is the only place that
+knows this.
+
+**What happened and when it was recorded are two dates.** `document_date` and
+`posting_date`. A December invoice found in February posts in February and
+still says December. `resolve_posting_date` moves a document out of a closed
+month into the next open one rather than refusing it — refusing means the
+transaction is never recorded at all, and a ledger missing a real payment is
+worse than one showing it late.
+
+**The rest of the system finds accounts by what they are for.** `ControlAccountKey`
+is a unique, nullable column: exactly one account can be "the receivables
+control". An accountant renumbers the chart on day two, and nothing that posts
+should care.
+
+**Nothing is edited.** A wrong entry is reversed by a contra with every side
+swapped; the original keeps its status, gains a pointer to its reversal, and
+stays exactly as posted. The same rule as the stock ledger, the leave ledger
+and the ICU fluid chart.
+
+**Reconciliation compares two independent records.** `receivables_ageing`
+reads the invoices; the control account balance reads the journals; neither is
+derived from the other, which is the only reason comparing them means
+anything. In most hospital systems these drift apart over years because
+nothing ever asks. The bank statement is kept in its own table for the same
+reason — importing it into the ledger would destroy the exercise.
+
+Two smaller decisions. A discount is debited to "discounts allowed" rather
+than netted off revenue, because a hospital that nets it cannot answer "how
+much did we discount last year". And a supplier invoice debits inventory
+rather than expense, because the cost belongs to the period the stock is sold
+in — expensing purchases on receipt shows a loss every time the hospital
+restocks.
+
+**Affects.** `apps/finance/` (new app), `apps/rbac/permissions.py`
+(`finance.post`, `finance.close`), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 127 - A negative debit, caught by the database
+2026-09-04 · Backend · bug
+
+The first run of the finance seed died on `journal_line_is_one_sided`:
+`debit = -4.00`.
+
+Billing records a refund as a `Payment` with a negative amount, sharing the
+receipt sequence with the payment it reverses. That is right for billing. It
+is wrong for a ledger, where a line is a debit or a credit and a negative
+debit is not a thing — it sums correctly in every report and is indefensible
+in every audit, which is exactly the kind of error that survives for years.
+
+`post_payment` now reads the sign, posts the amount positive, and swaps the
+direction: a refund credits cash and debits receivables, with source `refund`
+rather than `payment`.
+
+The constraint is the point of the entry. Without it this would have been
+written, would have balanced, and would have been discovered by an auditor
+rather than by a seed on the day the module was built.
+
+**Affects.** `apps/finance/services.py`.
+
+---
+
+## 128 - The books were missing a third of the documents
+2026-09-04 · Backend · bug
+
+With the refunds fixed, the reconciliation reported the receivables control
+account at Rs 58,302 against a subledger of zero.
+
+Three omissions, all the same shape — a status filter that decided which
+documents "count".
+
+`post_invoice` accepted only issued, partly-paid and paid invoices. Seven
+invoices had status `credited`: their revenue was recognised when they were
+issued and reversed when the credit note was raised, and both facts belong in
+the books. Excluding them leaves the month they were earned in permanently
+wrong.
+
+Twenty-eight credit notes were never posted at all, because `is_credit_note`
+was filtered out. A credit note is an invoice with the signs reversed; it
+needs the same entry with every side swapped.
+
+And the seed posted only payments with status `completed`. When a payment is
+refunded, billing marks the original `refunded` and writes a negative row —
+so the ledger received every refund with nothing to reverse, which is how a
+drawer ends up owing money it never took.
+
+One further consequence, in `receivables_ageing`: it skipped any invoice whose
+outstanding was `<= 0`, which silently dropped credit notes and overpayments.
+Those are money the hospital owes back. Dropping them makes the subledger
+disagree with the control account by exactly that amount — the failure this
+whole report exists to catch, built into the report itself. Now only exactly
+zero is skipped.
+
+After all four, both records read Rs 0.00 and agree.
+
+**Affects.** `apps/finance/services.py`,
+`apps/finance/management/commands/seed_finance_demo.py`.
+
+---
+
+## 129 - The balance sheet did not balance, by one water bill
+2026-09-04 · Backend · bug
+
+Assets Rs 180,476; liabilities and equity Rs 189,776. Out by Rs 9,300.
+
+`balance_sheet` added `profit_and_loss(until=until)["surplus"]` to equity, and
+`profit_and_loss` defaults its `since` to the start of the *current* fiscal
+year. The balance sheet accounts, meanwhile, accumulate from the beginning of
+time. Any income or expense in a previous fiscal year therefore appeared in
+the assets and not in the equity that should offset it.
+
+The seed had posted exactly one such transaction: a late water bill, dated
+into the previous year to demonstrate the closed-period behaviour. Without it
+the report would have balanced and the bug would have shipped, to be found the
+first time a customer's second fiscal year began.
+
+The fix is `accumulated_surplus` — every income and expense ever posted —
+because this system does not write year-end closing entries into retained
+earnings. `surplus_for_the_period` is still reported beside it, since that is
+the figure a manager actually wants.
+
+**Affects.** `apps/finance/services.py`.
+
+---
+
+## 130 - Opening balances
+2026-09-04 · Backend · feature
+
+With everything posting correctly the cash account read minus fifty-two
+thousand. Not an arithmetic error: the drawer's contents on the day the
+hospital started using this system had never been recorded, so the first
+refund took it negative and it stayed there.
+
+`post_opening_balances` takes a map of control keys to signed balances in each
+account's own terms, and puts whatever does not balance into retained
+earnings. That is not a fudge — the difference between what a business owns
+and what it owes on the day the books open *is* its accumulated result.
+Requiring the operator to balance it by hand produces a suspense entry nobody
+ever clears.
+
+**Affects.** `apps/finance/services.py`,
+`apps/finance/management/commands/seed_finance_demo.py`.
+
+---
+
+## 131 - Keeping the ledger is not raising invoices
+2026-09-04 · Backend · feature
+
+`finance.post` and `finance.close`, both sensitive, with `finance.post`
+declaring `conflicts_with` against `invoice.create` and `payment.record`.
+
+The oldest fraud in bookkeeping is one person raising an invoice, taking the
+payment, and posting a journal that hides both. The segregation machinery
+already existed for refunds, purchase approval and payroll sign-off; this is
+the same rule applied to the books themselves. Closing a period is separated
+again, because deciding that a month is finished is a different authority from
+posting into it.
+
+**Affects.** `apps/rbac/permissions.py`, `apps/finance/api.py`.
+
+---
+
+## 132 - The finance screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Finance.tsx`. A finance screen has a job the others do not:
+it must be checkable. So it leads with the proofs rather than burying them.
+
+**"Does the ledger agree with the invoices?" is the banner above every tab** —
+green with both figures when it does, red with the difference and the
+references of the unposted invoices when it does not. It is the question that
+goes unasked for years in most hospital systems, so it is the first thing on
+the page.
+
+**The trial balance states that it balances in a sentence**, with the
+difference, rather than leaving a reader to compare two columns that look
+similar.
+
+**The posting dialog shows a running difference that must reach zero before
+the button enables.** The same rule the database constraint enforces, made
+visible while somebody types instead of reported after they submit.
+
+**A journal posted late shows both dates** — "12 Feb (dated 20 Dec)" — because
+the gap is the whole reason periods exist. A reversed entry is dimmed and
+names its contra; there is no edit and no delete anywhere on the screen.
+
+**Reopening a period demands a reason** and says why: it is a decision with
+consequences outside this system.
+
+**The bank tab shows unmatched in both directions** with a sentence on what
+each usually means — a statement line with no journal is a charge nobody knew
+about, a journal with no statement line is a cheque that has not cleared, or a
+payment that was never actually made.
+
+**Affects.** `frontend/src/pages/Finance.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.

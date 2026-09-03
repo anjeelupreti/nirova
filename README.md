@@ -37,9 +37,12 @@ multi-branch group.
 > - **Intensive care** — a chart that appends rather than overwrites, infusion
 >   rates as events so the dose history survives, and severity scores that name
 >   the organ systems they could not see.
+> - **Finance** — double entry the database enforces, periods that close, and a
+>   receivables control account that is compared against the invoices rather
+>   than assumed to agree with them.
 >
-> The patient portal and the finance ledger are not built yet.
-> 46 of the specification's 132 sections are complete; see
+> The patient portal and insurance claims are not built yet.
+> 47 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -157,6 +160,7 @@ backend/
     emergency/         arrivals, triage, pathways, resuscitation        [tenant]
     theatre/           rooms, cases, the safety checklist, implants     [tenant]
     icu/               stays, charting, infusions, scoring, alerts      [tenant]
+    finance/           chart of accounts, ledger, periods, ageing       [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -506,6 +510,12 @@ Interactive schema at `/api/docs/` once the server is running.
 | `POST /api/icu/stays/{uuid}/sofa/` | Score, naming what it could not see |
 | `GET /api/icu/stays/{uuid}/blockers/` | What still holds them in the unit |
 | `GET /api/icu/summary/?facility=` | Mortality, ventilator days, line-days |
+| `POST /api/finance/journals/post/` | A balanced entry, or nothing |
+| `POST /api/finance/journals/{ref}/reverse/` | The only way to undo one |
+| `GET /api/finance/reports/?report=trial_balance` | Summed from the lines |
+| `GET /api/finance/reports/?report=reconcile_receivables` | Do the books agree with the invoices? |
+| `POST /api/finance/periods/{uuid}/close/` | Stop the month |
+| `GET /api/finance/bank-accounts/{uuid}/reconciliation/` | Unmatched, both ways |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -578,10 +588,12 @@ Built:
 - [x] Intensive care: charting that appends, infusion rates as events, fluid
       balance from a ledger, ventilator set-versus-measured, line-days, and
       severity scores that name their gaps
+- [x] Finance: chart of accounts, double entry enforced by the database,
+      accounting periods, ageing on both sides, and reconciliation that
+      compares two independent records rather than restating one
 
 Next, in dependency order:
 
-- [ ] Finance: chart of accounts, ledger, revenue cycle
 - [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
 - [ ] Insurance, claims and government schemes
 - [ ] Referrals and the patient portal

@@ -514,23 +514,90 @@ rather than redesigning around it.
 
 # Phase 2 — Money ✅ (outpatient)
 
-## §55 Finance / accounting `[~]`
+## §55 Finance / accounting 🔷
 
+**Foundations**
 - [x] Billable service catalogue
 - [x] Tax treatment per service: exempt, zero-rated, standard
 - [x] Decimal money throughout, half-up rounding
 - [x] Nepali fiscal year handling
-- [ ] Chart of accounts
-- [ ] General ledger and journals
-- [ ] Cash and bank
-- [ ] Accounts receivable ageing
-- [ ] Accounts payable
-- [ ] Expense management
-- [ ] Tax ledger and VAT return preparation
+
+**Chart of accounts**
+- [x] Five account types, with the normal balance held as data so no posting
+      function has to remember which side a debit is
+- [x] A tree: parents group, leaves take postings, and postability is computed
+      from the tree rather than declared
+- [x] Control keys — the rest of the system finds an account by what it is
+      *for*, so an accountant can renumber the whole chart
+- [x] A starter chart, built idempotently, that adds only what is missing
+- [x] Control accounts marked, so nobody posts a manual journal into
+      receivables by hand
+- [ ] Per-facility sub-charts and consolidation
+
+**The ledger**
+- [x] Double entry, with the balance enforced by a database constraint on the
+      entry rather than by the service layer alone
+- [x] A line is a debit or a credit, never both and never neither
+- [x] Nothing is edited or deleted; a mistake is reversed by a contra entry
+      that names it, and both stay
+- [x] Document date and posting date kept separate
+- [x] A journal names the document that caused it, uniquely — posting the same
+      invoice twice is impossible however many times a job runs
+- [x] Cost centre and party on every line, so the subledgers exist
+- [x] Opening balances, with the difference going to retained earnings
+- [ ] Recurring journals and templates
+- [ ] Multi-currency
+
+**Periods**
+- [x] Twelve periods per Nepali fiscal year, named for the Bikram Sambat month
+- [x] Open, soft-closed and locked
+- [x] Closing refuses while drafts remain — a draft in a closed period can
+      never be posted anywhere
+- [x] A document dated in a closed month posts into the next open one and
+      keeps its own date
+- [x] Reopening demands a reason and is audited; a locked period never reopens
+- [ ] Year-end closing entries into retained earnings
+
+**Posting from the rest of the system**
+- [x] Invoices: receivables debited, revenue credited gross, VAT credited
+      separately, discount as an expense rather than netted off
+- [x] Credit notes posted as the same entry with every side swapped
+- [x] Payments, with cash to the drawer and everything else to the bank
+- [x] Refunds recognised by sign and posted in the opposite direction
+- [x] Supplier invoices to inventory, not to expense
+- [x] Expenses, with the VAT split out
+- [x] Payroll: gross as cost, net and every deduction as separate liabilities
+- [ ] Stock movements and cost of goods sold at the point of sale
+- [ ] Patient deposits and their application to invoices
+
+**Reading the books**
+- [x] Trial balance, summed from the lines so it is a real check
+- [x] Account ledger with an opening balance and a running balance
+- [x] Income and expenditure
+- [x] Balance sheet, using the accumulated surplus rather than the year's
+- [x] VAT return with output and input kept apart
+- [ ] Comparative periods and budget variance
+- [ ] Cash flow statement
+
+**Reconciliation**
+- [x] Receivables ageing computed from the invoices, independently of the
+      ledger
+- [x] Payables ageing, with disputes marked
+- [x] The receivables control account compared against the subledger, naming
+      the invoices that were never posted
+- [x] Bank statement kept as its own record, never imported into the ledger
+- [x] Matching refuses when the amounts differ — a tolerance would hide the
+      transposed figures reconciliation exists to find
+- [x] Unmatched reported in both directions, because they mean different
+      things
+- [ ] Statement import from a bank file
+- [ ] Automatic match suggestions
+
+**Still to build**
 - [ ] Fixed assets and depreciation
 - [ ] Budgets
-- [ ] Cost and profit centres
-- [ ] Bank reconciliation
+- [ ] Profit centres beyond the cost-centre tag
+- [ ] Credit note application against specific invoices
 
 ## §56 Revenue cycle management `[x]`
 
@@ -573,9 +640,9 @@ rather than redesigning around it.
 - [x] Procedure, laboratory and radiology charges
 - [x] Corporate and insurance pricing
 - [x] Discounts and partial payment
-- [ ] Room and bed charges
+- [x] Room and bed charges, accrued nightly and idempotently
+- [x] Theatre consumption and implants charged to the encounter
 - [ ] Nursing charges
-- [ ] Theatre and ICU charges
 - [ ] Diet charges
 - [ ] Package billing
 - [ ] Deposits against admission

@@ -166,6 +166,13 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("refund.approve", "Approve refunds", "Finance",
        conflicts_with=("refund.create",)),
     _p("discount.approve", "Approve discounts beyond limit", "Finance"),
+    # Keeping the ledger is not the same authority as raising invoices, and
+    # the two in one pair of hands is the oldest fraud in bookkeeping: raise
+    # an invoice, take the payment, and post a journal that hides both.
+    _p("finance.post", "Post and reverse journal entries", "Finance",
+       is_sensitive=True, conflicts_with=("invoice.create", "payment.record")),
+    _p("finance.close", "Close and reopen accounting periods", "Finance",
+       is_sensitive=True),
 
     # -- people -----------------------------------------------------------
     _p("employee.read", "View employees", "People", is_sensitive=True),

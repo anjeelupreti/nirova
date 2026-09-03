@@ -3119,3 +3119,268 @@ export interface TrendPoint {
   source: string;
   validated: boolean;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Finance                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Money arrives as a string. Format it; never do arithmetic on it here. */
+
+export interface LedgerAccount {
+  uuid: string;
+  code: string;
+  name: string;
+  name_nepali: string;
+  account_type: "asset" | "liability" | "equity" | "income" | "expense";
+  parent: string | null;
+  is_postable: boolean;
+  control_key: string;
+  is_control: boolean;
+  facility: string | null;
+  is_active: boolean;
+  description: string;
+  normal_balance: "debit" | "credit";
+}
+
+export interface AccountingPeriod {
+  uuid: string;
+  fiscal_year: string;
+  period_number: number;
+  name: string;
+  starts_on: string;
+  ends_on: string;
+  status: "open" | "soft_closed" | "locked";
+  closed_at: string | null;
+  closed_by_name: string;
+  notes: string;
+  accepts_postings: boolean;
+  entries: number;
+}
+
+export interface JournalLine {
+  uuid: string;
+  account_code: string;
+  account_name: string;
+  debit: string;
+  credit: string;
+  narration: string;
+  party_type: string;
+  party_reference: string;
+  party_name: string;
+  cost_centre: string;
+}
+
+export interface JournalEntry {
+  uuid: string;
+  reference: string;
+  document_date: string;
+  posting_date: string;
+  period_name: string;
+  facility_name: string;
+  narration: string;
+  source: string;
+  source_reference: string;
+  status: "draft" | "posted" | "reversed";
+  posted_at: string | null;
+  posted_by_name: string;
+  total_debit: string;
+  total_credit: string;
+  reversal_reason: string;
+  reversed_by_reference: string;
+  /** The document's own date and the day it hit the books are different. */
+  posted_late: boolean;
+  lines: JournalLine[];
+}
+
+export interface TrialBalanceRow {
+  code: string;
+  name: string;
+  type: string;
+  debit: string;
+  credit: string;
+  balance: string;
+}
+
+export interface TrialBalance {
+  as_at: string;
+  rows: TrialBalanceRow[];
+  total_debit: string;
+  total_credit: string;
+  difference: string;
+  balances: boolean;
+}
+
+export interface ProfitAndLoss {
+  from: string;
+  to: string;
+  income: { code: string; name: string; amount: string }[];
+  expenses: { code: string; name: string; amount: string }[];
+  total_income: string;
+  total_expense: string;
+  surplus: string;
+}
+
+export interface BalanceSheet {
+  as_at: string;
+  assets: { code: string; name: string; amount: string }[];
+  liabilities: { code: string; name: string; amount: string }[];
+  equity: { code: string; name: string; amount: string }[];
+  total_assets: string;
+  total_liabilities: string;
+  total_equity: string;
+  surplus_for_the_period: string;
+  accumulated_surplus: string;
+  difference: string;
+  balances: boolean;
+}
+
+export interface ReceivablesAgeing {
+  as_at: string;
+  buckets: Record<string, string>;
+  total: string;
+  invoices: {
+    invoice: string;
+    patient: string;
+    issued: string;
+    days: number;
+    total: string;
+    paid: string;
+    outstanding: string;
+  }[];
+  over_90: string;
+}
+
+export interface PayablesAgeing {
+  as_at: string;
+  buckets: Record<string, string>;
+  total: string;
+  invoices: {
+    invoice: string;
+    supplier: string;
+    supplier_number: string;
+    due: string;
+    days_overdue: number;
+    outstanding: string;
+    disputed: boolean;
+  }[];
+  overdue: string;
+}
+
+export interface ReceivablesAgreement {
+  as_at: string;
+  /** From the invoices. */
+  subledger: string;
+  /** From the ledger's control account. Independently computed. */
+  ledger: string;
+  difference: string;
+  agrees: boolean;
+  invoices_not_posted: string[];
+  invoices_not_posted_count: number;
+}
+
+export interface VatReturn {
+  from: string;
+  to: string;
+  output_tax: string;
+  input_tax: string;
+  payable: string;
+}
+
+export interface AccountLedger {
+  account: string;
+  opening: string;
+  closing: string;
+  rows: {
+    date: string;
+    reference: string;
+    narration: string;
+    source: string;
+    party: string;
+    debit: string;
+    credit: string;
+    balance: string;
+  }[];
+}
+
+export interface SupplierInvoice {
+  uuid: string;
+  reference: string;
+  supplier_invoice_number: string;
+  supplier_uuid: string;
+  supplier_name: string;
+  facility: string;
+  invoice_date: string;
+  due_date: string;
+  received_on: string;
+  subtotal: string;
+  tax_amount: string;
+  total: string;
+  paid_amount: string;
+  goods_receipts: string[];
+  variance: string;
+  variance_notes: string;
+  status: string;
+  approved_by_name: string;
+  approved_at: string | null;
+  notes: string;
+  outstanding: string;
+  is_overdue: boolean;
+}
+
+export interface LedgerExpense {
+  uuid: string;
+  reference: string;
+  facility: string;
+  spent_on: string;
+  account: string;
+  account_name: string;
+  cost_centre: string;
+  description: string;
+  amount: string;
+  tax_amount: string;
+  claimed_by_name: string;
+  payment_method: string;
+  receipt_number: string;
+  has_receipt: boolean;
+  status: string;
+  approved_by_name: string;
+  approved_at: string | null;
+  rejection_reason: string;
+}
+
+export interface LedgerBankAccount {
+  uuid: string;
+  name: string;
+  bank_name: string;
+  branch: string;
+  account_number: string;
+  account: string;
+  facility: string | null;
+  is_active: boolean;
+  notes: string;
+}
+
+export interface BankReconciliation {
+  bank_account: string;
+  from: string;
+  to: string;
+  statement_lines: number;
+  statement_total: string;
+  ledger_total: string;
+  difference: string;
+  unmatched_on_the_statement: {
+    uuid: string;
+    date: string;
+    description: string;
+    reference: string;
+    amount: string;
+  }[];
+  unmatched_in_the_ledger: {
+    uuid: string;
+    date: string;
+    reference: string;
+    narration: string;
+    amount: string;
+  }[];
+  matched: number;
+}
