@@ -30,6 +30,10 @@ urlpatterns = [
     path("api/insurance/", include("apps.insurance.urls")),
     path("api/blood/", include("apps.bloodbank.urls")),
     path("api/referrals/", include("apps.referrals.urls")),
+    path("api/portal/", include("apps.portal.urls")),
+    # The patient-facing half, on its own prefix: a different
+    # authentication and a different tenant binding.
+    path("api/me/", include("apps.portal.me_urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
         "api/docs/",

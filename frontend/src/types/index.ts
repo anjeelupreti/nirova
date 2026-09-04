@@ -4140,3 +4140,112 @@ export interface ReferralTarget {
   urgency: ReferralUrgency;
   days: number;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Patient portal (the staff-facing half)                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The patient-facing half of the portal is a separate application: a different
+ * audience, a different authentication (`Authorization: Portal <token>`) and a
+ * different tenant binding. These types cover what the staff console
+ * administers — invitations, proxy access, messages and adoption.
+ */
+
+export type PortalAccountStatus =
+  | "invited" | "active" | "locked" | "suspended" | "closed";
+
+export interface PortalAccount {
+  uuid: string;
+  patient_name: string;
+  patient_mrn: string;
+  login_identifier: string;
+  email: string;
+  status: PortalAccountStatus;
+  registered_at: string | null;
+  last_login_at: string | null;
+  is_locked: boolean;
+  locked_until: string | null;
+  wants_appointment_reminders: boolean;
+  wants_result_notifications: boolean;
+  preferred_language: string;
+}
+
+export interface PortalInvitationIssued {
+  /** Returned once. The server keeps only a hash. */
+  code: string;
+  hint: string;
+  expires_at: string;
+}
+
+export type ProxyRelationship =
+  | "parent" | "child" | "spouse" | "sibling" | "carer" | "legal";
+
+export interface ProxyAccess {
+  uuid: string;
+  account_holder: string;
+  patient_name: string;
+  relationship: ProxyRelationship;
+  /** Narrower than the patient's own view by default. */
+  can_see_results: boolean;
+  can_see_invoices: boolean;
+  can_book_appointments: boolean;
+  granted_at: string;
+  granted_by_name: string;
+  consent_evidence: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  revoked_by_name: string;
+  revoked_reason: string;
+  is_live: boolean;
+}
+
+export interface ProxyReviewRow {
+  grant: string;
+  proxy: string;
+  patient: string;
+  relationship: ProxyRelationship;
+  granted_at: string;
+  days_old: number;
+  expires_at: string | null;
+  can_see_results: boolean;
+  consent_evidence: string;
+  last_looked: string | null;
+}
+
+export interface PortalMessage {
+  uuid: string;
+  patient_name: string;
+  direction: "from_patient" | "to_patient";
+  subject: string;
+  body: string;
+  sent_at: string;
+  sender_name: string;
+  read_at: string | null;
+  answered_at: string | null;
+  answered_by_name: string;
+  /** Distinct from read: a message somebody glanced at is not answered. */
+  is_answered: boolean;
+}
+
+export interface PortalAccessLogRow {
+  looked_at: string;
+  patient: string;
+  resource: string;
+  detail: string;
+  ip: string | null;
+}
+
+export interface PortalAdoption {
+  patients: number;
+  invited: number;
+  accounts: number;
+  active: number;
+  used_in_90_days: number;
+  /** Says whether the desk is offering it or quietly skipping it. */
+  invitation_to_account_percent: number | null;
+  coverage_percent: number | null;
+  expired_unused_invitations: number;
+  locked_accounts: number;
+  live_proxy_grants: number;
+}

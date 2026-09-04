@@ -49,9 +49,12 @@ multi-branch group.
 > - **Referrals** — a referral must ask a question, the letter is frozen when
 >   it is sent, and "seen but nobody told the referrer" is a report rather
 >   than a silence.
+> - **Patient portal** — its own credential and its own session, registration
+>   only by invitation, critical results held while a clinician rings, and
+>   proxy access that stops the moment consent is withdrawn.
 >
-> The patient portal is not built yet.
-> 50 of the specification's 132 sections are complete; see
+> Employee self-service and the analytics engine are not built yet.
+> 51 of the specification's 132 sections are complete; see
 > [`docs/IMPLEMENTATION_CHECKLIST.md`](docs/IMPLEMENTATION_CHECKLIST.md).
 
 ---
@@ -173,6 +176,7 @@ backend/
     insurance/         payers, policies, pre-auth, claims, schemes      [tenant]
     bloodbank/         donors, donations, units, matching, reactions    [tenant]
     referrals/         providers, referrals, responses, the loop        [tenant]
+    portal/            patient accounts, sessions, proxy access         [tenant]
 frontend/              React + Vite + TypeScript + shadcn/ui
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
@@ -543,6 +547,11 @@ Interactive schema at `/api/docs/` once the server is running.
 | `GET /api/referrals/reports/?report=unanswered` | Seen, and nobody told the referrer |
 | `GET /api/referrals/reports/?report=worklist` | Breach first, then target |
 | `GET /api/referrals/{ref}/letter/` | The letter as frozen when it was sent |
+| `POST /api/me/auth/` | A patient signs in; its own scheme and session |
+| `GET /api/me/?section=results` | Released results only; critical ones held |
+| `POST /api/portal/accounts/invite/` | A code, returned once and never again |
+| `POST /api/portal/proxies/{uuid}/revoke/` | Withdrawal, effective immediately |
+| `GET /api/portal/proxies/review/` | Grants nobody has revisited |
 | `GET /api/platform/dashboard/` | MRR, expansion, concentration, infrastructure |
 | `GET /api/platform/organizations/` | Every customer and their estate |
 | `GET /api/platform/subscriptions/` | Contracts and the add-ons on them |
@@ -627,11 +636,14 @@ Built:
 - [x] Referrals: a question that must be asked, a letter frozen when sent,
       five distinct states, countable decline reasons, and the unanswered
       pile as a report
+- [x] Patient portal: a separate identity and session, invitation-only
+      registration, results released rather than exposed, and proxy access
+      with consent, an expiry and an immediate revocation
 
 Next, in dependency order:
 
 - [ ] Laboratory (LIMS) and radiology (RIS/PACS) beyond ordering
-- [ ] The patient portal and employee self-service
+- [ ] Employee self-service
 - [ ] Analytics, reporting engine, command centres
 - [ ] Mobile apps and offline mode
 

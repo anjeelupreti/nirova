@@ -89,6 +89,7 @@ TENANT_APPS = [
     "apps.insurance",
     "apps.bloodbank",
     "apps.referrals",
+    "apps.portal",
 ]
 
 LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS
@@ -109,6 +110,10 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.tenancy.middleware.TenantContextMiddleware",
+    # After the staff resolver, deliberately: that one sets
+    # `request.tenant = None` on every request, so a portal binding
+    # placed before it would be cleared a moment later.
+    "apps.portal.auth.PortalTenantMiddleware",
     "apps.audit.middleware.AuditContextMiddleware",
 ]
 

@@ -2114,10 +2114,74 @@ rather than redesigning around it.
 - [ ] Templates: appointment, reminder, follow-up, prescription, lab result, invoice, payment, campaign, feedback, emergency
 - [ ] Delivery tracking
 
-## §94 Patient portal `[ ]`
-- [ ] Profile · appointments · queue position · medical history
-- [ ] Prescriptions · laboratory · radiology · invoices · payment · insurance
-- [ ] Follow-ups · documents · telemedicine · family accounts
+## §94 Patient portal 🔷
+
+**Identity**
+- [x] A patient account is its own table with its own credential, not a flag
+      on a staff user — the separation is structural rather than conditional
+- [x] Its own authentication scheme (`Authorization: Portal <token>`) and its
+      own tenant binding, because a patient has no membership
+- [x] `request.user` on a portal request is a principal that answers
+      `is_authenticated` and nothing else, so code that treats a patient as
+      staff raises rather than granting
+- [x] Registration only against an invitation issued by somebody at the desk
+- [x] The invitation code is returned once and stored hashed
+- [x] Any earlier unused invitation is revoked, so nobody holds two live codes
+- [x] How the code was delivered, and to what, is recorded
+- [x] Authentication answers identically whether or not the account exists
+- [x] Lockout after repeated failures, expiring on its own
+- [ ] Password reset by SMS one-time code
+- [ ] Two-factor authentication
+
+**Sessions**
+- [x] Sessions are rows, so signing out actually invalidates
+- [x] A patient can see where they are signed in and end one
+- [x] Sign out everywhere
+- [ ] Device fingerprinting and unfamiliar-device notification
+
+**What may be seen**
+- [x] Only results the laboratory has released
+- [x] Critical results held for a day, abnormal ones briefly, so a clinician
+      can ring first
+- [x] Held is announced, not hidden: the patient is told a result is ready
+      and that somebody will be in touch
+- [x] The hold expires — an indefinite one is a result they never learn about
+- [x] Appointments, prescriptions, referrals and issued invoices
+- [x] Draft invoices are never shown
+- [x] Which record is being read comes from the session and the live grants,
+      never from the request
+- [ ] Documents, images and discharge summaries
+- [ ] Online payment from the portal
+- [ ] Queue position in real time
+- [ ] Telemedicine
+
+**Family and proxy accounts**
+- [x] Proxy access is an interval with a relationship, evidence of consent,
+      an expiry and a revocation
+- [x] Narrower than the patient's own view by default — a carer arranging
+      appointments does not need the notes
+- [x] One live grant per account and patient, enforced by constraint
+- [x] Checked at query time, so withdrawal takes effect immediately
+- [x] A proxy's reads are logged; a patient's own reads are not
+- [x] A review list of grants nobody has revisited
+- [ ] A patient granting and withdrawing access themselves
+- [ ] Automatic expiry when a child reaches majority
+
+**Messages**
+- [x] Patient to practice, and staff replies
+- [x] Answered is distinct from read
+- [x] An unanswered queue, because a message somebody glanced at is not
+      answered
+- [x] Stated as not a clinical channel, in the model and on the screen
+- [ ] Attachments and photographs
+
+**Oversight**
+- [x] Take-up: invitations issued against accounts registered, and coverage
+      against the patient list
+- [x] Invitations that expired unused
+- [x] Accounts locked right now
+- [x] Live proxy grants, and the ones that see results marked
+- [ ] Per-facility breakdown
 
 ## §95 Employee self-service `[ ]`
 - [ ] Profile · attendance · leave · roster · shift · payslip

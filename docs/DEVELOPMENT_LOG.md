@@ -4323,3 +4323,145 @@ left the building.
 
 **Affects.** `frontend/src/pages/Referrals.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 148 - The patient portal
+2026-09-04 · Backend · feature
+
+`apps/portal/`. Every other module in this system is read by staff. This one
+is read by the patient, and that single change makes several of the usual
+answers wrong.
+
+**A patient account is not a staff account.** Its own table, its own password
+hash, its own authentication scheme (`Authorization: Portal <token>`) and its
+own tenant binding — because a patient has no membership and the ordinary
+middleware resolves the organization from one. `request.user` on a portal
+request is a `PortalPrincipal` that answers `is_authenticated` and
+deliberately nothing else, so anything reaching for `has_perm` raises instead
+of quietly treating a patient as clinical staff. A flag on `identity.User`
+would have been one bad query away from exactly that.
+
+**Registration is a claim, and a claim is verified.** An account can only be
+created against an invitation issued by somebody who saw the patient. Without
+it the portal is "type an MRN and a date of birth" — both printed on every
+document the patient carries — which is an enumeration attack with a login at
+the end. The code is returned once and stored hashed, because an invitation
+list readable from the database is a list of working credentials for other
+people's medical records.
+
+**Authentication answers the same way whether or not the account exists**, and
+spends the same time doing it. A form that distinguishes "no such account"
+from "wrong password" is a tool for finding out who is a patient at this
+hospital, and that is a disclosure before anybody guesses anything.
+
+**A result is released, and a critical one is held.** The laboratory already
+distinguishes verified from released; the portal shows only released results,
+and holds a critical one for a day while somebody rings. A patient reading
+"potassium 7.1" from a phone at eleven at night, with nobody to ask, is a harm
+the system caused. The hold is *announced*: the patient is told a result is
+ready and that a clinician will be in touch, because a gap they do not know
+about is worse than a delay they do — and the hold expires, because an
+indefinite one is a result they never learn about at all.
+
+**Proxy access is an interval with evidence, an expiry and a revocation**,
+checked at query time and never cached on the session. Consent withdrawn at
+ten o'clock stops working at ten o'clock, not at the proxy's next sign-in. A
+boolean "linked" loses both the expiry and the withdrawal, and "my ex-husband
+can still see my results" is not a complaint anybody recovers from.
+
+**A proxy's reads are logged; a patient's own are not.** Logging somebody
+reading their own record produces a table nobody can search. For a proxy it is
+the only way to answer the question that eventually gets asked.
+
+Two smaller decisions. Sessions are rows so that signing out invalidates
+something — "log out everywhere" that invalidates nothing is the commonest lie
+in a consumer account screen, and on a medical record it matters. And which
+record is being read comes from the session and the live grants, never from
+the request: a portal that accepts `?patient=` is one guessed UUID away from
+somebody else's record.
+
+**Affects.** `apps/portal/` (new app), `config/settings/base.py`,
+`config/urls.py`.
+
+---
+
+## 149 - Brute-force protection that protected nothing
+2026-09-04 · Backend · bug
+
+The seed reported `locked after 5 failures: expected True, got False`.
+
+`authenticate` was decorated with `tenant_atomic_method`. On a wrong password
+it incremented the failed-attempt counter, saved it, and raised
+`AuthenticationFailed` on the next line — and the raise rolled the save back.
+The counter never advanced past one, the account never locked, and the
+lockout did nothing at all while looking, in the code, exactly as though it
+worked.
+
+This is the second time this session: the blood bank's `return_unit`
+discarded a unit whose cold chain was broken and then raised, and the raise
+undid the discard. The general rule is worth stating plainly:
+
+> A function that both *records* a consequence and *refuses* cannot do the
+> recording inside the transaction the refusal aborts.
+
+Both are now un-decorated on the failing path, with a comment saying why so
+that the next person to tidy up does not put the decorator back.
+
+**And then the rest of the codebase was checked for it.** A short AST pass
+over every `services.py` found nine atomic functions that write and then raise:
+`create_invoice`, `identify`, `admit`, `clear`, `record_response`,
+`post_movement`, `dispense`, `create_sale` and `request_return`.
+
+All nine are correct, and reading them is what sharpens the rule. In every one
+the write is *part of the thing being refused* — a half-built invoice, an
+empty clearance row, a `get_or_create` stock row with zero in it — and rolling
+it back is precisely right, because none of it should exist if the operation
+does not complete.
+
+The two bugs were different in kind. What they wrote was not part of the
+operation; it was a **record about the refusal**: that a unit's cold chain had
+been broken, that somebody had guessed a password wrong. So the rule is
+narrower and more useful than "do not write before raising":
+
+> If the thing being written must outlive the refusal, it cannot be written
+> inside the transaction the refusal aborts.
+
+A build-then-validate function is fine. A function that *counts* something, or
+records that something has been spoiled, is not.
+
+The seed caught the original because it checked the account's state after the
+failures rather than trusting that the exceptions meant the counter had moved.
+
+**Affects.** `apps/portal/services.py`.
+
+---
+
+## 150 - The portal screen, and why it is only half a screen
+2026-09-04 · Frontend · feature
+
+`frontend/src/pages/Portal.tsx`. The patient-facing half is a separate
+application by nature — a different audience, a different authentication, a
+different tenant binding — so what the staff console gets is what staff
+administer.
+
+**An invitation code is shown once, and the box says so before it closes.**
+The database keeps only a hash, so a clinician who closes the dialog without
+writing it down has to issue a new one. Saying that in the dialog is cheaper
+than the support call.
+
+**Proxy grants that give sight of results are drawn in red**, in the row and
+in the review list. Somebody else reading a patient's results is the
+highest-consequence permission this system hands out and it is invisible in a
+list of names and relationships.
+
+**"Nobody answered" is the message count on the tab**, not "unread". Read and
+answered are different, and a queue sorted by unread hides the message
+somebody opened, meant to come back to, and did not.
+
+**The review list shows when each proxy last actually looked**, because a
+grant nobody has used and a grant somebody uses weekly are different
+conversations to have.
+
+**Affects.** `frontend/src/pages/Portal.tsx`, `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`.
