@@ -20,7 +20,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import (
+    HasPermission,
+    apply_scope_filter,
+    get_authorization,
+)
 from apps.hr.models import (
     Credential,
     Employee,
@@ -111,7 +115,7 @@ class PositionViewSet(viewsets.ModelViewSet):
 class EmployeeViewSet(viewsets.ModelViewSet):
     """The workforce."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("employee.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("employee.read", Scope.OWN)]
     lookup_field = "employee_code"
     filterset_class = uuid_filterset(
         Employee, relations=["facility", "department", "position"],
@@ -141,6 +145,11 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         # looking someone up means a current colleague.
         if self.request.query_params.get("include_separated") != "true":
             queryset = queryset.exclude(status="separated")
+
+        # Scope filter: callers with only Scope.OWN see only their own row.
+        queryset = apply_scope_filter(
+            queryset, self.request, "employee.read", employee_attr="self"
+        )
         return queryset.order_by("first_name", "last_name")
 
     # -- self ---------------------------------------------------------------

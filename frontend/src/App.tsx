@@ -34,6 +34,8 @@ import {
   Send,
   KeyRound,
   Users,
+  UserCheck,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { useSession } from "@/hooks/useSession";
@@ -42,6 +44,8 @@ import CapacityPage from "@/pages/Capacity";
 import FacilitiesPage from "@/pages/Facilities";
 import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
+import NurseWorkspacePage from "@/pages/NurseWorkspace";
+import SelfServicePage from "@/pages/SelfService";
 import BillingPage from "@/pages/Billing";
 import ConsultationPage from "@/pages/Consultation";
 import CounterPage from "@/pages/Counter";
@@ -97,6 +101,7 @@ const NAV_GROUPS: {
       { to: "/queue", label: "Queue", icon: ListOrdered },
       { to: "/emergency", label: "Emergency", icon: Siren },
       { to: "/wards", label: "Wards", icon: BedDouble },
+      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck },
       { to: "/theatre", label: "Theatre", icon: Scissors },
       { to: "/icu", label: "ICU", icon: HeartPulse },
       { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
@@ -125,6 +130,7 @@ const NAV_GROUPS: {
   {
     label: "People",
     items: [
+      { to: "/self-service", label: "Self Service", icon: UserCheck },
       { to: "/people", label: "Directory", icon: UserCog },
       { to: "/time", label: "Time", icon: CalendarClock },
     ],
@@ -345,11 +351,13 @@ export default function App() {
           <Route path="/portal" element={<PortalPage />} />
           <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/wards" element={<WardsPage />} />
+          <Route path="/nurse-workspace" element={<NurseWorkspacePage />} />
           <Route path="/theatre" element={<TheatrePage />} />
           <Route path="/icu" element={<IcuPage />} />
           <Route path="/pharmacy" element={<PharmacyPage />} />
           <Route path="/counter" element={<CounterPage />} />
           <Route path="/procurement" element={<ProcurementPage />} />
+          <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />

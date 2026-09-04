@@ -1,0 +1,160 @@
+# Generated for Nirova Phase 9 §96 / Phase 6 §28 Nursing Models
+
+import uuid
+from django.db import migrations, models
+import django.db.models.deletion
+import django.utils.timezone
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ('encounters', '0001_initial'),
+        ('inpatient', '0001_initial'),
+        ('prescriptions', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='NurseAssignment',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('created_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('updated_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('deleted_at', models.DateTimeField(blank=True, editable=False, null=True)),
+                ('deleted_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('nurse_id', models.UUIDField(db_index=True)),
+                ('nurse_name', models.CharField(max_length=255)),
+                ('assigned_date', models.DateField(db_index=True)),
+                ('shift', models.CharField(choices=[('morning', 'Morning (07:00 – 15:00)'), ('evening', 'Evening (15:00 – 23:00)'), ('night', 'Night (23:00 – 07:00)')], db_index=True, default='morning', max_length=16)),
+                ('role', models.CharField(choices=[('primary', 'Primary bedside nurse'), ('buddy', 'Buddy / Relief nurse'), ('charge', 'Charge / In-charge nurse')], default='primary', max_length=16)),
+                ('is_active', models.BooleanField(default=True)),
+                ('notes', models.CharField(blank=True, max_length=255)),
+                ('assigned_by_id', models.UUIDField(blank=True, null=True)),
+                ('assigned_by_name', models.CharField(blank=True, max_length=255)),
+                ('admission', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='nurse_assignments', to='inpatient.admission')),
+                ('bed', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='nurse_assignments', to='inpatient.bed')),
+                ('ward', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='nurse_assignments', to='inpatient.ward')),
+            ],
+            options={
+                'db_table': 'ipd_nurse_assignment',
+                'ordering': ['-assigned_date', 'shift', 'nurse_name'],
+                'indexes': [
+                    models.Index(fields=['nurse_id', 'assigned_date', 'shift'], name='ipd_nurse_a_nurse_i_9a1e01_idx'),
+                    models.Index(fields=['ward', 'assigned_date', 'shift'], name='ipd_nurse_a_ward_id_24a49c_idx'),
+                    models.Index(fields=['admission', 'assigned_date', 'shift'], name='ipd_nurse_a_admissi_3ef418_idx'),
+                ],
+            },
+        ),
+        migrations.CreateModel(
+            name='MedicationAdministration',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('created_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('updated_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('deleted_at', models.DateTimeField(blank=True, editable=False, null=True)),
+                ('deleted_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('medicine_name', models.CharField(max_length=255)),
+                ('scheduled_time', models.DateTimeField(db_index=True)),
+                ('administered_at', models.DateTimeField(db_index=True, default=django.utils.timezone.now)),
+                ('administered_by_id', models.UUIDField(db_index=True)),
+                ('administered_by_name', models.CharField(max_length=255)),
+                ('dose_given', models.CharField(max_length=64)),
+                ('route', models.CharField(default='PO', max_length=16)),
+                ('status', models.CharField(choices=[('given', 'Given'), ('held', 'Held'), ('refused', 'Refused by patient'), ('omitted', 'Omitted / Missed')], db_index=True, default='given', max_length=16)),
+                ('reason', models.CharField(blank=True, help_text='Mandatory clinical rationale if held, refused or omitted.', max_length=512)),
+                ('injection_site', models.CharField(blank=True, help_text='Anatomical site for injectables (e.g. Left deltoid, Abdomen).', max_length=128)),
+                ('witness_by_id', models.UUIDField(blank=True, null=True)),
+                ('witness_by_name', models.CharField(blank=True, help_text='Second nurse sign-off for high-alert drugs.', max_length=255)),
+                ('notes', models.CharField(blank=True, max_length=512)),
+                ('admission', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='medication_administrations', to='inpatient.admission')),
+                ('encounter', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='medication_administrations', to='encounters.encounter')),
+                ('prescription_line', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='administrations', to='prescriptions.prescriptionline')),
+            ],
+            options={
+                'db_table': 'ipd_medication_administration',
+                'ordering': ['-administered_at'],
+                'indexes': [
+                    models.Index(fields=['admission', '-administered_at'], name='ipd_med_adm_admissi_4a11f2_idx'),
+                    models.Index(fields=['prescription_line', '-administered_at'], name='ipd_med_adm_prescri_9b32c8_idx'),
+                    models.Index(fields=['status', '-administered_at'], name='ipd_med_adm_status_8c17b0_idx'),
+                ],
+            },
+        ),
+        migrations.CreateModel(
+            name='NursingHandover',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('created_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('updated_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('deleted_at', models.DateTimeField(blank=True, editable=False, null=True)),
+                ('deleted_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('shift_date', models.DateField(db_index=True, default=django.utils.timezone.now)),
+                ('shift', models.CharField(choices=[('morning', 'Morning (07:00 – 15:00)'), ('evening', 'Evening (15:00 – 23:00)'), ('night', 'Night (23:00 – 07:00)')], db_index=True, default='morning', max_length=16)),
+                ('outgoing_nurse_id', models.UUIDField(db_index=True)),
+                ('outgoing_nurse_name', models.CharField(max_length=255)),
+                ('code_status', models.CharField(choices=[('full_code', 'Full resuscitation (CPR)'), ('dnr', 'Do Not Resuscitate (DNR / AND)'), ('dni', 'Do Not Intubate')], default='full_code', max_length=16)),
+                ('situation', models.TextField(help_text='Current clinical state and immediate concerns.')),
+                ('background', models.TextField(blank=True, help_text='History, surgeries, allergies, code status.')),
+                ('assessment', models.TextField(help_text='Vitals, NEWS2 score, IV lines/catheters/drains, fluid balance.')),
+                ('recommendation', models.TextField(help_text='Plan for next shift, pending labs/imaging, consults.')),
+                ('is_acknowledged', models.BooleanField(db_index=True, default=False)),
+                ('incoming_nurse_id', models.UUIDField(blank=True, null=True)),
+                ('incoming_nurse_name', models.CharField(blank=True, max_length=255)),
+                ('acknowledged_at', models.DateTimeField(blank=True, null=True)),
+                ('admission', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='handovers', to='inpatient.admission')),
+                ('ward', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='handovers', to='inpatient.ward')),
+            ],
+            options={
+                'db_table': 'ipd_nursing_handover',
+                'ordering': ['-created_at'],
+                'indexes': [
+                    models.Index(fields=['admission', '-shift_date'], name='ipd_nursing_admissi_7e11aa_idx'),
+                    models.Index(fields=['ward', '-shift_date'], name='ipd_nursing_ward_id_81f2bb_idx'),
+                    models.Index(fields=['is_acknowledged', '-shift_date'], name='ipd_nursing_is_ackn_49a901_idx'),
+                ],
+            },
+        ),
+        migrations.CreateModel(
+            name='NursingTask',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('created_at', models.DateTimeField(default=django.utils.timezone.now, editable=False)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('uuid', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('created_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('updated_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('deleted_at', models.DateTimeField(blank=True, editable=False, null=True)),
+                ('deleted_by_id', models.UUIDField(blank=True, editable=False, null=True)),
+                ('title', models.CharField(max_length=255)),
+                ('category', models.CharField(choices=[('vitals', 'Vitals & Monitoring'), ('medication', 'Medication & Infusion'), ('wound_care', 'Wound & Dressing'), ('fluid_balance', 'Fluid & Intake/Output'), ('hygiene', 'Hygiene & Skin/Positioning'), ('general', 'General Nursing Care')], db_index=True, default='general', max_length=20)),
+                ('shift', models.CharField(blank=True, help_text="Target shift ('morning', 'evening', 'night') or blank for any.", max_length=16)),
+                ('due_at', models.DateTimeField(blank=True, db_index=True, null=True)),
+                ('status', models.CharField(choices=[('pending', 'Pending'), ('in_progress', 'In progress'), ('completed', 'Completed'), ('cancelled', 'Cancelled')], db_index=True, default='pending', max_length=16)),
+                ('completed_at', models.DateTimeField(blank=True, null=True)),
+                ('completed_by_id', models.UUIDField(blank=True, null=True)),
+                ('completed_by_name', models.CharField(blank=True, max_length=255)),
+                ('notes', models.TextField(blank=True)),
+                ('admission', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='nursing_tasks', to='inpatient.admission')),
+                ('ward', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='nursing_tasks', to='inpatient.ward')),
+            ],
+            options={
+                'db_table': 'ipd_nursing_task',
+                'ordering': ['due_at', '-created_at'],
+                'indexes': [
+                    models.Index(fields=['admission', 'status'], name='ipd_nursing_admissi_201ab4_idx'),
+                    models.Index(fields=['ward', 'status'], name='ipd_nursing_ward_id_651a2d_idx'),
+                    models.Index(fields=['status', 'due_at'], name='ipd_nursing_status_8818f1_idx'),
+                ],
+            },
+        ),
+    ]

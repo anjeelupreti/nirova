@@ -129,3 +129,46 @@ export interface SignInResult {
     login_identifier: string;
   };
 }
+
+export interface PatientCorrectionRow {
+  uuid: string;
+  field_name: string;
+  field_label: string;
+  old_value: string;
+  proposed_value: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requested_at: string;
+  decided_at?: string | null;
+  decided_by_name?: string;
+  decision_notes?: string;
+}
+
+export interface PatientProfile {
+  uuid: string;
+  mrn: string;
+  full_name: string;
+  phone: string;
+  alternate_phone: string;
+  email: string;
+  gender: string;
+  date_of_birth: string | null;
+  stated_age_years: number | null;
+  temporary_address: string;
+  tole: string;
+  municipality: string;
+  district: string;
+  province: string;
+  guardian_name: string;
+  guardian_phone: string;
+  guardian_relationship: string;
+  pending_corrections: PatientCorrectionRow[];
+  recent_corrections: PatientCorrectionRow[];
+}
+
+export interface DocumentResponse {
+  html: string;
+  reference: string;
+  title: string;
+}
+

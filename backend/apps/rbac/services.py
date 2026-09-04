@@ -111,6 +111,15 @@ class UserAuthorization:
             return None
         return granted.facility_ids
 
+    def is_own_scope(self, code: str) -> bool:
+        """True if the permission is held strictly at Scope.OWN (not broader)."""
+        if self.is_organization_owner:
+            return False
+        granted = self.permissions.get(code)
+        if granted is None:
+            return False
+        return granted.scope == Scope.OWN
+
     def as_dict(self) -> dict:
         return {
             "user_id": self.user_id,
@@ -465,6 +474,15 @@ SYSTEM_ROLES = [
             "employee.read", "credential.read", "salary.read",
             "report.read", "analytics.read",
             "audit.read", "audit.export", "subscription.read",
+        ],
+    },
+    {
+        "code": "staff",
+        "name": "Staff / Employee",
+        "description": "Base role for every employee. Grants self-service access to own profile, attendance, roster and payslips.",
+        "max_scope": Scope.OWN,
+        "permissions": [
+            "employee.read", "attendance.read", "salary.read",
         ],
     },
 ]

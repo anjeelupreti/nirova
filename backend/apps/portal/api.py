@@ -23,12 +23,13 @@ accepts `?patient=` is one guessed UUID away from somebody else's record.
 answered by a person.
 """
 
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
 
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
@@ -36,6 +37,9 @@ from apps.common.permissions import HasPermission, get_authorization
 from apps.patients.models import Patient
 from apps.portal.auth import PortalSessionAuthentication
 from apps.portal.models import (
+    PatientCorrectionField,
+    PatientCorrectionRequest,
+    PatientCorrectionStatus,
     PortalAccount,
     PortalMessage,
     PortalSession,
@@ -44,22 +48,27 @@ from apps.portal.models import (
 )
 from apps.portal.services import (
     PortalError,
-    accessible_patients,
     access_for,
+    accessible_patients,
     adoption,
     appointments_for,
     authenticate,
+    cancel_patient_correction,
+    decide_patient_correction,
+    generate_patient_document,
     grant_proxy,
     home,
     invite,
     invoices_for,
     messages_for,
     note_access,
+    patient_profile_for,
     prescriptions_for,
     proxy_review,
     referrals_for,
     register,
     reply_to_message,
+    request_patient_correction,
     results_for,
     revoke_all_sessions,
     revoke_proxy,
@@ -194,7 +203,27 @@ class ReasonSerializer(serializers.Serializer):
 
 class MessageInputSerializer(serializers.Serializer):
     subject = serializers.CharField(max_length=255)
-    body = serializers.CharField(max_length=8000)
+    body = serializers.CharField()
+
+
+class PatientCorrectionSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.full_name", read_only=True)
+    patient_mrn = serializers.CharField(source="patient.mrn", read_only=True)
+    field_label = serializers.CharField(source="get_field_name_display", read_only=True)
+
+    class Meta:
+        model = PatientCorrectionRequest
+        fields = [
+            "uuid", "patient", "patient_name", "patient_mrn",
+            "field_name", "field_label", "old_value", "proposed_value",
+            "reason", "status", "requested_at", "decided_at",
+            "decided_by_name", "decision_notes",
+        ]
+        read_only_fields = [
+            "uuid", "patient_name", "patient_mrn", "field_label",
+            "old_value", "status", "requested_at", "decided_at",
+            "decided_by_name", "decision_notes",
+        ]
 
 
 class ReplySerializer(serializers.Serializer):
@@ -349,6 +378,24 @@ class MeView(APIView):
             note_access(account, patient, "messages", ip=ip)
             return Response(messages_for(patient, account))
 
+        if section == "profile":
+            note_access(account, patient, "profile", ip=ip)
+            return Response(patient_profile_for(patient, account))
+
+        if section == "document":
+            doc_type = request.query_params.get("type", "")
+            reference = request.query_params.get("reference", "")
+            if not doc_type or not reference:
+                raise PortalError(
+                    "Document request requires 'type' (result/prescription/invoice) and 'reference'.",
+                    code="invalid_request",
+                )
+            doc = generate_patient_document(account, patient, doc_type, reference)
+            note_access(account, patient, f"document:{doc_type}", detail=reference, ip=ip)
+            if request.query_params.get("format") == "html":
+                return HttpResponse(doc["html"], content_type="text/html")
+            return Response(doc)
+
         if section == "sessions":
             return Response(SessionSerializer(
                 account.sessions.order_by("-issued_at")[:20], many=True,
@@ -359,12 +406,13 @@ class MeView(APIView):
              "available": [
                  "home", "results", "appointments", "invoices",
                  "prescriptions", "referrals", "messages", "sessions",
+                 "profile", "document",
              ]},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     def post(self, request):
-        """Send a message, or sign out."""
+        """Send a message, sign out, or submit a demographic correction."""
         account = request.user.account
         what = request.data.get("action", "message")
 
@@ -375,6 +423,25 @@ class MeView(APIView):
         if what == "sign_out_everywhere":
             count = revoke_all_sessions(account, reason="Signed out everywhere")
             return Response({"sessions_ended": count})
+
+        if what == "request_correction":
+            row = self._target(request)
+            field_name = request.data.get("field_name", "")
+            proposed_value = request.data.get("proposed_value", "")
+            reason = request.data.get("reason", "")
+            correction = request_patient_correction(
+                account, row["patient"], field_name, proposed_value, reason,
+            )
+            return Response(
+                PatientCorrectionSerializer(correction).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        if what == "cancel_correction":
+            corr_uuid = request.data.get("correction")
+            correction = get_object_or_404(PatientCorrectionRequest, uuid=corr_uuid)
+            cancelled = cancel_patient_correction(correction, account)
+            return Response(PatientCorrectionSerializer(cancelled).data)
 
         serializer = MessageInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -556,3 +623,33 @@ class PortalAdoptionView(APIView):
 
     def get(self, request):
         return Response(adoption())
+
+
+class PatientCorrectionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Demographic correction proposals submitted by patients for desk review."""
+
+    serializer_class = PatientCorrectionSerializer
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    lookup_field = "uuid"
+    filterset_class = uuid_filterset(
+        PatientCorrectionRequest, relations=["patient"], fields=["status", "field_name"],
+    )
+
+    def get_queryset(self):
+        return PatientCorrectionRequest.objects.select_related("patient", "account")
+
+    @action(detail=True, methods=["post"], url_path="decide")
+    def decide(self, request, uuid=None):
+        """Approve or reject a correction proposal. Mutates Patient on approval."""
+        get_authorization(request).require("patient.update", Scope.FACILITY)
+        correction = self.get_object()
+        approved = request.data.get("approved", True)
+        notes = request.data.get("notes", "")
+        updated = decide_patient_correction(
+            correction,
+            actor=request.user,
+            approved=bool(approved),
+            decision_notes=str(notes),
+        )
+        return Response(PatientCorrectionSerializer(updated).data)
+

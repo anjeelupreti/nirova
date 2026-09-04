@@ -23,7 +23,7 @@ from apps.patients.models import (
     PatientCondition,
 )
 from apps.patients.services import register_patient
-from apps.scheduling.models import AppointmentSource, ProviderSchedule
+from apps.scheduling.models import Appointment, AppointmentSource, ProviderSchedule
 from apps.scheduling.services import (
     book_appointment,
     call_next,
@@ -241,6 +241,25 @@ class Command(BaseCommand):
             ]
             if not slots:
                 continue
+
+            # Reuse this patient's booking for the day if the seed has already
+            # made one. Booking unconditionally filled the slot on every run
+            # until it hit its capacity of two, after which this seed refused
+            # itself with "that slot already holds 2 of 2 bookings" and stayed
+            # broken. A seed that only works on a clean database stops being
+            # run, and these seeds are how the system is verified.
+            existing = Appointment.objects.filter(
+                patient=patient, scheduled_for__date=target,
+            ).first()
+            if existing is not None:
+                booked.append(existing)
+                self.stdout.write(
+                    f"  {existing.reference}  {patient.full_name} -> "
+                    f"{existing.provider_name} @ {existing.scheduled_for:%H:%M}"
+                    "  (already booked)"
+                )
+                continue
+
             appointment = book_appointment(
                 organization=organization,
                 patient=patient,

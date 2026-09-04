@@ -38,6 +38,8 @@ from apps.hr.models import (
     EmploymentType,
     EventType,
     Position,
+    ProfileCorrectionRequest,
+    ProfileCorrectionStatus,
     VerificationStatus,
 )
 from apps.organization.models import Department, Facility
@@ -901,3 +903,102 @@ def team_of(manager: Employee) -> list:
             result.append(report)
             queue.append(report)
     return result
+
+
+ALLOWED_PROFILE_CORRECTION_FIELDS = {
+    "phone",
+    "personal_email",
+    "address",
+    "province",
+    "district",
+    "municipality",
+    "emergency_contact_name",
+    "emergency_contact_phone",
+    "emergency_contact_relation",
+    "bank_name",
+    "bank_account_number",
+    "bank_branch",
+}
+
+
+def request_profile_correction(
+    employee: Employee,
+    fields_payload: dict,
+    reason: str,
+    actor,
+) -> ProfileCorrectionRequest:
+    """Propose a correction to personal contact or bank details."""
+    clean_payload = {
+        k: str(v).strip()
+        for k, v in fields_payload.items()
+        if k in ALLOWED_PROFILE_CORRECTION_FIELDS and v is not None
+    }
+    if not clean_payload:
+        raise HrError(
+            "No valid profile fields provided to update.",
+            code="invalid_profile_fields",
+        )
+
+    correction = ProfileCorrectionRequest.objects.create(
+        employee=employee,
+        requested_by_user_id=actor.uuid,
+        fields_payload=clean_payload,
+        reason=reason.strip(),
+        status=ProfileCorrectionStatus.PENDING,
+    )
+    return correction
+
+
+def decide_profile_correction(
+    correction: ProfileCorrectionRequest,
+    actor,
+    approve: bool,
+    notes: str = "",
+) -> ProfileCorrectionRequest:
+    """HR or manager decides a profile change request."""
+    if correction.status != ProfileCorrectionStatus.PENDING:
+        raise HrError(
+            f"Request is already {correction.status}.",
+            code="profile_request_not_pending",
+        )
+
+    assert_different_actors(
+        correction.requested_by_user_id, actor.uuid, "profile change request"
+    )
+
+    correction.decided_by_user_id = actor.uuid
+    correction.decided_by_name = (
+        getattr(actor, "get_full_name", lambda: str(actor))() or str(actor)
+    )
+    correction.decided_at = timezone.now()
+    correction.decision_notes = notes.strip()
+
+    if approve:
+        correction.status = ProfileCorrectionStatus.APPROVED
+        emp = correction.employee
+        for field, val in correction.fields_payload.items():
+            if field in ALLOWED_PROFILE_CORRECTION_FIELDS:
+                setattr(emp, field, val)
+        emp.save()
+    else:
+        correction.status = ProfileCorrectionStatus.REJECTED
+
+    correction.save()
+    return correction
+
+
+def cancel_profile_correction(
+    correction: ProfileCorrectionRequest,
+    actor,
+) -> ProfileCorrectionRequest:
+    """Requester cancels an unapproved correction request."""
+    if correction.status != ProfileCorrectionStatus.PENDING:
+        raise HrError(
+            f"Request is already {correction.status}.",
+            code="profile_request_not_pending",
+        )
+    correction.status = ProfileCorrectionStatus.CANCELLED
+    correction.decision_notes = "Cancelled by requester."
+    correction.decided_at = timezone.now()
+    correction.save(update_fields=["status", "decision_notes", "decided_at"])
+    return correction

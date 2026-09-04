@@ -33,6 +33,7 @@ import {
   KeyRound,
   Loader2,
   MailQuestion,
+  UserCheck,
   Users,
 } from "lucide-react";
 
@@ -41,6 +42,7 @@ import { cn } from "@/lib/utils";
 import type {
   Paginated,
   Patient,
+  PatientCorrectionItem,
   PortalAccount,
   PortalAdoption,
   PortalInvitationIssued,
@@ -71,12 +73,13 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 
-type Tab = "accounts" | "proxies" | "messages" | "adoption";
+type Tab = "accounts" | "proxies" | "messages" | "corrections" | "adoption";
 
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: "accounts", label: "Accounts", icon: Users },
   { id: "proxies", label: "Who can see whose", icon: Eye },
   { id: "messages", label: "Messages", icon: MailQuestion },
+  { id: "corrections", label: "Demographic corrections", icon: UserCheck },
   { id: "adoption", label: "Take-up", icon: CheckCircle2 },
 ];
 
@@ -95,6 +98,7 @@ export default function PortalPage() {
   const [tab, setTab] = useState<Tab>("accounts");
   const [denied, setDenied] = useState(false);
   const [unanswered, setUnanswered] = useState<PortalMessage[]>([]);
+  const [pendingCorrections, setPendingCorrections] = useState<number>(0);
 
   const loadUnanswered = useCallback(() => {
     void api
@@ -105,37 +109,45 @@ export default function PortalPage() {
       });
   }, []);
 
-  useEffect(loadUnanswered, [loadUnanswered]);
+  const loadPendingCorrections = useCallback(() => {
+    void api
+      .get<Paginated<PatientCorrectionItem>>("/portal/corrections/?status=pending")
+      .then((res) => setPendingCorrections(res.count || res.results?.length || 0))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadUnanswered();
+    loadPendingCorrections();
+  }, [loadUnanswered, loadPendingCorrections]);
 
   if (denied) {
     return (
-      <Alert>
-        <Users className="h-4 w-4" />
-        <AlertTitle>The portal is not visible to you</AlertTitle>
+      <Alert variant="destructive">
+        <AlertTitle>Access denied</AlertTitle>
         <AlertDescription>
-          Administering patient accounts needs patient-record permissions.
+          Managing the patient portal needs <code>patient.read</code> permission.
         </AlertDescription>
       </Alert>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Patient portal</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Patient portal</h1>
         <p className="text-sm text-muted-foreground">
-          Who has an account, who can see whose record, and what nobody has
-          answered.
+          Invitations, proxy access, messages and demographic corrections.
         </p>
       </div>
 
       <Alert>
         <KeyRound className="h-4 w-4" />
-        <AlertTitle>The patient-facing app is separate</AlertTitle>
+        <AlertTitle>Invitations are given at the desk, not typed</AlertTitle>
         <AlertDescription>
-          Patients sign in to their own application with their own credential
-          and their own session. This console administers it: it never shows a
-          patient's password, and it cannot sign in as one.
+          A patient creates an account using an MRN and an invitation code
+          issued here by somebody who saw them. Without the code the portal is
+          an open enumeration attack against the patient list.
         </AlertDescription>
       </Alert>
 
@@ -157,6 +169,9 @@ export default function PortalPage() {
             {id === "messages" && unanswered.length > 0 && (
               <Badge variant="destructive">{unanswered.length}</Badge>
             )}
+            {id === "corrections" && pendingCorrections > 0 && (
+              <Badge variant="secondary">{pendingCorrections}</Badge>
+            )}
           </button>
         ))}
       </div>
@@ -165,6 +180,9 @@ export default function PortalPage() {
       {tab === "proxies" && <Proxies />}
       {tab === "messages" && (
         <Messages unanswered={unanswered} onChanged={loadUnanswered} />
+      )}
+      {tab === "corrections" && (
+        <Corrections onUpdated={loadPendingCorrections} />
       )}
       {tab === "adoption" && <Adoption />}
     </div>
@@ -930,3 +948,226 @@ function Fact({
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Demographic Corrections                                                    */
+/* -------------------------------------------------------------------------- */
+
+function Corrections({ onUpdated }: { onUpdated: () => void }) {
+  const [rows, setRows] = useState<PatientCorrectionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const [rejecting, setRejecting] = useState<PatientCorrectionItem | null>(null);
+  const [rejectionNotes, setRejectionNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    const query = statusFilter ? `?status=${statusFilter}` : "";
+    api
+      .get<Paginated<PatientCorrectionItem> | PatientCorrectionItem[]>(`/portal/corrections/${query}`)
+      .then((data) => {
+        if (Array.isArray(data)) setRows(data);
+        else setRows(data.results || []);
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : "Could not load correction proposals.");
+      })
+      .finally(() => setLoading(false));
+  }, [statusFilter]);
+
+  useEffect(load, [load]);
+
+  const decide = async (item: PatientCorrectionItem, approved: boolean, notes = "") => {
+    setBusy(true);
+    try {
+      await api.post(`/portal/corrections/${item.uuid}/decide/`, {
+        approved,
+        notes,
+      });
+      setRejecting(null);
+      setRejectionNotes("");
+      load();
+      onUpdated();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Failed to process decision.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Patient Demographic Corrections</h2>
+          <p className="text-xs text-muted-foreground">
+            Review proposed updates to phone numbers, addresses, and emergency contacts before applying them to patient records.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="w-36 text-xs h-8"
+          >
+            <option value="pending">Pending</option>
+            <option value="">All statuses</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
+          </Select>
+        </div>
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {loading ? (
+        <div className="py-12 text-center text-muted-foreground">
+          <Loader2 className="inline h-5 w-5 animate-spin" />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
+          No demographic corrections matching this filter.
+        </div>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Patient</TableHead>
+                <TableHead>Field</TableHead>
+                <TableHead>Proposed Change</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Requested</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.uuid}>
+                  <TableCell>
+                    <div className="font-medium text-xs">{row.patient_name}</div>
+                    <div className="text-[11px] font-mono text-muted-foreground">{row.patient_mrn}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {row.field_label}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-xs">
+                      <span className="line-through text-muted-foreground text-[11px] mr-1.5">
+                        {row.old_value || "(empty)"}
+                      </span>
+                      &rarr; <strong className="text-foreground ml-1.5">{row.proposed_value}</strong>
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-[200px] text-xs text-muted-foreground truncate">
+                    &ldquo;{row.reason}&rdquo;
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                    {day(row.requested_at)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        row.status === "approved"
+                          ? "secondary"
+                          : row.status === "rejected"
+                          ? "destructive"
+                          : "outline"
+                      }
+                      className={cn(
+                        "text-xs capitalize",
+                        row.status === "pending" && "border-amber-500/50 bg-amber-500/10 text-amber-700",
+                      )}
+                    >
+                      {row.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {row.status === "pending" ? (
+                      <div className="flex justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={busy}
+                          onClick={() => void decide(row, true)}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs text-destructive hover:bg-destructive/10"
+                          disabled={busy}
+                          onClick={() => setRejecting(row)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {row.decided_by_name ? `By ${row.decided_by_name}` : "—"}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {rejecting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-md shadow-lg">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Reject Correction Proposal</CardTitle>
+              <CardDescription>
+                State why {rejecting.patient_name}&apos;s proposed {rejecting.field_label} update cannot be verified.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-xs bg-muted/40 p-2.5 rounded border">
+                Proposed: <strong>{rejecting.proposed_value}</strong> (Reason: {rejecting.reason})
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="rej-notes">Reason for rejection *</Label>
+                <Textarea
+                  id="rej-notes"
+                  rows={2}
+                  value={rejectionNotes}
+                  onChange={(e) => setRejectionNotes(e.target.value)}
+                  placeholder="e.g. Phone number does not match identification documents"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" onClick={() => setRejecting(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={busy || !rejectionNotes.trim()}
+                  onClick={() => void decide(rejecting, false, rejectionNotes.trim())}
+                >
+                  {busy && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                  Confirm Rejection
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+

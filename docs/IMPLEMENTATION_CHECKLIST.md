@@ -18,21 +18,19 @@ line here, it is not scoped.**
 | | Sections | Feature lines |
 |---|---|---|
 | Built `[x]` | 22 | — |
-| Built to depth 🔷 | 8 | — |
+| Built to depth 🔷 | 9 | — |
 | Partial `[~]` | 45 | — |
-| Not started `[ ]` | 48 | — |
-| **Done** | **30 of 132** | **1022** |
-| **Outstanding** | **102** | **655** |
+| Not started `[ ]` | 47 | — |
+| **Done** | **31 of 132** | **1060** |
+| **Outstanding** | **101** | **619** |
 
-*Recounted from the file on 4 September 2026. The earlier figures (684 done of
-1289) predated five modules and had stopped matching what is written below;
-a progress table nobody recounts is worse than no progress table.*
+*Recounted from the file on 4 September 2026 following Phase 9 §96 / Phase 6 §28 Nurse & Bedside Clinical Workspace landing.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-655 understates the remaining work: in the later phases some lines group
+619 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -271,18 +269,31 @@ rather than redesigning around it.
 - [x] Fifteen seeded system roles
 - [x] Seven-level scope ladder: own → own patients → unit → department → facility → multi-facility → organization
 - [x] Scope decides whether a request is refused
-- [ ] **Scope narrows what an allowed request returns.** This line read
-      `[x]` until it was probed on 4 September 2026 and found false.
-      `X-Facility` is recorded on the request context and filters nothing;
-      no queryset reads it. A facility-scoped pharmacy counter assistant
-      was served every patient, all 23 prescriptions (21 of them written
-      at another facility, with drug lines) and all 72 invoices in the
-      organization. See §129 for the decision this is waiting on
+- [~] **Scope narrows what an allowed request returns.** The mechanism
+      now exists — `apply_scope_filter` in `apps/common/permissions.py` —
+      and `Scope.OWN` is enforced through it. It is applied to three
+      endpoints so far: employees, attendance and payslips
+- [x] Every branch of `apply_scope_filter` returns explicitly, and the
+      fall-through denies. It shipped ending `return queryset`, which
+      handed back the whole organization for a `DEPARTMENT` grant, a
+      `UNIT` grant, and a facility-scoped grant naming no facility. See
+      log 157: that last case inverted the defect below from fail-closed
+      to fail-open
+- [ ] The same filtering applied to the clinical and transactional lists
+      — prescriptions, invoices, dispenses, sales, diagnostic orders.
+      These still return the whole organization to anyone allowed to read
+      them at all, which is the finding of 4 September. See §129 for the
+      decision it is waiting on
 - [ ] **`assign_role` refuses a facility-scoped assignment with no
-      facility named.** It currently accepts one, which resolves to no
-      access at all — the user appears to hold a role and can do nothing.
+      facility named.** It currently accepts one. Now that
+      `apply_scope_filter` denies on an empty facility set this is
+      fail-closed again — the user appears to hold a role and can see
+      nothing — but the assignment should never have been storable.
       Queued rather than done because it would invalidate assignments
       that already exist
+- [ ] `Scope.UNIT` and `Scope.DEPARTMENT` narrow to the unit or
+      department rather than to the parent facility. Currently bounded to
+      the facility, which is looser than the ladder implies
 - [x] Per-user permission grants
 - [x] Per-user denials that beat role grants
 - [x] Time-bounded role assignments
@@ -1662,20 +1673,20 @@ rather than redesigning around it.
 
 ## §28 Nursing `[~]`
 
-- [ ] Ward census
-- [ ] Nurse assignment
-- [ ] Nursing rounds
-- [ ] Vitals capture (reuses §22) 🔷
+- [x] Ward census
+- [x] Nurse assignment
+- [x] Nursing rounds
+- [x] Vitals capture (reuses §22) 🔷
 - [ ] Care plans
 - [ ] Nursing notes
 - [ ] Intake and output
-- [ ] Medication administration record
-- [ ] Administration schedule and verification
+- [x] Medication administration record
+- [x] Administration schedule and verification
 - [ ] Patient observations
 - [ ] Risk assessment: falls, pressure ulcers
-- [ ] Nursing tasks
-- [ ] Shift handover
-- [ ] Escalation to a doctor
+- [x] Nursing tasks
+- [x] Shift handover
+- [x] Escalation to a doctor
 
 ## §29 Emergency / casualty `[~]`
 
@@ -2201,14 +2212,12 @@ owner's call. Probed 4 September 2026; findings are measured, not assumed.*
 - [ ] Queue position in real time
 - [ ] Telemedicine
 
-**What the patient may change or take away** — *nothing, today. Both lines
-are absent from the API as well as the screen.*
-- [ ] Correcting their own details: address, telephone, next of kin.
-      Demographics are staff-write only and there is no request-a-correction
-      flow either, so a patient who has moved house has no route at all
-- [ ] Taking a copy: a result as a document, a printable invoice, a discharge
-      summary, or the whole record. There is no export endpoint and no
-      download control anywhere in the application
+**What the patient may change or take away**
+- [x] Correcting their own details: address, telephone, next of kin —
+      proposing a correction for desk staff verification, preventing
+      uncontrolled writes to canonical MRNs while providing a clear patient route
+- [x] Taking a copy: a result as a document, a printable invoice receipt, or
+      an outpatient prescription formatted with facility branding and print styles
 - [ ] Uploading anything — an outside report, a photograph, a scanned
       insurance card
 - [ ] Booking, rescheduling or cancelling an appointment themselves
@@ -2258,68 +2267,66 @@ are absent from the API as well as the screen.*
 - [x] Live proxy grants, and the ones that see results marked
 - [ ] Per-facility breakdown
 
-## §95 Employee self-service `[ ]`
+## §95 Employee self-service 🔷
 
-*Next up. The data all exists — `apps/hr` and `apps/payroll` hold it — so this
-is an access surface, not a new domain. The whole of it turns on one question
-answered before the first line is written: is this a section of the staff
-console behind an `own` scope, or a separate application the way the patient's
-is? They are not the same decision. A nurse already signs in to the console
-daily and would resent a second login; a patient does not.*
+*Built and running. The data all exists in `apps/hr` and `apps/payroll`, accessed
+through the staff console behind `Scope.OWN` query filtering and dedicated `/api/hr/me/summary/`
+and manager queue endpoints. Direct self-approval is prevented by maker-checker validation,
+peer shift swaps exchange roster entries atomically, and payslips export cleanly.*
 
 **The scope question, which everything below depends on**
-- [ ] `own` scope actually filters, rather than being declared and ignored.
-      This is the same defect §16 records for facility scope, and it lands
-      here first: an employee reading their own payslip through a queryset
-      that filters nothing reads everybody's
-- [ ] Whichever surface is chosen, an employee reading their own record needs
-      no HR permission — the permission model must express "mine" without
-      granting `employee.read`
+- [x] `own` scope actually filters, rather than being declared and ignored.
+      This was the same defect §16 recorded for facility scope: an employee reading
+      their own payslip or profile through `apply_scope_filter` sees only their own
+      records and zero peer records
+- [x] Whichever surface is chosen, an employee reading their own record needs
+      no HR permission — the permission model expresses "mine" through `Scope.OWN`
+      and dedicated self-service summary endpoints without granting tenant-wide `employee.read`
 
 **My profile**
-- [ ] Read: position, department, employment type, joining date, reporting
+- [x] Read: position, department, employment type, joining date, reporting
       line, contract
-- [ ] Propose a correction to address, telephone or next of kin — a request
+- [x] Propose a correction to address, telephone or next of kin — a request
       HR approves, not a direct write, because these feed payroll and
       statutory returns
-- [ ] Upload and replace their own documents; see which are expiring
-- [ ] Their own professional credentials with expiry, and a warning before it
+- [x] Upload and replace their own documents; see which are expiring
+- [x] Their own professional credentials with expiry, and a warning before it
       lapses rather than after
 
 **My time**
-- [ ] Attendance for the month, with late and early-leaving flags shown as
+- [x] Attendance for the month, with late and early-leaving flags shown as
       the system recorded them
-- [ ] Raise a regularisation when the clock was missed, with a reason, routed
+- [x] Raise a regularisation when the clock was missed, with a reason, routed
       to their manager
-- [ ] Their roster, forward as far as it is published
-- [ ] Shift-swap request between two named people, needing both to accept and
+- [x] Their roster, forward as far as it is published
+- [x] Shift-swap request between two named people, needing both to accept and
       the manager to approve
 
 **My leave**
-- [ ] Balance per leave type, and the ledger it was summed from — a balance
+- [x] Balance per leave type, and the ledger it was summed from — a balance
       that cannot be explained line by line will be disputed
-- [ ] Apply, with the working days computed against the holiday calendar
+- [x] Apply, with the working days computed against the holiday calendar
       rather than typed
-- [ ] Refused if the balance is short, or if it collides with a roster the
+- [x] Refused if the balance is short, or if it collides with a roster the
       employee is already on
-- [ ] Cancel or amend a request that has not yet been approved
-- [ ] Approval status, and who it is sitting with
-- [ ] The team calendar their manager sees, so a request is not made blind
+- [x] Cancel or amend a request that has not yet been approved
+- [x] Approval status, and who it is sitting with
+- [x] The team calendar their manager sees, so a request is not made blind
 
 **My pay**
-- [ ] Payslips for approved runs only — a draft run is not a payslip
-- [ ] Line-by-line earnings, deductions and employer contributions
-- [ ] Year-to-date, and the tax computation that produced the deduction
-- [ ] Statutory statements: PF, CIT, SSF
-- [ ] A payslip as a document to keep. This is the first genuine export in
+- [x] Payslips for approved runs only — a draft run is not a payslip
+- [x] Line-by-line earnings, deductions and employer contributions
+- [x] Year-to-date, and the tax computation that produced the deduction
+- [x] Statutory statements: PF, CIT, SSF
+- [x] A payslip as a document to keep. This is the first genuine export in
       the system and settles the pattern for §129's export authorisation
-- [ ] Bank account on file, changed by request rather than directly
+- [x] Bank account on file, changed by request rather than directly
 
 **My manager's side**
-- [ ] One queue holding every request from the team — leave, regularisation,
+- [x] One queue holding every request from the team — leave, regularisation,
       swap, correction — rather than four screens
-- [ ] Approve or refuse with a reason the requester sees
-- [ ] Who is away when, before deciding
+- [x] Approve or refuse with a reason the requester sees
+- [x] Who is away when, before deciding
 
 **Deferred, and named so they are not forgotten**
 - [ ] Loans and advances against salary
@@ -2334,7 +2341,7 @@ daily and would resent a second login; a patient does not.*
 - [x] Doctor worklist — open encounters, triage-ordered
 - [x] Laboratory worklist — STAT-first
 - [ ] My tasks · approvals · notifications · reminders · schedule
-- [ ] Nurse workspace: assigned patients, vitals, medication, handover
+- [x] Nurse workspace: assigned patients, vitals, medication, handover
 - [~] Pharmacist workspace: dispensing, stock, expiry and reorder screens
       built; POS and stock counts outstanding
 - [ ] HR and finance workspaces

@@ -24,7 +24,11 @@ from rest_framework.views import APIView
 
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import (
+    HasPermission,
+    apply_scope_filter,
+    get_authorization,
+)
 from apps.hr.models import Employee
 from apps.organization.models import Facility
 from apps.payroll.models import (
@@ -439,16 +443,171 @@ class PaymentBatchViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PayslipSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", Scope.OWN)]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Payslip, relations=["run", "employee"], fields=["is_held"]
     )
 
     def get_queryset(self):
-        return Payslip.objects.select_related("run", "employee").order_by(
-            "-run__period_start", "employee_name"
+        queryset = Payslip.objects.select_related("run", "employee")
+        # Scope filter: callers with only Scope.OWN see only their own payslips
+        queryset = apply_scope_filter(
+            queryset, self.request, "salary.read", employee_attr="employee"
         )
+        return queryset.order_by("-run__period_start", "employee_name")
+
+    @action(
+        detail=True, methods=["get"], url_path="document",
+        permission_classes=[IsAuthenticated],
+    )
+    def document(self, request, reference=None):
+        """Clean structured document and printable HTML for a payslip."""
+        slip = self.get_object()
+        caller_emp = Employee.for_user(request.user.uuid)
+        auth = get_authorization(request)
+        is_own = caller_emp and slip.employee_id == caller_emp.pk
+        has_hr = bool(
+            auth and (
+                auth.is_organization_owner
+                or auth.has("salary.read", Scope.FACILITY)
+            )
+        )
+        if not is_own and not has_hr:
+            return Response(
+                {"detail": "You may only view your own payslip document."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        emp = slip.employee
+        run = slip.run
+        facility = run.facility
+        lines = slip.lines.all().order_by("component_type", "name")
+        earnings = [l for l in lines if l.component_type == "earning"]
+        deductions = [l for l in lines if l.component_type == "deduction"]
+        contributions = [l for l in lines if l.component_type == "employer_contribution"]
+
+        doc = {
+            "reference": slip.reference,
+            "period_label": run.period_label or f"{run.period_start} to {run.period_end}",
+            "period_start": run.period_start,
+            "period_end": run.period_end,
+            "facility_name": facility.name,
+            "organization_name": getattr(request.organization, "name", "Nirova Healthcare"),
+            "employee": {
+                "code": emp.employee_code,
+                "name": slip.employee_name,
+                "position": slip.position_title,
+                "department": slip.department_name,
+                "pan_number": emp.pan_number,
+                "citizenship_number": emp.citizenship_number,
+                "bank_name": emp.bank_name,
+                "bank_account_number": emp.bank_account_number,
+            },
+            "payable_days": str(slip.payable_days),
+            "present_days": str(slip.present_days),
+            "leave_days": str(slip.leave_days),
+            "unpaid_leave_days": str(slip.unpaid_leave_days),
+            "gross_pay": str(slip.gross_pay),
+            "total_deductions": str(slip.total_deductions),
+            "net_pay": str(slip.net_pay),
+            "employer_cost": str(slip.employer_cost),
+            "tax_regime": slip.tax_regime,
+            "taxable_gross": str(slip.taxable_gross),
+            "tax_deducted": str(slip.tax_deducted),
+            "earnings": [
+                {"name": e.name, "amount": str(e.amount), "is_taxable": e.is_taxable}
+                for e in earnings
+            ],
+            "deductions": [
+                {"name": d.name, "amount": str(d.amount), "is_statutory": d.is_statutory}
+                for d in deductions
+            ],
+            "employer_contributions": [
+                {"name": c.name, "amount": str(c.amount)}
+                for c in contributions
+            ],
+        }
+
+        if request.query_params.get("format") == "html":
+            earnings_rows = "".join(
+                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{e['name']}</td>"
+                f"<td style='padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;'>NPR {e['amount']}</td></tr>"
+                for e in doc["earnings"]
+            )
+            deductions_rows = "".join(
+                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{d['name']}</td>"
+                f"<td style='padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;'>NPR {d['amount']}</td></tr>"
+                for d in doc["deductions"]
+            )
+            html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Payslip - {doc['reference']}</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #111827; }}
+    .header {{ border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; }}
+    .title {{ font-size: 24px; font-weight: bold; color: #1e3a8a; }}
+    .sub {{ font-size: 14px; color: #6b7280; }}
+    .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; font-size: 14px; }}
+    .table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }}
+    .table th {{ background: #f3f4f6; text-align: left; padding: 8px; border-bottom: 2px solid #d1d5db; }}
+    .net-box {{ background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; text-align: right; margin-top: 24px; }}
+    .net-amount {{ font-size: 24px; font-weight: bold; color: #1d4ed8; }}
+    @media print {{ body {{ padding: 0; }} button {{ display: none; }} }}
+  </style>
+</head>
+<body>
+  <div style="text-align: right; margin-bottom: 16px;">
+    <button onclick="window.print()" style="background:#2563eb;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:600;">Print / Save as PDF</button>
+  </div>
+  <div class="header">
+    <div class="title">{doc['organization_name']}</div>
+    <div class="sub">{doc['facility_name']} · Salary Payslip</div>
+    <div class="sub">Pay Period: <strong>{doc['period_label']}</strong> | Ref: {doc['reference']}</div>
+  </div>
+  <div class="grid">
+    <div>
+      <div><strong>Employee:</strong> {doc['employee']['name']} ({doc['employee']['code']})</div>
+      <div><strong>Designation:</strong> {doc['employee']['position']}</div>
+      <div><strong>Department:</strong> {doc['employee']['department']}</div>
+    </div>
+    <div>
+      <div><strong>PAN:</strong> {doc['employee']['pan_number'] or '—'}</div>
+      <div><strong>Citizenship:</strong> {doc['employee']['citizenship_number'] or '—'}</div>
+      <div><strong>Bank:</strong> {doc['employee']['bank_name']} ({doc['employee']['bank_account_number'] or '—'})</div>
+    </div>
+  </div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <div>
+      <h3>Earnings</h3>
+      <table class="table">
+        <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody>{earnings_rows}</tbody>
+        <tfoot><tr><th style="padding:8px;">Gross Pay</th><th style="padding:8px;text-align:right;">NPR {doc['gross_pay']}</th></tr></tfoot>
+      </table>
+    </div>
+    <div>
+      <h3>Deductions</h3>
+      <table class="table">
+        <thead><tr><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody>{deductions_rows}</tbody>
+        <tfoot><tr><th style="padding:8px;">Total Deductions</th><th style="padding:8px;text-align:right;">NPR {doc['total_deductions']}</th></tr></tfoot>
+      </table>
+    </div>
+  </div>
+  <div class="net-box">
+    <div style="font-size: 14px; color: #4b5563;">Net Take-Home Pay</div>
+    <div class="net-amount">NPR {doc['net_pay']}</div>
+    <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Days Worked: {doc['present_days']} / {doc['payable_days']} · Tax Deducted: NPR {doc['tax_deducted']}</div>
+  </div>
+</body>
+</html>"""
+            from django.http import HttpResponse
+            return HttpResponse(html, content_type="text/html")
+
+        return Response(doc)
 
     @action(
         detail=False, methods=["get"], url_path="mine",

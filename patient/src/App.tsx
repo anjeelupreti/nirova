@@ -28,19 +28,24 @@ import {
   MessageSquare,
   Phone,
   Pill,
+  Printer,
   Receipt,
   Send,
   ShieldCheck,
   Smartphone,
+  UserCog,
+  X,
 } from "lucide-react";
 
 import api, { ApiError, session, whenSignedOut } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   Appointment,
+  DocumentResponse,
   HomeScreen,
   Invoices,
   MessageRow,
+  PatientProfile,
   Prescription,
   ReferralRow,
   ResultRow,
@@ -71,7 +76,8 @@ type Screen =
   | "prescriptions"
   | "referrals"
   | "messages"
-  | "sessions";
+  | "sessions"
+  | "profile";
 
 const dateTime = (value: string | null) =>
   value
@@ -444,6 +450,7 @@ const TILES: {
   { screen: "invoices", label: "Bills", icon: Receipt, needs: "invoices" },
   { screen: "referrals", label: "Referrals", icon: Send },
   { screen: "messages", label: "Messages", icon: MessageSquare },
+  { screen: "profile", label: "My details", icon: UserCog },
 ];
 
 function Home({
@@ -658,6 +665,7 @@ const TITLES: Record<Screen, string> = {
   referrals: "Referrals",
   messages: "Messages",
   sessions: "Where I am signed in",
+  profile: "My details & corrections",
 };
 
 function Section({
@@ -671,6 +679,7 @@ function Section({
 }) {
   const [data, setData] = useState<unknown>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [documentModal, setDocumentModal] = useState<{ html: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     setProblem(null);
@@ -684,6 +693,23 @@ function Section({
       setProblem(err instanceof ApiError ? err.message : "Could not load.");
     }
   }, [screen, record]);
+
+  const handlePrint = async (type: "result" | "prescription" | "invoice", reference: string) => {
+    try {
+      const res = await api.get<DocumentResponse>(
+        `/me/?section=document&type=${type}&reference=${encodeURIComponent(reference)}${record ? `&record=${record}` : ""}`
+      );
+      const w = window.open("", "_blank");
+      if (w) {
+        w.document.write(res.html);
+        w.document.close();
+      } else {
+        setDocumentModal({ html: res.html, title: res.title });
+      }
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : "Could not generate printable document.");
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -714,16 +740,16 @@ function Section({
       )}
 
       {data !== null && screen === "results" && (
-        <Results rows={data as ResultRow[]} />
+        <Results rows={data as ResultRow[]} onPrint={handlePrint} />
       )}
       {data !== null && screen === "appointments" && (
         <Appointments rows={data as Appointment[]} />
       )}
       {data !== null && screen === "invoices" && (
-        <Bills data={data as Invoices} />
+        <Bills data={data as Invoices} onPrint={handlePrint} />
       )}
       {data !== null && screen === "prescriptions" && (
-        <Medicines rows={data as Prescription[]} />
+        <Medicines rows={data as Prescription[]} onPrint={handlePrint} />
       )}
       {data !== null && screen === "referrals" && (
         <Referrals rows={data as ReferralRow[]} />
@@ -734,11 +760,62 @@ function Section({
       {data !== null && screen === "sessions" && (
         <Sessions rows={data as SessionRow[]} onChanged={load} />
       )}
+      {data !== null && screen === "profile" && (
+        <ProfileView
+          data={data as PatientProfile}
+          record={record}
+          onReload={load}
+        />
+      )}
+
+      {documentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="flex h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="text-sm font-semibold">{documentModal.title}</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const frame = document.getElementById("doc-frame") as HTMLIFrameElement;
+                    frame?.contentWindow?.print();
+                  }}
+                >
+                  <Printer className="mr-1.5 h-4 w-4" />
+                  Print
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setDocumentModal(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            {/* allow-scripts without allow-same-origin: the document needs
+                its own print button to work, but the frame gets an opaque
+                origin, so nothing inside it can reach this page's
+                sessionStorage -- which is where the portal token lives. The
+                server escapes every value it interpolates; this is the second
+                lock on the same door. */}
+            <iframe
+              id="doc-frame"
+              srcDoc={documentModal.html}
+              sandbox="allow-scripts allow-modals"
+              className="h-full w-full rounded-b-lg border-0 bg-white"
+              title="Document Preview"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function Results({ rows }: { rows: ResultRow[] }) {
+function Results({
+  rows,
+  onPrint,
+}: {
+  rows: ResultRow[];
+  onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
+}) {
   if (rows.length === 0) {
     return <Empty>No results yet.</Empty>;
   }
@@ -784,6 +861,17 @@ function Results({ rows }: { rows: ResultRow[] }) {
                     The report is with your doctor.
                   </p>
                 )}
+                <div className="mt-3 flex justify-end border-t pt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => onPrint("result", row.reference)}
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Official Report
+                  </Button>
+                </div>
               </div>
             ) : (
               /* The whole point of showing this card at all. */
@@ -848,7 +936,13 @@ function AppointmentCard({ row }: { row: Appointment }) {
   );
 }
 
-function Bills({ data }: { data: Invoices }) {
+function Bills({
+  data,
+  onPrint,
+}: {
+  data: Invoices;
+  onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
+}) {
   return (
     <div className="space-y-3">
       <Card>
@@ -871,6 +965,17 @@ function Bills({ data }: { data: Invoices }) {
               {row.is_credit_note && (
                 <Badge variant="secondary">refund</Badge>
               )}
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => onPrint("invoice", row.number)}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Tax Receipt
+                </Button>
+              </div>
             </div>
             <div className="text-right">
               <p className="font-medium tabular-nums">{rupees(row.total)}</p>
@@ -888,7 +993,13 @@ function Bills({ data }: { data: Invoices }) {
   );
 }
 
-function Medicines({ rows }: { rows: Prescription[] }) {
+function Medicines({
+  rows,
+  onPrint,
+}: {
+  rows: Prescription[];
+  onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
+}) {
   if (rows.length === 0) return <Empty>No medicines prescribed.</Empty>;
   return (
     <div className="space-y-3">
@@ -916,6 +1027,19 @@ function Medicines({ rows }: { rows: Prescription[] }) {
                 {line.instructions && <p>{line.instructions}</p>}
               </div>
             ))}
+            {row.reference && (
+              <div className="mt-3 flex justify-end border-t pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => onPrint("prescription", row.reference)}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Print Prescription
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
@@ -1127,3 +1251,253 @@ function Empty({ children }: { children: React.ReactNode }) {
     </p>
   );
 }
+
+function ProfileView({
+  data,
+  record,
+  onReload,
+}: {
+  data: PatientProfile;
+  record: string;
+  onReload: () => void;
+}) {
+  const [proposing, setProposing] = useState(false);
+  const [field, setField] = useState<string>("phone");
+  const [proposedValue, setProposedValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const currentVal = String(data[field as keyof PatientProfile] || "");
+
+  const submit = async () => {
+    if (!proposedValue.trim() || !reason.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await api.post("/me/", {
+        action: "request_correction",
+        field_name: field,
+        proposed_value: proposedValue.trim(),
+        reason: reason.trim(),
+        ...(record ? { record } : {}),
+      });
+      setProposing(false);
+      setProposedValue("");
+      setReason("");
+      onReload();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Failed to submit request.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancel = async (uuid: string) => {
+    try {
+      await api.post("/me/", {
+        action: "cancel_correction",
+        correction: uuid,
+        ...(record ? { record } : {}),
+      });
+      onReload();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Could not cancel request.");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">{data.full_name}</CardTitle>
+              <CardDescription>MRN: {data.mrn}</CardDescription>
+            </div>
+            <Badge variant="outline" className="capitalize">
+              {data.gender}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-2.5 text-sm">
+          <div className="flex justify-between border-b py-1">
+            <span className="text-muted-foreground">Phone</span>
+            <span className="font-medium">{data.phone || "—"}</span>
+          </div>
+          {data.alternate_phone && (
+            <div className="flex justify-between border-b py-1">
+              <span className="text-muted-foreground">Alternate phone</span>
+              <span>{data.alternate_phone}</span>
+            </div>
+          )}
+          {data.email && (
+            <div className="flex justify-between border-b py-1">
+              <span className="text-muted-foreground">Email</span>
+              <span>{data.email}</span>
+            </div>
+          )}
+          <div className="flex justify-between border-b py-1">
+            <span className="text-muted-foreground">Current address</span>
+            <span className="max-w-[200px] text-right font-medium">
+              {data.temporary_address || data.tole || data.district || "—"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-1">
+            <span className="text-muted-foreground">Emergency contact</span>
+            <span className="text-right">
+              {data.guardian_name ? `${data.guardian_name} (${data.guardian_relationship || "Guardian"})` : "—"}
+              {data.guardian_phone && <div className="text-xs text-muted-foreground">{data.guardian_phone}</div>}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!proposing ? (
+        <Button className="w-full gap-2" variant="outline" onClick={() => setProposing(true)}>
+          <UserCog className="h-4 w-4" />
+          Request Detail Correction
+        </Button>
+      ) : (
+        <Card className="border-primary/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Propose a Correction</CardTitle>
+            <CardDescription>
+              Changes are reviewed and confirmed by desk staff before updating your medical record.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {err && (
+              <Alert variant="destructive">
+                <AlertDescription>{err}</AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-1">
+              <Label>Field to correct</Label>
+              <select
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={field}
+                onChange={(e) => {
+                  setField(e.target.value);
+                  setProposedValue("");
+                }}
+              >
+                <option value="phone">Phone number</option>
+                <option value="alternate_phone">Alternate phone</option>
+                <option value="email">Email</option>
+                <option value="temporary_address">Current residence / address</option>
+                <option value="tole">Tole / Street</option>
+                <option value="municipality">Municipality</option>
+                <option value="guardian_name">Emergency contact name</option>
+                <option value="guardian_phone">Emergency contact phone</option>
+                <option value="guardian_relationship">Emergency contact relationship</option>
+              </select>
+            </div>
+
+            <div className="rounded border bg-muted/50 p-2.5 text-xs">
+              <span className="text-muted-foreground">Current recorded: </span>
+              <strong>{currentVal || "None on file"}</strong>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Proposed new value</Label>
+              <Input
+                value={proposedValue}
+                onChange={(e) => setProposedValue(e.target.value)}
+                placeholder="Enter new value"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label>Reason for change</Label>
+              <Textarea
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Changed phone number, relocated to new residence"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                className="flex-1"
+                disabled={busy || !proposedValue.trim() || !reason.trim()}
+                onClick={() => void submit()}
+              >
+                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Submit Request
+              </Button>
+              <Button variant="ghost" onClick={() => setProposing(false)}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {data.pending_corrections && data.pending_corrections.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Pending verification ({data.pending_corrections.length})
+          </p>
+          {data.pending_corrections.map((p) => (
+            <Card key={p.uuid} className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="space-y-1 py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase text-amber-700">
+                    {p.field_label}
+                  </span>
+                  <Badge variant="secondary" className="bg-amber-100 text-xs text-amber-800">
+                    Pending Desk Review
+                  </Badge>
+                </div>
+                <div className="text-sm">
+                  <span className="text-xs text-muted-foreground line-through">{p.old_value || "Empty"}</span>{" "}
+                  &rarr; <strong>{p.proposed_value}</strong>
+                </div>
+                <div className="text-xs italic text-muted-foreground">&ldquo;{p.reason}&rdquo;</div>
+                <div className="flex justify-end pt-2">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => void cancel(p.uuid)}>
+                    Cancel Request
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {data.recent_corrections && data.recent_corrections.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            Past Requests
+          </p>
+          {data.recent_corrections.map((p) => (
+            <Card key={p.uuid}>
+              <CardContent className="space-y-1 py-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium">{p.field_label}</span>
+                  <Badge
+                    variant={p.status === "approved" ? "secondary" : "destructive"}
+                    className="text-xs capitalize"
+                  >
+                    {p.status}
+                  </Badge>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Proposed: <strong>{p.proposed_value}</strong> on {date(p.requested_at)}
+                </div>
+                {p.decision_notes && (
+                  <div className="rounded bg-muted/40 p-1.5 text-xs text-muted-foreground">
+                    Staff note: {p.decision_notes}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+

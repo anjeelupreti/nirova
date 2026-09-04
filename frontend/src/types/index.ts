@@ -4249,3 +4249,363 @@ export interface PortalAdoption {
   locked_accounts: number;
   live_proxy_grants: number;
 }
+
+export interface PatientCorrectionItem {
+  uuid: string;
+  patient: string;
+  patient_name: string;
+  patient_mrn: string;
+  field_name: string;
+  field_label: string;
+  old_value: string;
+  proposed_value: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requested_at: string;
+  decided_at: string | null;
+  decided_by_name: string;
+  decision_notes: string;
+}
+
+export interface ProfileCorrectionRow {
+  uuid: string;
+  employee: string;
+  employee_code: string;
+  employee_name: string;
+  department_name: string;
+  fields_payload: Record<string, string>;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  decided_by_name: string;
+  decided_at: string | null;
+  decision_notes: string;
+  created_at: string;
+}
+
+export interface ShiftSwapRow {
+  uuid: string;
+  requester: string;
+  requester_code: string;
+  requester_name: string;
+  target_employee: string;
+  target_code: string;
+  target_name: string;
+  requester_entry: string;
+  requester_entry_date: string;
+  requester_shift_code: string;
+  requester_shift_name: string;
+  requester_starts_at: string;
+  requester_ends_at: string;
+  target_entry: string | null;
+  target_entry_date: string | null;
+  target_shift_code: string | null;
+  target_shift_name: string | null;
+  reason: string;
+  status:
+    | "pending_peer"
+    | "pending_manager"
+    | "approved"
+    | "rejected_peer"
+    | "rejected_manager"
+    | "cancelled";
+  peer_notes: string;
+  peer_decided_at: string | null;
+  manager_name: string;
+  manager_notes: string;
+  manager_decided_at: string | null;
+  created_at: string;
+}
+
+export interface ESSMeSummary {
+  employee: {
+    uuid: string;
+    code: string;
+    full_name: string;
+    first_name: string;
+    last_name: string;
+    position: string;
+    department: string;
+    facility: string;
+    facility_uuid: string;
+    reports_to: string;
+    joined_on: string;
+    employment_type: string;
+    phone: string;
+    personal_email: string;
+    work_email: string;
+    address: string;
+    province: string;
+    district: string;
+    municipality: string;
+    citizenship_number: string;
+    pan_number: string;
+    blood_group: string;
+    bank_name: string;
+    bank_account_number: string;
+    bank_branch: string;
+    emergency_contact_name: string;
+    emergency_contact_phone: string;
+    emergency_contact_relation: string;
+    is_clinical: boolean;
+    is_provider: boolean;
+  };
+  attendance_today: {
+    uuid: string;
+    status: string;
+    checked_in_at: string | null;
+    checked_out_at: string | null;
+    late_minutes: number;
+    early_exit_minutes: number;
+    worked_hours: string;
+  } | null;
+  leave_balances: {
+    code: string;
+    name: string;
+    colour: string;
+    balance: string;
+    annual_entitlement: string;
+  }[];
+  upcoming_shifts: {
+    uuid: string;
+    date: string;
+    shift_name: string;
+    shift_code: string;
+    starts_at: string;
+    ends_at: string;
+    colour: string;
+    is_on_call: boolean;
+  }[];
+  credentials: {
+    uuid: string;
+    name: string;
+    registration_number: string;
+    issuing_body: string;
+    expires_on: string;
+    days_to_expiry: number | null;
+    is_expired: boolean;
+    status_tag: "valid" | "expiring_soon" | "expired";
+    verified_at: string | null;
+    blocks_practice: boolean;
+  }[];
+  pending_incoming_swaps: number;
+  pending_corrections: number;
+  is_manager: boolean;
+}
+
+export interface ManagerQueueItem {
+  id: string;
+  reference: string;
+  type: "leave" | "regularisation" | "swap" | "correction";
+  type_label: string;
+  employee_code: string;
+  employee_name: string;
+  department: string;
+  title: string;
+  subtitle: string;
+  reason: string;
+  submitted_at: string;
+  badge_colour: string;
+}
+
+export interface ManagerQueueResponse {
+  is_manager: boolean;
+  summary: {
+    pending_total: number;
+    leave_count: number;
+    regularisation_count: number;
+    swap_count: number;
+    correction_count: number;
+  };
+  team_status_today: {
+    employee_code: string;
+    employee_name: string;
+    department: string;
+    status: string;
+    checked_in_at: string | null;
+    checked_out_at: string | null;
+  }[];
+  items: ManagerQueueItem[];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Nurse Workspace & Bedside Clinical Care (§96 & §28)                        */
+/* -------------------------------------------------------------------------- */
+
+export interface NEWS2Trigger {
+  parameter: string;
+  score: number;
+  value: string;
+}
+
+export interface NEWS2Score {
+  score: number;
+  risk_level: "low" | "medium" | "high";
+  color: "green" | "amber" | "red";
+  recommendation: string;
+  triggers: NEWS2Trigger[];
+  single_param_extreme: boolean;
+}
+
+export interface NursePatientCard {
+  admission_uuid: string;
+  admission_reference: string;
+  patient_uuid: string;
+  patient_name: string;
+  patient_mrn: string;
+  patient_age: string;
+  patient_gender: string;
+  admitted_at: string;
+  length_of_stay_days: number;
+  admitting_diagnosis: string;
+  consultant_name: string;
+  bed_code: string;
+  ward_name: string;
+  ward_uuid: string | null;
+  is_mine: boolean;
+  assigned_nurse_role: string | null;
+  news2: NEWS2Score;
+  vitals: {
+    recorded_at: string;
+    bp: string | null;
+    pulse: number | null;
+    rr: number | null;
+    spo2: number | null;
+    temp: number | null;
+    pain: number | null;
+    flags: { field: string; level: string; note: string }[];
+  } | null;
+  fluid_balance_24h: {
+    intake_ml: number;
+    output_ml: number;
+    net_ml: number;
+  };
+  emar: {
+    active_medicines: number;
+    administrations_today: number;
+  };
+  tasks: {
+    pending_count: number;
+  };
+  handover: {
+    uuid: string;
+    shift: string;
+    shift_date: string;
+    outgoing_nurse_name: string;
+    code_status: string;
+    is_acknowledged: boolean;
+    incoming_nurse_name: string;
+    situation: string;
+    recommendation: string;
+  } | null;
+}
+
+export interface NurseWorkspaceSummary {
+  shift: string;
+  date: string;
+  scope: string;
+  facility_name: string;
+  total_patients: number;
+  high_risk_count: number;
+  medium_risk_count: number;
+  total_tasks_pending: number;
+  patients: NursePatientCard[];
+}
+
+export interface EmarAdministration {
+  uuid: string;
+  prescription_line: string;
+  medicine_name: string;
+  scheduled_time: string;
+  administered_at: string;
+  administered_by_name: string;
+  dose_given: string;
+  route: string;
+  status: "given" | "held" | "refused" | "omitted";
+  reason: string;
+  injection_site: string;
+  witness_by_name: string;
+  notes: string;
+}
+
+export interface EmarLine {
+  uuid: string;
+  generic_name: string;
+  brand_name: string;
+  display_name: string;
+  dose: string;
+  route: string;
+  route_display: string;
+  frequency: string;
+  frequency_display: string;
+  instructions: string;
+  is_prn: boolean;
+  prn_indication: string;
+  max_doses_per_day: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  last_administered: EmarAdministration | null;
+  history: EmarAdministration[];
+}
+
+export interface EmarResponse {
+  admission_reference: string;
+  patient_name: string;
+  lines: EmarLine[];
+  administrations: EmarAdministration[];
+}
+
+export interface NursingHandover {
+  uuid: string;
+  admission: string;
+  ward: string;
+  patient_name: string;
+  patient_mrn: string;
+  bed_code: string;
+  shift_date: string;
+  shift: string;
+  outgoing_nurse_name: string;
+  code_status: string;
+  situation: string;
+  background: string;
+  assessment: string;
+  recommendation: string;
+  is_acknowledged: boolean;
+  incoming_nurse_name: string;
+  acknowledged_at: string | null;
+  created_at: string;
+}
+
+export interface NursingTask {
+  uuid: string;
+  admission: string;
+  ward: string;
+  patient_name: string;
+  bed_code: string;
+  title: string;
+  category: string;
+  shift: string;
+  due_at: string | null;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  completed_at: string | null;
+  completed_by_name: string;
+  notes: string;
+  created_at: string;
+}
+
+export interface NurseAssignment {
+  uuid: string;
+  ward: string;
+  ward_name: string;
+  admission: string | null;
+  patient_name: string;
+  bed: string | null;
+  bed_code: string;
+  nurse_id: string;
+  nurse_name: string;
+  assigned_date: string;
+  shift: string;
+  role: string;
+  is_active: boolean;
+  notes: string;
+  assigned_by_name: string;
+}

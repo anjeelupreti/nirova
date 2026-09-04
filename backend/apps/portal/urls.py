@@ -13,6 +13,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.portal.api import (
     MeView,
+    PatientCorrectionViewSet,
     PortalAccountViewSet,
     PortalAdoptionView,
     PortalAuthView,
@@ -24,6 +25,7 @@ router = DefaultRouter()
 router.register("accounts", PortalAccountViewSet, basename="portal-account")
 router.register("proxies", ProxyViewSet, basename="portal-proxy")
 router.register("messages", PortalMessageViewSet, basename="portal-message")
+router.register("corrections", PatientCorrectionViewSet, basename="portal-correction")
 
 urlpatterns = [
     path("adoption/", PortalAdoptionView.as_view(), name="portal-adoption"),

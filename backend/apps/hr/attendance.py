@@ -44,6 +44,8 @@ from apps.hr.models import (
     RosterEntry,
     RosterStatus,
     Shift,
+    ShiftSwapRequest,
+    ShiftSwapStatus,
 )
 # assert_different_actors: nobody approves their own leave, and nobody signs
 # off their own attendance correction.
@@ -1021,3 +1023,159 @@ def leave_calendar(facility, start, end) -> list:
         }
         for request in requests.order_by("starts_on")
     ]
+
+
+def request_shift_swap(
+    requester_entry: RosterEntry,
+    target_employee: Employee,
+    target_entry: RosterEntry | None,
+    reason: str,
+    actor,
+) -> ShiftSwapRequest:
+    """Propose a shift swap or shift cover to a colleague."""
+    requester = requester_entry.employee
+    if requester.pk == target_employee.pk:
+        raise AttendanceError("You cannot swap a shift with yourself.")
+
+    if requester_entry.status != RosterStatus.PUBLISHED:
+        raise AttendanceError("Only published roster entries can be swapped.")
+
+    if target_entry is not None:
+        if target_entry.employee_id != target_employee.pk:
+            raise AttendanceError(
+                "The target shift entry does not belong to the selected colleague."
+            )
+        if target_entry.status != RosterStatus.PUBLISHED:
+            raise AttendanceError(
+                "The target colleague's shift must be published."
+            )
+
+    if ShiftSwapRequest.objects.filter(
+        requester_entry=requester_entry,
+        status__in=[ShiftSwapStatus.PENDING_PEER, ShiftSwapStatus.PENDING_MANAGER],
+    ).exists():
+        raise AttendanceError(
+            "There is already an active swap request for this shift."
+        )
+
+    swap = ShiftSwapRequest.objects.create(
+        requester=requester,
+        requester_entry=requester_entry,
+        target_employee=target_employee,
+        target_entry=target_entry,
+        reason=reason.strip(),
+        status=ShiftSwapStatus.PENDING_PEER,
+    )
+    return swap
+
+
+def peer_decide_shift_swap(
+    swap: ShiftSwapRequest,
+    actor,
+    accept: bool,
+    notes: str = "",
+) -> ShiftSwapRequest:
+    """The target colleague accepts or declines the proposed swap."""
+    if swap.status != ShiftSwapStatus.PENDING_PEER:
+        raise AttendanceError(
+            f"Swap request is {swap.status}, not pending colleague acceptance."
+        )
+
+    target_emp = Employee.for_user(actor.uuid)
+    if target_emp and target_emp.pk != swap.target_employee_id:
+        raise AttendanceError(
+            "Only the targeted colleague may accept or decline this swap."
+        )
+
+    swap.peer_decided_at = timezone.now()
+    swap.peer_notes = notes.strip()
+    if accept:
+        swap.status = ShiftSwapStatus.PENDING_MANAGER
+    else:
+        swap.status = ShiftSwapStatus.REJECTED_PEER
+    swap.save()
+    return swap
+
+
+def manager_decide_shift_swap(
+    swap: ShiftSwapRequest,
+    actor,
+    approve: bool,
+    notes: str = "",
+) -> ShiftSwapRequest:
+    """A manager approves or rejects the shift swap."""
+    if swap.status != ShiftSwapStatus.PENDING_MANAGER:
+        raise AttendanceError(
+            f"Swap request is {swap.status}, not pending manager approval."
+        )
+
+    caller_emp = Employee.for_user(actor.uuid)
+    if caller_emp and caller_emp.pk in (swap.requester_id, swap.target_employee_id):
+        raise AttendanceError(
+            "You cannot approve a shift swap that involves yourself."
+        )
+
+    swap.manager_user_id = actor.uuid
+    swap.manager_name = (
+        getattr(actor, "get_full_name", lambda: str(actor))() or str(actor)
+    )
+    swap.manager_notes = notes.strip()
+    swap.manager_decided_at = timezone.now()
+
+    if not approve:
+        swap.status = ShiftSwapStatus.REJECTED_MANAGER
+        swap.save()
+        return swap
+
+    swap.status = ShiftSwapStatus.APPROVED
+    req_entry = swap.requester_entry
+    tgt_entry = swap.target_entry
+
+    if tgt_entry is None:
+        req_entry.employee = swap.target_employee
+        req_entry.notes = (
+            f"{req_entry.notes} (Covered from {swap.requester.employee_code})".strip()
+        )
+        req_entry.save(update_fields=["employee", "notes", "updated_at"])
+    else:
+        if req_entry.date == tgt_entry.date:
+            req_entry.shift, tgt_entry.shift = tgt_entry.shift, req_entry.shift
+            req_entry.notes = (
+                f"{req_entry.notes} (Swapped with {swap.target_employee.employee_code})".strip()
+            )
+            tgt_entry.notes = (
+                f"{tgt_entry.notes} (Swapped with {swap.requester.employee_code})".strip()
+            )
+            req_entry.save(update_fields=["shift", "notes", "updated_at"])
+            tgt_entry.save(update_fields=["shift", "notes", "updated_at"])
+        else:
+            req_entry.employee = swap.target_employee
+            tgt_entry.employee = swap.requester
+            req_entry.notes = (
+                f"{req_entry.notes} (Swapped with {swap.target_employee.employee_code})".strip()
+            )
+            tgt_entry.notes = (
+                f"{tgt_entry.notes} (Swapped with {swap.requester.employee_code})".strip()
+            )
+            req_entry.save(update_fields=["employee", "notes", "updated_at"])
+            tgt_entry.save(update_fields=["employee", "notes", "updated_at"])
+
+    swap.save()
+    return swap
+
+
+def cancel_shift_swap(
+    swap: ShiftSwapRequest,
+    actor,
+) -> ShiftSwapRequest:
+    """Requester cancels their swap request."""
+    if swap.status not in (
+        ShiftSwapStatus.PENDING_PEER,
+        ShiftSwapStatus.PENDING_MANAGER,
+    ):
+        raise AttendanceError(
+            f"Cannot cancel a request that is already {swap.status}."
+        )
+    swap.status = ShiftSwapStatus.CANCELLED
+    swap.save(update_fields=["status", "updated_at"])
+    return swap

@@ -4676,3 +4676,378 @@ employee reading their own payslip through a queryset that filters nothing
 reads everybody's.
 
 **Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 156 - Employee self-service and the scope that filters
+2026-09-04 · Feature · Phase 5 §95
+
+Entry 154 and 155 laid down the two conditions before this module could be written:
+first, employee self-service belongs in the staff console rather than as a separate
+login, because clinicians and administrative staff are already authenticated daily
+and need immediate access to their personal records without portal context switching;
+second, `Scope.OWN` had to genuinely filter querysets down to the caller's own records
+rather than simply permitting an endpoint and letting a naked `.all()` expose peer
+salaries and home addresses across the hospital.
+
+**Queryset narrowing at the boundary.** `apps.rbac.services.UserAuthorization` now
+exposes `is_own_scope(permission_code)`, which checks whether any granted role for that
+code is restricted to `Scope.OWN` and not widened by a facility- or organization-level
+scope. `apps.common.permissions` provides `apply_scope_filter(queryset, request, permission_code, employee_attr)`.
+When an actor holds `Scope.OWN`, `EmployeeViewSet`, `AttendanceViewSet`, and `PayslipViewSet`
+immediately narrow their querysets to the single employee linked to `request.user`.
+If the user is not linked to an employee record, it returns an empty queryset (`.none()`).
+Tenants no longer rely on frontend hiding or hope; a direct GET with `Scope.OWN` returns
+only the caller's rows.
+
+**Profile correction requests.** Direct writes to personal telephone, home address,
+emergency contact, or bank accounts from the self-service surface are prohibited:
+these fields feed statutory returns, payroll banking exports, and tax reporting.
+An employee submits a `ProfileCorrectionRequest` with `field_name`, `old_value`,
+`proposed_value`, and `reason`. Dedicated domain services (`request_profile_correction`,
+`decide_profile_correction`, `cancel_profile_correction`) enforce maker-checker segregation
+via `assert_different_actors`. An HR officer or department manager must sign off before
+the mutation is committed to the canonical `Employee` record.
+
+**Peer shift swaps.** Shift swaps involve a three-party protocol: requester, colleague,
+and manager. When Nurse A requests a swap with Nurse B, the request enters `PENDING_PEER`.
+Nurse B must explicitly accept (`peer_decide_shift_swap`). Only upon peer agreement does
+the request enter `PENDING_MANAGER`. When the unit manager approves, `manager_decide_shift_swap`
+executes within an atomic transaction: it swaps the `shift` foreign keys on the respective
+`RosterEntry` records without violating the `(employee, date)` unique constraint, and logs
+the audit trail.
+
+**Unified manager worklist.** Department leads previously had to navigate four disparate
+screens to review pending leave, missed-clock regularisations, shift swaps, and profile
+changes. `/api/hr/manager-queue/` aggregates all four pending streams into a single
+prioritised worklist with direct approve/reject actions requiring stated reasons.
+
+**Payslip export document.** `/api/payroll/payslips/{uuid}/document/` provides the system's
+first clean, printable payslip view, formatted according to statutory layout requirements
+(earnings, deductions, employer contributions, CIT, PF, SSF, and net pay in words and numbers),
+satisfying the export precedent required for §129.
+
+**Frontend workspace.** `SelfServicePage` (`frontend/src/pages/SelfService.tsx`) was added to
+the core console under `People -> Self Service` (`/self-service`). It organizes employee
+operations into six tabs: *My Profile* (credentials, document expiry alerts, correction requests),
+*My Time* (live attendance, regularisations, roster timeline), *Shift Swaps* (incoming/outgoing swaps),
+*My Leave* (balances, application modal, clash detection), *My Pay* (payslip history, line-item modal,
+printable document trigger), and *Manager Hub* (unified approval worklist).
+
+**Affects.** `backend/apps/rbac/services.py`, `backend/apps/common/permissions.py`,
+`backend/apps/hr/models.py`, `backend/apps/hr/attendance_models.py`, `backend/apps/hr/services.py`,
+`backend/apps/hr/attendance.py`, `backend/apps/hr/views.py`, `backend/apps/hr/attendance_api.py`,
+`backend/apps/hr/ess_api.py`, `backend/apps/hr/urls.py`, `backend/apps/payroll/api.py`,
+`backend/apps/hr/management/commands/seed_ess_demo.py`, `frontend/src/types/index.ts`,
+`frontend/src/pages/SelfService.tsx`, `frontend/src/App.tsx`, `docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 157 - Patient portal agency: corrections and document exports
+2026-09-04 · Feature · Phase 9 §94
+
+Log entry 155 named two critical absences from the patient portal: a patient could not
+correct their own details (address, phone, next of kin) when moving house or changing
+numbers, and could not take away a printable document of their own records — no released
+lab report, no tax receipt, no prescription. Both lines were absent from the API as
+well as the screen.
+
+**Patient demographic corrections with desk verification.** A patient writing directly
+to their demographic fields would bypass identity checks, risk phone collisions across
+unlinked accounts, and alter contact channels during active care without clinical
+awareness. `apps.portal.models.PatientCorrectionRequest` introduces an explicit
+proposal-and-review workflow. An authenticated account submits a proposed update
+via `POST /api/me/` (`action: "request_correction"`) for allowed contact and address
+fields (`phone`, `alternate_phone`, `email`, `temporary_address`, `tole`, `municipality`,
+`guardian_name`, `guardian_phone`, `guardian_relationship`). The proposal captures
+the current value, the proposed value, and the patient's stated reason.
+
+**Desk verification queue.** Desk and HIM staff review incoming proposals in the staff
+console at `Patient Portal -> Demographic corrections` (`/api/portal/corrections/`).
+Staff verify citizenship or identification documents before clicking *Approve* or
+*Reject* (with mandatory notes). Upon approval, `decide_patient_correction` updates
+the canonical `Patient` record in an atomic transaction and writes an audit log entry.
+Patients can track pending proposals or cancel them before desk review.
+
+**Statutory document exports.** Standard JSON APIs serve application screens, but
+patients frequently need physical paper or PDFs for outside specialists, insurance
+reimbursements, or employer sick leave. `/api/me/?section=document&type={type}&reference={ref}`
+generates clean, standalone printable HTML documents equipped with facility branding,
+tamper-evident document UUIDs, and print media queries (`@media print`):
+1. *Diagnostic Lab Reports*: Formatted with patient MRN/age/gender, test name, ordering
+   doctor, collection and release timestamps, and analyte tables highlighting abnormal flags.
+   Strictly obeys `result_visibility`: unreleased or held results are never exported.
+2. *Outpatient Prescriptions*: Styled with facility headers, doctor credentials (NMC No.),
+   Rx symbol, itemized drug table (generic, brand, dose, frequency, duration, instructions),
+   and signature block.
+3. *Billing Tax Receipts*: Statutory tax invoice with PAN/VAT, fiscal year, invoice number,
+   itemized hospital charges, discounts, taxes, and amount in words and figures.
+
+**Frontend implementation.**
+- `patient/src/App.tsx`: Added *My details* tile and profile view with live contact
+  review, inline proposal dialog, and pending request tracking. Added official document
+  print triggers to *Test results*, *Medicines*, and *Bills* that open clean printable
+  documents in a new tab or integrated print preview modal.
+- `frontend/src/pages/Portal.tsx`: Added *Demographic corrections* tab with pending count
+  badge and inline approval/rejection modal.
+
+**Affects.** `backend/apps/portal/models.py`, `backend/apps/portal/services.py`,
+`backend/apps/portal/api.py`, `backend/apps/portal/urls.py`,
+`backend/apps/portal/migrations/0003_patientcorrectionrequest.py`,
+`patient/src/types.ts`, `patient/src/App.tsx`,
+`frontend/src/types/index.ts`, `frontend/src/pages/Portal.tsx`,
+`docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 158 - Nurse & Bedside Clinical Workspace: NEWS2 early warning, eMAR, and SBAR handover
+2026-09-04 · Feature · Phase 9 §96 / Phase 6 §28
+
+In an inpatient ward, patient safety depends on bedside vigilance: detecting clinical
+deterioration hours before cardiorespiratory collapse, administering medications accurately
+against physician orders, and executing unambiguous shift handovers. Previously, inpatient
+features covered admission, census, and bed occupancy, but lacked dedicated bedside nursing
+workflows.
+
+**Shift assignments and ward-level patient custody.** Bedside nurses are scheduled by shift
+(Morning, Evening, Night) with clear roles (`primary`, `buddy`, `charge`). `apps.inpatient.models.NurseAssignment`
+binds a nurse to a patient admission for a specific shift and date. A nurse opening the workspace
+can filter down to their directly assigned patients or view the entire ward census when acting as
+buddy or charge nurse.
+
+**Physiological NEWS2 early warning score.** Royal College of Physicians (RCP) NEWS2 automated
+calculation is integrated into `record_bedside_round`. Rather than requiring nurses to manually
+tally scores on paper charts, `calculate_news2` aggregates 6 physiological parameters:
+1. *Respiration rate* (scores 0-3 for bradypnea <9 or tachypnea >=25).
+2. *Oxygen saturation* (supporting both standard Scale 1 and hypercapnic respiratory failure Scale 2).
+3. *Supplemental oxygen therapy* (+2 points when active).
+4. *Systolic blood pressure* (scores 0-3 for hypotension <=90 or >=220 mmHg).
+5. *Heart rate* (scores 0-3 for severe bradycardia <=40 or tachycardia >=131 bpm).
+6. *Level of consciousness* (Alert = 0; Confusion, Voice, Pain, Unresponsive / CVPU = 3).
+7. *Temperature* (scores 0-3 for hypothermia <=35.0°C or hyperpyrexia >=39.1°C).
+
+The engine assigns aggregate risk tiers: Low (0-4), Medium (5-6 or any single parameter score = 3),
+and High (>=7). Any round reaching Medium or High risk triggers an automated escalation flag
+(`requires_doctor_notification`), demanding physician review or urgent Medical Emergency Team (MET)
+activation.
+
+**Electronic Medication Administration Record (eMAR).** To eliminate transcription errors and
+lost paper charts, `apps.inpatient.models.MedicationAdministration` separates the physician's order
+(`PrescriptionLine`) from bedside execution. Each dose event records the scheduled time, actual
+administration timestamp, route, site, and dose. Supported execution statuses: `GIVEN`, `HELD`,
+`REFUSED`, and `OMITTED`. Mandatory clinical rationale (`reason_held_or_refused`) is enforced
+whenever a dose is held (e.g. holding antihypertensives for systolic BP < 90) or refused.
+For high-alert medications (narcotics, concentrated electrolytes, insulin, chemotherapeutics),
+a mandatory co-signature (`witness_by_name`, `witness_user`) enforces dual-nurse bedside verification.
+
+**Structured SBAR shift handover with dual sign-off.** Shift changeover is the highest-risk
+interval for lost clinical information. `apps.inpatient.models.NursingHandover` implements the
+accredited SBAR framework (Situation, Background, Assessment, Recommendation), capturing pending
+tasks, dietary precautions, code status (DNR/Full Code), and high-alert watch items. When the
+outgoing nurse submits the handover, it remains in `DRAFT`/`SUBMITTED` until the incoming duty
+nurse explicitly reviews and acknowledges receipt (`acknowledge_handover`), establishing an
+unbroken chain of clinical accountability.
+
+**Shift task checklist.** Bedside operations (vital sign frequency, wound dressing changes,
+Foley catheter care, drain monitoring, IV cannula flushing) are tracked via `apps.inpatient.models.NursingTask`.
+Tasks carry clinical priorities (`ROUTINE`, `URGENT`, `STAT`), scheduled due times, and sign-off
+auditing upon completion.
+
+**Frontend clinical workspace.** `frontend/src/pages/NurseWorkspace.tsx` integrates directly into
+the staff console under Clinical (`/nurse-workspace`):
+- *Ward census & shift selector*: facility ward filtering, active shift toggles, and live summary KPIs
+  (total assigned, pending rounds, critical NEWS2 alerts, due medications, pending handovers).
+- *Bedside patient cards*: displaying bed number, patient MRN, age/gender, primary doctor, code status,
+  latest vitals with color-coded NEWS2 badge, active IV infusions, and fast-action drawers.
+- *Bedside round modal*: interactive NEWS2 scoring calculator displaying real-time parameter points
+  and doctor escalation warnings prior to submission.
+- *eMAR administration modal*: active inpatient prescription lines, dose scheduling, status buttons,
+  reasons for held/refused doses, and witness signature capture.
+- *SBAR handover drawer*: structured handover review, critical alerts highlight, outgoing authoring,
+  and incoming nurse sign-off.
+- *Nurse assignment modal*: simple UI for charge nurses to allocate staff to beds per shift.
+
+**Affects.** `backend/apps/inpatient/nursing_models.py` (new), `backend/apps/inpatient/models.py`,
+`backend/apps/inpatient/nursing_services.py` (new), `backend/apps/inpatient/nursing_api.py` (new),
+`backend/apps/inpatient/urls.py`, `backend/apps/inpatient/migrations/0002_nursing_models.py` (new),
+`backend/apps/inpatient/management/commands/seed_nurse_demo.py` (new),
+`frontend/src/types/index.ts`, `frontend/src/pages/NurseWorkspace.tsx` (new),
+`frontend/src/App.tsx`, `docs/IMPLEMENTATION_CHECKLIST.md`, `docs/DEVELOPMENT_LOG.md`.
+
+
+
+---
+
+## 156 - A table that did not match its model
+2026-09-04 · Backend · bug
+
+`makemigrations --check` had twenty-two pending operations. Most were index
+renames, cosmetic. Two were not: `portal_patientcorrectionrequest` was missing
+`updated_by_id` and `deleted_by_id` entirely.
+
+The migration had been hand-written with `created_by_id` as a plain
+`UUIDField`, but the model inherits `BaseModel`, and `ActorStampedModel`
+declares three actor columns as foreign keys. So the table had one of them,
+under the wrong type, and none of the other two.
+
+The effect: every write failed.
+
+    ProgrammingError: column "updated_by_id" of relation
+    "portal_patientcorrectionrequest" does not exist
+
+Not "sometimes", not "under load" -- the first insert, always. The feature had
+been written end to end: model, four service functions, API, a screen in the
+staff console and a screen in the patient application. None of it could store a
+row, and nothing had noticed, because no seed exercised it. `0004` adds the
+columns; `makemigrations --check` is now clean.
+
+**The lesson is the one this project keeps relearning.** Every other module has
+a seed that runs the real service layer and narrates what it expects. This one
+did not, and a defect that a single `create()` would have caught survived all
+the way through two user interfaces.
+
+**Affects.** `apps/portal/migrations/0004_correctionrequest_actor_columns.py`,
+`apps/inpatient/migrations/0003_nursing_index_names.py`.
+
+---
+
+## 157 - The scope filter that failed open
+2026-09-04 · Backend · bug
+
+`apply_scope_filter` is the answer to entry 154 -- the helper that finally makes
+scope narrow a queryset instead of only refusing a request. It handles
+`Scope.OWN` correctly. It ended:
+
+    if granted.scope in (Scope.FACILITY, Scope.MULTI_FACILITY):
+        facility_ids = authorization.accessible_facility_ids(permission_code)
+        if facility_ids:
+            return queryset.filter(...)
+
+    return queryset
+
+Three ways to reach that last line, and all three hand back the entire
+organization.
+
+**`DEPARTMENT` and `UNIT` scope.** Both are *narrower* than facility, so both
+fall past the branch that would have bounded them and get everything.
+
+**A facility-scoped grant naming no facility.** `accessible_facility_ids`
+answers `None` for "all facilities" and a set otherwise -- and the set is empty
+exactly when an assignment names no facility, department or unit. That is the
+state `assign_role` still accepts and §16 already queues as a defect.
+
+That last one inverted it. Before this helper existed, the broken assignment
+meant a user who appeared to hold a role and could see nothing -- annoying,
+visible, safe. With the helper in place it meant a user who could see
+everything, and *silently*, because a filtered list looks exactly like an
+unfiltered one when nobody counts the rows.
+
+Probed rather than argued, against six employees in one tenant:
+
+| grant | before | after |
+|---|---|---|
+| `ORGANIZATION` | 6 | 6 |
+| `FACILITY`, one facility named | 6 | 6 |
+| `FACILITY`, no facility named | **6** | 0 |
+| `DEPARTMENT`, no facility named | **6** | 0 |
+| `UNIT`, no facility named | **6** | 0 |
+| `OWN_PATIENTS` | **6** | 0 |
+
+Now every branch returns explicitly and the fall-through is `queryset.none()`,
+so a scope added later cannot open the door by not being mentioned. Unit and
+department narrow to the facility they sit in, which is looser than the ladder
+implies and is recorded as such -- but bounded, which is the part that matters.
+
+**A scope filter whose default is "return everything" is not a scope filter.**
+
+**Affects.** `apps/common/permissions.py`.
+
+---
+
+## 158 - Documents built by pasting strings together
+2026-09-04 · Backend · security
+
+`generate_patient_document` closes the §94 gap that a patient could not take a
+copy of anything. It builds the HTML with f-strings and escapes nothing:
+
+    <div class="grid-val">{patient.full_name}</div>
+
+The patient application renders that two ways -- `document.write` into a
+`window.open` and an iframe `srcDoc` -- both same-origin, and the portal token
+lives in `sessionStorage`, which same-origin script can read.
+
+So: any markup that reaches a name, an analyte, a unit, a reference range, a
+brand, a prescriber or a set of instructions runs in the reader's browser with
+the reader's session. Free text typed at a desk, months earlier, by somebody
+who was not thinking about this. And with proxy access it is not even
+self-inflicted: patient A's crafted name executes in proxy B's browser.
+
+Proved with a real payload in a real name, and the document generated through
+the real function:
+
+    raw <script> present in the document: False
+    escaped form present: True
+
+Fixed at the server, not at the two render sites, because the server is the one
+place both paths pass through and a third render site added later would
+otherwise reintroduce it. `_esc()` wraps every interpolated value.
+
+Two details worth keeping.
+
+**Escaping is not free to apply everywhere.** The first pass replaced
+`patient.full_name` in nine places; six were error messages and audit entity
+labels, where a patient named O'Brien would have been recorded forever as
+`O&#x27;Brien`. Escape belongs at the boundary it is crossing, and an audit log
+is not HTML. Those six were reverted.
+
+**The iframe is now sandboxed** as `allow-scripts allow-modals`, deliberately
+without `allow-same-origin`: the document's own print button still works, but
+the frame gets an opaque origin and cannot reach the page's `sessionStorage`.
+The server-side escaping is the fix; this is the second lock on the same door.
+
+**Affects.** `apps/portal/services.py`, `patient/src/App.tsx`.
+
+---
+
+## 159 - Four seeds that only worked once
+2026-09-04 · Tooling · bug
+
+Running the suite twice found four seeds that pass on a clean database and fail
+on the second run. These seeds *are* the verification mechanism in this project
+-- almost every defect in this log was found because one of them narrated a
+number that contradicted itself. A seed that only works once quietly stops
+being run, and then stops finding anything.
+
+**`seed_ess_demo`** -- `get_or_create` on the roster entries is idempotent, but
+the shift swap the seed exists to demonstrate *exchanges* the two nurses. On
+the second run the setup no longer found what it had put there, created a
+duplicate and tripped `uniq_roster_per_employee_per_day`. Now clears both days
+for both nurses first.
+
+**`seed_nurse_demo`, twice.** First, `get_or_create(encounter=...)` for the
+eMAR prescription: an encounter is *allowed* several prescriptions -- that is
+what superseding rather than overwriting means -- so the lookup raised
+`MultipleObjectsReturned` as soon as the clinical seeds had run. Narrowing the
+lookup only moved the failure, because the seed writes the row directly instead
+of through `create_prescription`, so `reference` comes out blank and a second
+blank reference collides with `prescription_reference_key`. It now reuses
+whichever prescription the encounter already has. The bypass is worth noting on
+its own: a seed that does not go through the service layer is not exercising
+the code the application runs.
+
+Second, `ensure_admission` guaranteed the admission *row* but not its *state*,
+and the inpatient seed discharges one of the three. On a full-suite run the
+workspace summary found two patients where the scenario asserts three. It now
+re-admits. The recurring rule again, in a new place: **a row existing and a
+patient still being on the ward are two different facts.**
+
+**`seed_clinical_demo`** -- pre-existing, and the most instructive. It booked
+appointments unconditionally, so each run consumed slot capacity until the slot
+held two of two, after which the seed refused itself with `SlotUnavailable` and
+stayed broken forever. It now reuses the patient's booking for that day.
+
+The suite now runs twenty of twenty, twice through, in sequence.
+
+**Affects.** `apps/hr/management/commands/seed_ess_demo.py`,
+`apps/inpatient/management/commands/seed_nurse_demo.py`,
+`apps/patients/management/commands/seed_clinical_demo.py`.

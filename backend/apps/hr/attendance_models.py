@@ -660,3 +660,58 @@ class LeaveRequest(BaseModel):
             raise ValidationError(
                 {"ends_on": "Leave cannot end before it starts."}
             )
+
+
+class ShiftSwapStatus(models.TextChoices):
+    PENDING_PEER = "pending_peer", "Pending colleague acceptance"
+    PENDING_MANAGER = "pending_manager", "Pending manager approval"
+    APPROVED = "approved", "Approved"
+    REJECTED_PEER = "rejected_peer", "Declined by colleague"
+    REJECTED_MANAGER = "rejected_manager", "Declined by manager"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class ShiftSwapRequest(BaseModel):
+    """A shift-swap request between two named employees.
+
+    Requires both parties to accept: the target employee must first accept,
+    and then their manager must approve before the roster entries are swapped.
+    """
+
+    requester = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="outgoing_swap_requests"
+    )
+    requester_entry = models.ForeignKey(
+        RosterEntry, on_delete=models.CASCADE, related_name="outgoing_swaps"
+    )
+    target_employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="incoming_swap_requests"
+    )
+    target_entry = models.ForeignKey(
+        RosterEntry, null=True, blank=True, on_delete=models.CASCADE,
+        related_name="incoming_swaps"
+    )
+    reason = models.CharField(max_length=512)
+    status = models.CharField(
+        max_length=20,
+        choices=ShiftSwapStatus.choices,
+        default=ShiftSwapStatus.PENDING_PEER,
+        db_index=True,
+    )
+    peer_notes = models.CharField(max_length=255, blank=True)
+    peer_decided_at = models.DateTimeField(null=True, blank=True)
+
+    manager_user_id = models.UUIDField(null=True, blank=True)
+    manager_name = models.CharField(max_length=255, blank=True)
+    manager_notes = models.CharField(max_length=255, blank=True)
+    manager_decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "hr_shift_swap"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return (
+            f"Swap: {self.requester.employee_code} -> "
+            f"{self.target_employee.employee_code} ({self.status})"
+        )

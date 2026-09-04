@@ -14,6 +14,12 @@ from apps.hr.attendance_api import (
     RosterViewSet,
     ShiftViewSet,
 )
+from apps.hr.ess_api import (
+    ESSMeSummaryView,
+    ManagerQueueView,
+    ProfileCorrectionViewSet,
+    ShiftSwapViewSet,
+)
 from apps.hr.views import (
     CredentialViewSet,
     EmployeeViewSet,
@@ -33,10 +39,15 @@ router.register("regularisations", RegularisationViewSet,
                 basename="regularisation")
 router.register("leave-types", LeaveTypeViewSet, basename="leave-type")
 router.register("leave", LeaveRequestViewSet, basename="leave-request")
+router.register("profile-corrections", ProfileCorrectionViewSet,
+                basename="profile-correction")
+router.register("shift-swaps", ShiftSwapViewSet, basename="shift-swap")
 
 urlpatterns = [
-    # Before the router, so "dashboard" is not read as an employee code.
+    # Before the router, so "dashboard" and "me" are not read as an employee code.
     path("dashboard/", HrDashboardView.as_view(), name="hr-dashboard"),
+    path("me/summary/", ESSMeSummaryView.as_view(), name="ess-me-summary"),
+    path("manager-queue/", ManagerQueueView.as_view(), name="ess-manager-queue"),
     path("leave-balance/", LeaveBalanceView.as_view(), name="leave-balance"),
     path("leave-ledger/", LeaveLedgerView.as_view(), name="leave-ledger"),
     path("leave-calendar/", LeaveCalendarView.as_view(), name="leave-calendar"),

@@ -679,3 +679,18 @@ class NursingRound(BaseModel):
     @property
     def balance_ml(self) -> int:
         return self.intake_ml - self.output_ml
+
+
+# Nursing domain models
+from apps.inpatient.nursing_models import (  # noqa: E402, F401
+    AdministrationStatus,
+    CodeStatusChoice,
+    MedicationAdministration,
+    NurseAssignment,
+    NurseRole,
+    NursingHandover,
+    NursingTask,
+    ShiftChoice,
+    TaskCategory,
+    TaskStatus,
+)

@@ -32,6 +32,9 @@ from datetime import timedelta
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
+# escape: every value in a generated document is free text somebody typed,
+# and the patient application renders that HTML same-origin.
+from django.utils.html import escape
 
 from apps.audit.models import AuditAction
 # record: creating a portal account and granting proxy access are the two
@@ -54,6 +57,9 @@ from apps.portal.models import (
     PortalSession,
     ProxyAccess,
     ProxyRelationship,
+    PatientCorrectionField,
+    PatientCorrectionRequest,
+    PatientCorrectionStatus,
     account_for_login,
 )
 # tenant_atomic_method: writes that must land together open on the tenant
@@ -916,3 +922,684 @@ def proxy_review(days: int = 365) -> list:
             "last_looked": last.looked_at if last else None,
         })
     return sorted(rows, key=lambda row: -row["days_old"])
+
+
+# ---------------------------------------------------------------------------
+# Patient Demographic Corrections
+# ---------------------------------------------------------------------------
+
+
+def patient_profile_for(patient, account: PortalAccount) -> dict:
+    """The patient's current demographic profile, along with pending proposals."""
+    access_for(account, patient)
+    pending_qs = PatientCorrectionRequest.objects.filter(
+        patient=patient, status=PatientCorrectionStatus.PENDING,
+    ).order_by("-requested_at")
+    recent_qs = PatientCorrectionRequest.objects.filter(
+        patient=patient,
+    ).exclude(status=PatientCorrectionStatus.PENDING).order_by("-requested_at")[:10]
+
+    return {
+        "uuid": str(patient.uuid),
+        "mrn": patient.mrn,
+        "full_name": patient.full_name,
+        "phone": patient.phone,
+        "alternate_phone": patient.alternate_phone,
+        "email": patient.email,
+        "gender": patient.gender,
+        "date_of_birth": patient.date_of_birth,
+        "stated_age_years": patient.stated_age_years,
+        "temporary_address": patient.temporary_address,
+        "tole": patient.tole,
+        "municipality": patient.municipality,
+        "district": patient.district,
+        "province": patient.province,
+        "guardian_name": patient.guardian_name,
+        "guardian_phone": patient.guardian_phone,
+        "guardian_relationship": patient.guardian_relationship,
+        "pending_corrections": [
+            {
+                "uuid": str(req.uuid),
+                "field_name": req.field_name,
+                "field_label": req.get_field_name_display(),
+                "old_value": req.old_value,
+                "proposed_value": req.proposed_value,
+                "reason": req.reason,
+                "status": req.status,
+                "requested_at": req.requested_at,
+            }
+            for req in pending_qs
+        ],
+        "recent_corrections": [
+            {
+                "uuid": str(req.uuid),
+                "field_name": req.field_name,
+                "field_label": req.get_field_name_display(),
+                "old_value": req.old_value,
+                "proposed_value": req.proposed_value,
+                "reason": req.reason,
+                "status": req.status,
+                "requested_at": req.requested_at,
+                "decided_at": req.decided_at,
+                "decided_by_name": req.decided_by_name,
+                "decision_notes": req.decision_notes,
+            }
+            for req in recent_qs
+        ],
+    }
+
+
+@tenant_atomic_method
+def request_patient_correction(
+    account: PortalAccount,
+    patient,
+    field_name: str,
+    proposed_value: str,
+    reason: str,
+) -> PatientCorrectionRequest:
+    """Submit a proposed correction to demographic or contact information."""
+    access_for(account, patient)
+    if field_name not in PatientCorrectionField.values:
+        raise PortalError(
+            f"Field '{field_name}' cannot be modified via self-service.",
+            code="invalid_field",
+        )
+
+    proposed_value = proposed_value.strip()
+    reason = reason.strip()
+    if not proposed_value:
+        raise PortalError("Proposed value cannot be empty.", code="empty_value")
+    if not reason:
+        raise PortalError(
+            "Please provide a reason for the correction so desk staff can verify.",
+            code="missing_reason",
+        )
+
+    existing_pending = PatientCorrectionRequest.objects.filter(
+        patient=patient,
+        field_name=field_name,
+        status=PatientCorrectionStatus.PENDING,
+    ).exists()
+    if existing_pending:
+        raise PortalError(
+            f"A correction request for '{field_name}' is already pending review.",
+            code="already_pending",
+        )
+
+    old_value = str(getattr(patient, field_name, "") or "")
+    if old_value.strip() == proposed_value:
+        raise PortalError(
+            "The proposed value is identical to the current recorded value.",
+            code="no_change",
+        )
+
+    correction = PatientCorrectionRequest.objects.create(
+        patient=patient,
+        account=account,
+        field_name=field_name,
+        old_value=old_value,
+        proposed_value=proposed_value,
+        reason=reason,
+        status=PatientCorrectionStatus.PENDING,
+        created_by_id=account.uuid,
+    )
+
+    record(
+        AuditAction.CREATE,
+        entity_type="portal.PatientCorrectionRequest",
+        entity_id=correction.uuid,
+        entity_label=f"Correction proposed for {patient.full_name} ({field_name})",
+        reason=reason,
+        metadata={"old_value": old_value, "proposed_value": proposed_value},
+    )
+    return correction
+
+
+@tenant_atomic_method
+def decide_patient_correction(
+    correction: PatientCorrectionRequest,
+    actor,
+    approved: bool,
+    decision_notes: str = "",
+) -> PatientCorrectionRequest:
+    """Approve or reject a patient correction proposal. Updates Patient model on approval."""
+    if not correction.is_pending:
+        raise PortalError(
+            "This correction proposal has already been decided.",
+            code="already_decided",
+        )
+
+    decision_notes = decision_notes.strip()
+    if not approved and not decision_notes:
+        raise PortalError(
+            "A decision note is required when rejecting a correction proposal.",
+            code="missing_rejection_reason",
+        )
+
+    correction.status = (
+        PatientCorrectionStatus.APPROVED
+        if approved
+        else PatientCorrectionStatus.REJECTED
+    )
+    correction.decided_at = timezone.now()
+    correction.decided_by_id = getattr(actor, "uuid", None)
+    correction.decided_by_name = getattr(actor, "full_name", "") or str(actor)
+    correction.decision_notes = decision_notes
+    correction.save(update_fields=[
+        "status", "decided_at", "decided_by_id", "decided_by_name",
+        "decision_notes", "updated_at",
+    ])
+
+    if approved:
+        patient = correction.patient
+        setattr(patient, correction.field_name, correction.proposed_value)
+        patient.save(update_fields=[correction.field_name, "updated_at"])
+
+    record(
+        AuditAction.UPDATE,
+        entity_type="portal.PatientCorrectionRequest",
+        entity_id=correction.uuid,
+        entity_label=f"Correction for {correction.patient.full_name} ({correction.field_name}) {correction.status}",
+        reason=decision_notes,
+        metadata={
+            "approved": approved,
+            "applied_field": correction.field_name,
+            "applied_value": correction.proposed_value if approved else None,
+        },
+    )
+    return correction
+
+
+@tenant_atomic_method
+def cancel_patient_correction(
+    correction: PatientCorrectionRequest,
+    account: PortalAccount,
+) -> PatientCorrectionRequest:
+    """Cancel a pending correction request by the patient account."""
+    if not correction.is_pending:
+        raise PortalError(
+            "Only pending correction proposals can be cancelled.",
+            code="not_pending",
+        )
+    if correction.account_id != account.id:
+        raise PortalError(
+            "You can only cancel your own correction proposals.",
+            code="not_permitted",
+        )
+
+    correction.status = PatientCorrectionStatus.CANCELLED
+    correction.decided_at = timezone.now()
+    correction.decided_by_name = account.patient.full_name
+    correction.decision_notes = "Cancelled by patient"
+    correction.save(update_fields=[
+        "status", "decided_at", "decided_by_name", "decision_notes", "updated_at",
+    ])
+    return correction
+
+
+# ---------------------------------------------------------------------------
+# Document Export Generator
+# ---------------------------------------------------------------------------
+
+
+def _esc(value) -> str:
+    """HTML-escape a value on its way into a generated document.
+
+    Every value in these documents is free text somebody typed -- a patient's
+    name at reception, an analyte from the laboratory, a prescriber's
+    instructions. None of it is trusted markup, and the patient application
+    renders the result same-origin, so an unescaped `<script>` in any of them
+    would run where the portal token is kept.
+    """
+    return escape("" if value is None else str(value))
+
+
+def generate_patient_document(
+    account: PortalAccount,
+    patient,
+    doc_type: str,
+    reference: str,
+) -> dict:
+    """Generate a clean, printable document for lab results, prescriptions, or invoices."""
+    access = access_for(account, patient)
+    reference = reference.strip()
+
+    if doc_type == "result":
+        if not access["can_see_results"]:
+            raise PortalError(
+                "This account is not authorized to view or print diagnostic results.",
+                code="not_permitted",
+            )
+        from apps.diagnostics.models import DiagnosticOrder
+
+        order = DiagnosticOrder.objects.filter(
+            patient=patient, reference=reference,
+        ).prefetch_related("results").first()
+        if order is None:
+            raise PortalError(
+                f"Diagnostic order '{reference}' not found for this patient.",
+                code="not_found",
+            )
+        vis = result_visibility(order)
+        if not vis["visible"]:
+            raise PortalError(
+                vis.get("reason", "This result is not yet available for document release."),
+                code="result_held",
+            )
+
+        facility_name = _esc(getattr(order.facility, "name", "Nirova Medical Center"))
+        order_date = order.ordered_at.strftime("%d %b %Y %H:%M")
+        release_date = (
+            order.released_at.strftime("%d %b %Y %H:%M")
+            if order.released_at
+            else "Released"
+        )
+
+        rows_html = ""
+        for r in order.results.all():
+            abnormal_badge = (
+                '<span style="color: #dc2626; font-weight: 700;">[HIGH/ABNORMAL]</span>'
+                if getattr(r, "is_abnormal", False)
+                else ""
+            )
+            name = _esc(getattr(r, "analyte_name", "") or getattr(r, "name", "Analyte"))
+            val = _esc(getattr(r, "value", ""))
+            unit = _esc(getattr(r, "unit", ""))
+            ref_range = _esc(getattr(r, "reference_range", "") or "Normal")
+            rows_html += f"""
+            <tr>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">{name}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 1.05em;"><strong>{val}</strong> {abnormal_badge}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b;">{unit}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #475569;">{ref_range}</td>
+            </tr>
+            """
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnostic Report - {_esc(order.reference)}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 32px 20px; background: #f8fafc; }}
+  .page {{ max-width: 800px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 24px; }}
+  .hosp-title {{ font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }}
+  .hosp-sub {{ font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  .report-badge {{ background: #f1f5f9; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #334155; text-align: right; }}
+  .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 28px; background: #f8fafc; padding: 18px; border-radius: 6px; border: 1px solid #edf2f7; font-size: 14px; }}
+  .grid-label {{ color: #64748b; font-size: 12px; text-transform: uppercase; }}
+  .grid-val {{ font-weight: 600; color: #0f172a; margin-top: 2px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 32px; font-size: 14px; text-align: left; }}
+  th {{ background: #f1f5f9; padding: 12px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }}
+  .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; color: #64748b; }}
+  .sig-line {{ border-top: 1px solid #94a3b8; width: 220px; text-align: center; padding-top: 8px; font-size: 12px; color: #334155; font-weight: 600; }}
+  .print-bar {{ max-width: 800px; margin: 0 auto 16px auto; display: flex; justify-content: space-between; align-items: center; }}
+  .btn-print {{ background: #0284c7; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }}
+  .btn-print:hover {{ background: #0369a1; }}
+  @media print {{
+    body {{ background: white; padding: 0; }}
+    .page {{ border: none; box-shadow: none; padding: 0; max-width: 100%; }}
+    .no-print {{ display: none !important; }}
+    @page {{ margin: 1.5cm; }}
+  }}
+</style>
+</head>
+<body>
+<div class="print-bar no-print">
+  <span style="font-size: 13px; color: #64748b;">Nirova Health Records &bull; Official Diagnostic Release</span>
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+</div>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="hosp-title">{facility_name}</div>
+      <div class="hosp-sub">Laboratory & Pathology Diagnostic Report</div>
+    </div>
+    <div class="report-badge">
+      <div>REF: {_esc(order.reference)}</div>
+      <div style="font-weight: 400; color: #64748b; margin-top: 3px;">Released: {release_date}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="grid-label">Patient Name</div>
+      <div class="grid-val">{_esc(patient.full_name)}</div>
+    </div>
+    <div>
+      <div class="grid-label">MRN / Hospital ID</div>
+      <div class="grid-val">{_esc(patient.mrn)}</div>
+    </div>
+    <div>
+      <div class="grid-label">Age / Gender</div>
+      <div class="grid-val">{patient.stated_age_years or patient.age or '—'} Y / {_esc(patient.get_gender_display())}</div>
+    </div>
+    <div>
+      <div class="grid-label">Specimen / Ordered Date</div>
+      <div class="grid-val">{order_date}</div>
+    </div>
+    <div style="grid-column: span 2;">
+      <div class="grid-label">Investigation Ordered</div>
+      <div class="grid-val" style="font-size: 15px; color: #0369a1;">{_esc(order.test_name)}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Investigation / Analyte</th>
+        <th>Observed Result</th>
+        <th>Unit</th>
+        <th>Reference Range</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>
+      <div>Verified by Authorized Hospital Laboratory Personnel</div>
+      <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Document ID: {order.uuid} &bull; Tamper-evident electronic record</div>
+    </div>
+    <div class="sig-line">
+      Consultant Pathologist / Lab Director
+    </div>
+  </div>
+</div>
+</body>
+</html>"""
+        return {"html": html, "reference": order.reference, "title": f"Diagnostic Report - {_esc(order.reference)}"}
+
+    elif doc_type == "prescription":
+        if not access["can_see_results"]:
+            raise PortalError(
+                "This account is not authorized to view prescriptions.",
+                code="not_permitted",
+            )
+        from apps.prescriptions.models import Prescription
+
+        prescription = Prescription.objects.filter(
+            patient=patient, reference=reference,
+        ).prefetch_related("lines").first()
+        if prescription is None:
+            raise PortalError(
+                f"Prescription '{reference}' not found for this patient.",
+                code="not_found",
+            )
+
+        prescribed_date = prescription.created_at.strftime("%d %b %Y")
+        prescriber = _esc(getattr(prescription, "prescriber_name", "") or "Consultant Physician")
+        lines_html = ""
+        for i, line in enumerate(prescription.lines.all(), 1):
+            instructions = _esc(getattr(line, "instructions", "") or "As advised")
+            duration = f"{line.duration_days} days" if line.duration_days else "Course completed"
+            brand = f" ({_esc(line.brand_name)})" if getattr(line, "brand_name", "") else ""
+            lines_html += f"""
+            <tr>
+              <td style="padding: 12px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-weight: 700; color: #64748b;">{i}.</td>
+              <td style="padding: 12px 14px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <div style="font-size: 15px; font-weight: 700; color: #0f172a;">{_esc(line.generic_name)}{brand}</div>
+                <div style="color: #64748b; font-size: 13px; margin-top: 3px;">Sig: {_esc(line.dose)} &bull; {_esc(line.frequency)} &bull; {duration}</div>
+                <div style="color: #0369a1; font-size: 12px; margin-top: 2px;">{instructions}</div>
+              </td>
+            </tr>
+            """
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Outpatient Prescription - {_esc(prescription.reference)}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 32px 20px; background: #f8fafc; }}
+  .page {{ max-width: 800px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 24px; }}
+  .hosp-title {{ font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }}
+  .hosp-sub {{ font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  .report-badge {{ background: #f1f5f9; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; color: #334155; text-align: right; }}
+  .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 28px; background: #f8fafc; padding: 18px; border-radius: 6px; border: 1px solid #edf2f7; font-size: 14px; }}
+  .grid-label {{ color: #64748b; font-size: 12px; text-transform: uppercase; }}
+  .grid-val {{ font-weight: 600; color: #0f172a; margin-top: 2px; }}
+  .rx-symbol {{ font-size: 32px; font-weight: 900; font-family: serif; color: #0284c7; margin-bottom: 12px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 32px; font-size: 14px; text-align: left; }}
+  .footer {{ margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; color: #64748b; }}
+  .sig-line {{ border-top: 1px solid #94a3b8; width: 220px; text-align: center; padding-top: 8px; font-size: 12px; color: #334155; font-weight: 600; }}
+  .print-bar {{ max-width: 800px; margin: 0 auto 16px auto; display: flex; justify-content: space-between; align-items: center; }}
+  .btn-print {{ background: #0284c7; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }}
+  .btn-print:hover {{ background: #0369a1; }}
+  @media print {{
+    body {{ background: white; padding: 0; }}
+    .page {{ border: none; box-shadow: none; padding: 0; max-width: 100%; }}
+    .no-print {{ display: none !important; }}
+    @page {{ margin: 1.5cm; }}
+  }}
+</style>
+</head>
+<body>
+<div class="print-bar no-print">
+  <span style="font-size: 13px; color: #64748b;">Nirova Health Records &bull; Official Outpatient Prescription</span>
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+</div>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="hosp-title">Nirova Medical Center</div>
+      <div class="hosp-sub">Department of Clinical Medicine &bull; Outpatient Prescription</div>
+    </div>
+    <div class="report-badge">
+      <div>RX: {_esc(prescription.reference)}</div>
+      <div style="font-weight: 400; color: #64748b; margin-top: 3px;">Date: {prescribed_date}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="grid-label">Patient Name</div>
+      <div class="grid-val">{_esc(patient.full_name)}</div>
+    </div>
+    <div>
+      <div class="grid-label">MRN / Hospital ID</div>
+      <div class="grid-val">{_esc(patient.mrn)}</div>
+    </div>
+    <div>
+      <div class="grid-label">Age / Gender</div>
+      <div class="grid-val">{patient.stated_age_years or patient.age or '—'} Y / {_esc(patient.get_gender_display())}</div>
+    </div>
+    <div>
+      <div class="grid-label">Prescribing Physician</div>
+      <div class="grid-val">{prescriber}</div>
+    </div>
+  </div>
+
+  <div class="rx-symbol">&#8478;</div>
+
+  <table>
+    <tbody>
+      {lines_html}
+    </tbody>
+  </table>
+
+  <div style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 12px; font-size: 12px; color: #92400e; margin-top: 24px;">
+    <strong>Patient Instructions:</strong> Complete full antibiotic regimen if prescribed. Take medication with or after food unless directed otherwise. In case of unexpected allergic symptoms, contact hospital casualty immediately.
+  </div>
+
+  <div class="footer">
+    <div>
+      <div>Registered Clinical Prescription &bull; Nirova Healthcare OS</div>
+      <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">Document ID: {prescription.uuid}</div>
+    </div>
+    <div class="sig-line">
+      {prescriber}<br>
+      <span style="font-weight: 400; font-size: 11px; color: #64748b;">Medical Council Registered Practitioner</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>"""
+        return {"html": html, "reference": prescription.reference, "title": f"Prescription - {_esc(prescription.reference)}"}
+
+    elif doc_type == "invoice":
+        if not access["can_see_invoices"]:
+            raise PortalError(
+                "This account is not authorized to view or print billing invoices.",
+                code="not_permitted",
+            )
+        from apps.billing.models import Invoice, InvoiceStatus
+
+        invoice = Invoice.objects.filter(
+            patient=patient, number=reference,
+        ).exclude(status=InvoiceStatus.DRAFT).prefetch_related("lines").first()
+        if invoice is None:
+            raise PortalError(
+                f"Invoice '{reference}' not found for this patient.",
+                code="not_found",
+            )
+
+        issued_date = (
+            invoice.issued_at.strftime("%d %b %Y %H:%M")
+            if invoice.issued_at
+            else "Issued"
+        )
+        lines_html = ""
+        lines = list(invoice.lines.all()) if hasattr(invoice, "lines") else []
+        for i, l in enumerate(lines, 1):
+            desc = getattr(l, "description", "") or getattr(l, "service_name", "Hospital Service")
+            qty = getattr(l, "quantity", 1)
+            rate = getattr(l, "unit_price", "0.00")
+            disc = getattr(l, "discount_amount", "0.00")
+            tot = getattr(l, "total", "0.00")
+            lines_html += f"""
+            <tr>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">{i}.</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0;">{desc}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; text-align: center;">{qty}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace;">Rs {rate}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #64748b;">Rs {disc}</td>
+              <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; font-family: monospace;">Rs {tot}</td>
+            </tr>
+            """
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Official Billing Invoice - {invoice.number}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 32px 20px; background: #f8fafc; }}
+  .page {{ max-width: 800px; margin: 0 auto; background: #ffffff; padding: 40px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 24px; }}
+  .hosp-title {{ font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #0f172a; }}
+  .hosp-sub {{ font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  .report-badge {{ background: #f1f5f9; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; color: #334155; text-align: right; }}
+  .grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 28px; background: #f8fafc; padding: 18px; border-radius: 6px; border: 1px solid #edf2f7; font-size: 14px; }}
+  .grid-label {{ color: #64748b; font-size: 12px; text-transform: uppercase; }}
+  .grid-val {{ font-weight: 600; color: #0f172a; margin-top: 2px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px; }}
+  th {{ background: #f1f5f9; padding: 12px 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }}
+  .summary-box {{ margin-left: auto; width: 300px; margin-bottom: 30px; font-size: 14px; }}
+  .summary-row {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #e2e8f0; }}
+  .summary-total {{ display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a; font-size: 16px; font-weight: 800; margin-top: 6px; }}
+  .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: flex-end; font-size: 12px; color: #64748b; }}
+  .sig-line {{ border-top: 1px solid #94a3b8; width: 220px; text-align: center; padding-top: 8px; font-size: 12px; color: #334155; font-weight: 600; }}
+  .print-bar {{ max-width: 800px; margin: 0 auto 16px auto; display: flex; justify-content: space-between; align-items: center; }}
+  .btn-print {{ background: #0284c7; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }}
+  .btn-print:hover {{ background: #0369a1; }}
+  @media print {{
+    body {{ background: white; padding: 0; }}
+    .page {{ border: none; box-shadow: none; padding: 0; max-width: 100%; }}
+    .no-print {{ display: none !important; }}
+    @page {{ margin: 1.5cm; }}
+  }}
+</style>
+</head>
+<body>
+<div class="print-bar no-print">
+  <span style="font-size: 13px; color: #64748b;">Nirova Billing System &bull; Official Tax Invoice Receipt</span>
+  <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+</div>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="hosp-title">Nirova Healthcare Hospital</div>
+      <div class="hosp-sub">Tax Invoice &bull; Inland Revenue Department Registered</div>
+      <div style="font-size: 12px; color: #64748b; margin-top: 4px;">PAN / VAT No: 600123456 &bull; Fiscal Year: {getattr(invoice, 'fiscal_year', '2082/83')}</div>
+    </div>
+    <div class="report-badge">
+      <div>INVOICE: {invoice.number}</div>
+      <div style="font-weight: 400; color: #64748b; margin-top: 3px;">Date: {issued_date}</div>
+      <div style="font-weight: 700; color: #0284c7; margin-top: 3px; text-transform: uppercase;">Status: {invoice.status}</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="grid-label">Billed To (Patient)</div>
+      <div class="grid-val">{_esc(patient.full_name)}</div>
+    </div>
+    <div>
+      <div class="grid-label">MRN / Patient ID</div>
+      <div class="grid-val">{_esc(patient.mrn)}</div>
+    </div>
+    <div>
+      <div class="grid-label">Contact Phone</div>
+      <div class="grid-val">{patient.phone or '—'}</div>
+    </div>
+    <div>
+      <div class="grid-label">Address</div>
+      <div class="grid-val">{patient.temporary_address or patient.district or 'Nepal'}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 40px;">#</th>
+        <th>Description / Service Item</th>
+        <th style="text-align: center; width: 60px;">Qty</th>
+        <th style="text-align: right; width: 100px;">Rate</th>
+        <th style="text-align: right; width: 90px;">Discount</th>
+        <th style="text-align: right; width: 110px;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {lines_html if lines_html else '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">Hospital Consultation and Standard Care Package</td></tr>'}
+    </tbody>
+  </table>
+
+  <div class="summary-box">
+    <div class="summary-row">
+      <span style="color: #64748b;">Invoice Total:</span>
+      <span style="font-family: monospace; font-weight: 600;">Rs {invoice.total}</span>
+    </div>
+    <div class="summary-row">
+      <span style="color: #64748b;">Amount Paid:</span>
+      <span style="font-family: monospace; font-weight: 600; color: #16a34a;">Rs {invoice.amount_paid}</span>
+    </div>
+    <div class="summary-total">
+      <span>Balance Due:</span>
+      <span style="font-family: monospace; color: {'#dc2626' if invoice.balance_due > 0 else '#0f172a'};">Rs {invoice.balance_due}</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>
+      <div>Thank you for choosing Nirova Healthcare.</div>
+      <div style="margin-top: 4px; font-size: 11px; color: #94a3b8;">This is a computer generated statutory document.</div>
+    </div>
+    <div class="sig-line">
+      Authorized Billing Cashier
+    </div>
+  </div>
+</div>
+</body>
+</html>"""
+        return {"html": html, "reference": invoice.number, "title": f"Invoice - {invoice.number}"}
+
+    raise PortalError(f"Unsupported document type '{doc_type}'. Use 'result', 'prescription', or 'invoice'.")
+

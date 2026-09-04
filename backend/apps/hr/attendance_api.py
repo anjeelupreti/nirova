@@ -24,7 +24,11 @@ from rest_framework.views import APIView
 
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import (
+    HasPermission,
+    apply_scope_filter,
+    get_authorization,
+)
 from apps.hr.attendance import (
     all_balances,
     apply_for_leave,
@@ -416,7 +420,7 @@ class RosterViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AttendanceSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("attendance.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("attendance.read", Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Attendance, relations=["employee", "facility"],
@@ -431,6 +435,11 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(date__gte=start)
         if end:
             queryset = queryset.filter(date__lte=end)
+
+        # Scope filter: callers with only Scope.OWN see only their own attendance
+        queryset = apply_scope_filter(
+            queryset, self.request, "attendance.read", employee_attr="employee"
+        )
         return queryset.order_by("-date", "employee__first_name")
 
     # -- marking, which needs no permission beyond having a record ----------

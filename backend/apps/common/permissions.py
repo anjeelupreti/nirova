@@ -86,3 +86,73 @@ class IsOrganizationOwner(BasePermission):
     def has_permission(self, request, view):
         authorization = get_authorization(request)
         return bool(authorization and authorization.is_organization_owner)
+
+
+def apply_scope_filter(
+    queryset,
+    request,
+    permission_code: str,
+    employee_attr: str = "employee",
+    facility_attr: str = "facility",
+):
+    """Narrow a queryset to what the caller's scope actually reaches.
+
+    - Organization owner, or `Scope.ORGANIZATION`: the whole tenant.
+    - `Scope.OWN`: strictly the caller's own Employee record.
+    - `Scope.UNIT` / `DEPARTMENT` / `FACILITY` / `MULTI_FACILITY`: the
+      facilities the grant names.
+    - Anything else, including no permission at all: nothing.
+
+    **Every path returns explicitly, and the fall-through denies.** An earlier
+    version ended `return queryset`, which meant three separate cases handed
+    back the entire organization: a `DEPARTMENT` or `UNIT` grant, which are
+    *narrower* than facility and so fell past the facility branch; and -- worse
+    -- a facility-scoped grant naming no facility, which is the state
+    `assign_role` still permits and the checklist queues as a defect. That
+    combination inverted the defect from fail-closed to fail-open: the user
+    who previously appeared to have a role and could see nothing could now see
+    everything. A scope filter whose default is "return everything" is not a
+    scope filter.
+
+    `accessible_facility_ids` answers `None` for "all facilities", which only
+    happens for an owner or an organization-scoped grant -- both returned
+    above. Reaching the facility branch with an empty set therefore means the
+    grant genuinely reaches no facility, and the honest answer is no rows.
+    """
+    authorization = get_authorization(request)
+    if authorization is None:
+        return queryset.none()
+    if authorization.is_organization_owner:
+        return queryset
+
+    granted = authorization.permissions.get(permission_code)
+    if granted is None:
+        return queryset.none()
+
+    if granted.scope == Scope.ORGANIZATION:
+        return queryset
+
+    if granted.scope == Scope.OWN:
+        from apps.hr.models import Employee
+
+        employee = Employee.for_user(request.user.uuid)
+        if employee is None:
+            return queryset.none()
+        if employee_attr == "self":
+            return queryset.filter(pk=employee.pk)
+        return queryset.filter(**{employee_attr: employee})
+
+    # Unit and department grants are narrowed to the facility they sit in
+    # rather than to the unit itself: `_merge` records the parent facility on
+    # every grant, and this helper has no unit or department column to filter
+    # on. Looser than the ladder implies, and recorded as such in the
+    # checklist -- but bounded, which the previous fall-through was not.
+    if granted.scope in (
+        Scope.UNIT, Scope.DEPARTMENT, Scope.FACILITY, Scope.MULTI_FACILITY,
+    ):
+        facility_ids = authorization.accessible_facility_ids(permission_code)
+        if not facility_ids:
+            return queryset.none()
+        return queryset.filter(**{f"{facility_attr}_id__in": facility_ids})
+
+    return queryset.none()

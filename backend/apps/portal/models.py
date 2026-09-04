@@ -407,3 +407,73 @@ def validate_proxy_relationship(value: str) -> None:
             f"'{value}' is not a recognised relationship. Use one of: "
             f"{', '.join(ProxyRelationship.values)}."
         )
+
+
+class PatientCorrectionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class PatientCorrectionField(models.TextChoices):
+    PHONE = "phone", "Phone number"
+    ALTERNATE_PHONE = "alternate_phone", "Alternate phone"
+    EMAIL = "email", "Email"
+    TEMPORARY_ADDRESS = "temporary_address", "Current / Temporary address"
+    TOLE = "tole", "Tole / Street"
+    MUNICIPALITY = "municipality", "Municipality"
+    GUARDIAN_NAME = "guardian_name", "Emergency / Guardian name"
+    GUARDIAN_PHONE = "guardian_phone", "Emergency / Guardian phone"
+    GUARDIAN_RELATIONSHIP = "guardian_relationship", "Emergency / Guardian relationship"
+
+
+class PatientCorrectionRequest(BaseModel):
+    """A patient's proposal to correct their own demographic or contact details.
+
+    A request rather than a direct write, because demographics feed clinical
+    identifications, MRN indexing, billing records, and follow-up contact.
+    An unvetted patient edit could collide with another person's record or
+    disrupt contact during acute care.
+    """
+
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name="correction_requests",
+    )
+    account = models.ForeignKey(
+        PortalAccount, on_delete=models.CASCADE, related_name="correction_requests",
+    )
+    field_name = models.CharField(
+        max_length=32, choices=PatientCorrectionField.choices, db_index=True,
+    )
+    old_value = models.CharField(max_length=255, blank=True)
+    proposed_value = models.CharField(max_length=255)
+    reason = models.CharField(max_length=512)
+
+    status = models.CharField(
+        max_length=16,
+        choices=PatientCorrectionStatus.choices,
+        default=PatientCorrectionStatus.PENDING,
+        db_index=True,
+    )
+
+    requested_at = models.DateTimeField(default=timezone.now, db_index=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by_id = models.UUIDField(null=True, blank=True)
+    decided_by_name = models.CharField(max_length=255, blank=True)
+    decision_notes = models.CharField(max_length=512, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        indexes = [
+            models.Index(fields=["patient", "status", "-requested_at"]),
+            models.Index(fields=["status", "-requested_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.patient.mrn}: {self.field_name} -> {self.proposed_value} ({self.status})"
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == PatientCorrectionStatus.PENDING
+

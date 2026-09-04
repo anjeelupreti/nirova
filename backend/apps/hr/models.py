@@ -769,6 +769,50 @@ class Skill(BaseModel):
         return f"{self.name} ({self.get_level_display()})"
 
 
+class ProfileCorrectionStatus(models.TextChoices):
+    PENDING = "pending", "Pending approval"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class ProfileCorrectionRequest(BaseModel):
+    """An employee requesting a correction to their profile or bank details.
+
+    Contact information (address, phone, next of kin) and bank account details
+    feed payroll, tax filings, and legal notices. Directly overwriting them
+    from self-service risks unverified updates; an employee proposes the change,
+    and HR or their manager approves it before it is committed.
+    """
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.CASCADE, related_name="correction_requests"
+    )
+    requested_by_user_id = models.UUIDField()
+    fields_payload = models.JSONField(
+        default=dict,
+        help_text="Dictionary of proposed field changes.",
+    )
+    reason = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ProfileCorrectionStatus.choices,
+        default=ProfileCorrectionStatus.PENDING,
+        db_index=True,
+    )
+    decided_by_user_id = models.UUIDField(null=True, blank=True)
+    decided_by_name = models.CharField(max_length=255, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "hr_profile_correction"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.employee.employee_code} correction ({self.status})"
+
+
 # ---------------------------------------------------------------------------
 # Attendance, leave and rostering
 # ---------------------------------------------------------------------------
@@ -796,6 +840,8 @@ from apps.hr.attendance_models import (  # noqa: E402,F401
     RosterEntry,
     RosterStatus,
     Shift,
+    ShiftSwapRequest,
+    ShiftSwapStatus,
     ShiftType,
 )
 
