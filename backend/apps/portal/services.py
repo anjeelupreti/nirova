@@ -67,6 +67,13 @@ logger = logging.getLogger("nirova.portal")
 #: How long an invitation is worth anything.
 INVITATION_DAYS = 14
 
+#: Wrong codes before an invitation is dead.
+#:
+#: Eight digits is ample against a person and nothing against a script. Five
+#: guesses and the patient asks the desk for another code, which costs seconds
+#: — against an attack that would otherwise cost minutes.
+MAX_INVITATION_ATTEMPTS = 5
+
 
 class PortalError(DomainError):
     """The portal will not do that."""
@@ -141,14 +148,19 @@ def invite(patient, actor, delivered_by: str = "", delivered_to: str = "") -> tu
     return invitation, code
 
 
-@tenant_atomic_method
 def register(patient, code: str, login_identifier: str, password: str,
              email: str = "") -> PortalAccount:
     """Create the account, consuming the invitation.
 
     The code is checked against this patient's live invitations only. Without
     that, a code guessed for one patient would open an account on whichever
-    record the attacker named.
+    record the attacker named — so the patient is named by the MRN on their
+    card and the code comes from the desk, and neither alone is enough.
+
+    Not atomic, for the reason `authenticate` is not: a wrong code increments
+    the invitation's attempt counter, and a counter written inside the
+    transaction that then raises never advances. The account creation below is
+    wrapped separately.
     """
     if len(password) < 8:
         raise PortalError(
@@ -158,25 +170,61 @@ def register(patient, code: str, login_identifier: str, password: str,
     if not login_identifier.strip():
         raise PortalError("A login needs a phone number or an email address.")
 
+    # The code is checked *before* the identifier collision, deliberately.
+    # The other way round — which is how this was first written — answers
+    # "does this phone number have an account here?" to anybody who asks,
+    # with no code at all. That is the same disclosure the sign-in path takes
+    # care to avoid, arriving through the registration form instead.
+    live = [
+        row for row in PortalInvitation.objects.filter(patient=patient)
+        if row.is_usable
+    ]
+    invitation = next((row for row in live if row.check_code(code)), None)
+
+    if invitation is None:
+        # Count the guess against every live invitation for this patient, and
+        # kill any that have been tried too often. Written here, outside any
+        # transaction, precisely so that the refusal below cannot undo it.
+        for row in live:
+            row.failed_attempts += 1
+            if row.failed_attempts >= MAX_INVITATION_ATTEMPTS:
+                row.revoked_at = timezone.now()
+                row.revoked_reason = (
+                    f"{row.failed_attempts} wrong codes tried."
+                )
+                logger.warning(
+                    "Portal invitation for patient %s revoked after repeated "
+                    "wrong codes", patient.mrn,
+                )
+            row.save(update_fields=[
+                "failed_attempts", "revoked_at", "revoked_reason",
+                "updated_at",
+            ])
+        raise PortalError(
+            "That code is not valid for this patient, or it has expired. Ask "
+            "at the desk for a new one.",
+        )
+
+    # Only now, having proved they hold the desk's code for this patient.
     existing = account_for_login(login_identifier)
     if existing is not None and existing.patient_id != patient.id:
         raise PortalError(
             "That phone number or email is already used by another account."
         )
 
-    invitation = next(
-        (
-            row for row in PortalInvitation.objects.filter(patient=patient)
-            if row.is_usable and row.check_code(code)
-        ),
-        None,
+    return _create_account(
+        patient, invitation, login_identifier, password, email,
     )
-    if invitation is None:
-        raise PortalError(
-            "That code is not valid for this patient, or it has expired. Ask "
-            "at the desk for a new one.",
-        )
 
+
+@tenant_atomic_method
+def _create_account(patient, invitation, login_identifier: str,
+                    password: str, email: str) -> PortalAccount:
+    """The account and the invitation's consumption, written together.
+
+    These two must land as one: an account created against an invitation that
+    is still marked unused would let the same code be used twice.
+    """
     account, _ = PortalAccount.objects.get_or_create(
         patient=patient,
         defaults={"login_identifier": login_identifier.strip()},

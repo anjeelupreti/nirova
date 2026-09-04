@@ -173,6 +173,15 @@ class PortalInvitation(BaseModel):
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_reason = models.CharField(max_length=255, blank=True)
 
+    #: Wrong codes tried against this invitation.
+    #:
+    #: An eight-digit code is a hundred million possibilities, which is ample
+    #: against a person and nothing at all against a script. The counter turns
+    #: it into five guesses, after which the invitation is dead and the
+    #: patient asks the desk for another — an inconvenience measured in
+    #: seconds, against an attack measured in minutes.
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+
     class Meta:
         ordering = ["-issued_at"]
         indexes = [models.Index(fields=["patient", "-issued_at"])]

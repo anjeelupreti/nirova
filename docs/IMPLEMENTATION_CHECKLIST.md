@@ -2125,6 +2125,12 @@ rather than redesigning around it.
       `is_authenticated` and nothing else, so code that treats a patient as
       staff raises rather than granting
 - [x] Registration only against an invitation issued by somebody at the desk
+- [x] Identified by the number on the patient's card plus that code, and
+      neither alone is enough
+- [x] Five wrong codes kills the invitation; the counter survives the
+      refusal that raises it
+- [x] The code is checked before the identifier collision, so a stranger
+      cannot learn which phone numbers have accounts
 - [x] The invitation code is returned once and stored hashed
 - [x] Any earlier unused invitation is revoked, so nobody holds two live codes
 - [x] How the code was delivered, and to what, is recorded
@@ -2154,6 +2160,23 @@ rather than redesigning around it.
 - [ ] Online payment from the portal
 - [ ] Queue position in real time
 - [ ] Telemedicine
+
+**The patient's application**
+- [x] A separate build (`patient/`), not a section of the staff console —
+      its own bundle, its own origin, its own auth store
+- [x] 63 kB gzipped, because it is downloaded over a phone connection
+- [x] The token lives in `sessionStorage`, which dies with the tab —
+      the behaviour somebody in an internet café wants and would not
+      think to ask for
+- [x] Sign in, register with card number and code, home, results,
+      appointments, bills, medicines, referrals, messages, sessions
+- [x] A held result is shown as a card saying a doctor will call, never
+      omitted
+- [x] Reading somebody else's record is stated at the top of the screen
+- [x] "Not for urgent problems" beside the message box, not in terms of use
+- [ ] Nepali translation
+- [ ] Offline reading of already-fetched pages
+- [ ] Installable as a progressive web app
 
 **Family and proxy accounts**
 - [x] Proxy access is an interval with a relationship, evidence of consent,

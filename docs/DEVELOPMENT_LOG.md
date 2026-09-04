@@ -4465,3 +4465,109 @@ conversations to have.
 
 **Affects.** `frontend/src/pages/Portal.tsx`, `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 151 - No patient has a UUID
+2026-09-04 · Backend · bug
+
+The registration endpoint took the patient's UUID. Writing the form that calls
+it made the problem obvious in about a minute: a patient has a card with an
+MRN printed on it and a code from the desk, and nothing else. A registration
+form asking for an internal identifier is a form nobody can complete.
+
+It now takes the MRN and the code, and **neither alone is enough**: the MRN
+identifies which patient's invitations to check, the code has to match one of
+them. The MRN is printed on every document the patient carries, so it is not a
+secret; the code is, and it is the half that does the work.
+
+An MRN that matches nobody gets the same refusal as a wrong code, deliberately
+— a distinct "no such patient" would turn the registration form into a way of
+checking whether a given MRN belongs to anybody at this hospital.
+
+And the invitation now counts wrong guesses. Eight digits is a hundred million
+possibilities, which is ample against a person and nothing at all against a
+script; five wrong tries and the invitation is dead and the patient asks the
+desk for another. The counter is incremented **outside** any transaction, for
+the reason entry 149 gives: a counter written inside the transaction that then
+raises never advances.
+
+**Affects.** `apps/portal/models.py`, `apps/portal/services.py`,
+`apps/portal/api.py`.
+
+---
+
+## 152 - The registration form answered a question the login form refuses to
+2026-09-04 · Backend · bug
+
+The smoke test for the new flow produced "That phone number or email is
+already used by another account" for five consecutive wrong codes.
+
+The identifier-collision check ran before the code check. So anybody could
+post a phone number with a garbage code and learn whether that number has a
+portal account here — no code, no MRN that matters, nothing. The sign-in path
+takes careful trouble to answer identically whether or not an account exists,
+and the registration form was answering it plainly, one endpoint over.
+
+The order is now: the patient's own input is validated first (password length,
+identifier present, which discloses nothing), then the code, and only then the
+collision. By the time somebody sees "already used" they have proved they hold
+the desk's code for that patient, and telling them is fine.
+
+Worth noting how it surfaced: not from reading the code, but from a test that
+ran the sequence a real client performs and printed what came back. The
+disclosure was invisible in the function, which reads perfectly sensibly
+top-to-bottom.
+
+**Affects.** `apps/portal/services.py`.
+
+---
+
+## 153 - The patient's application
+2026-09-04 · Frontend · feature
+
+`patient/`. A separate Vite build, not a section of the staff console. Three
+reasons, in order of how much they matter.
+
+**The separation stays structural.** The backend module goes to some trouble
+to make a patient and a clinician different kinds of subject — different
+table, different credential, different authentication scheme, a principal that
+answers `is_authenticated` and nothing else. Putting both audiences in one
+bundle with one auth store puts that back in the hands of a single bad
+condition.
+
+**It is 63 kB gzipped.** The staff console is many times that, and this is
+downloaded over a phone connection by somebody who wants to know whether their
+blood test is back.
+
+**It is a different application.** One column, large targets, six tiles, no
+router — every screen is one tap from home, so a router would be a dependency
+carrying no weight.
+
+Decisions inside it worth stating.
+
+**The token lives in `sessionStorage`, never `localStorage`.** These pages are
+read on borrowed phones and internet-café computers far more often than a
+clinician's workstation is. `sessionStorage` dies with the tab, which is what
+somebody in that position actually wants and would not think to ask for.
+
+**A held result is a card, not a gap.** When a clinician is ringing about a
+result, the card appears saying exactly that, with a telephone icon. A list
+with a silent hole in it is worse than a visible delay the patient can ask
+about.
+
+**Reading somebody else's record is stated at the top of the screen**, with
+the relationship and a note that it can be ended at any time. A proxy who
+forgets whose record they are looking at is how the wrong person's medicines
+get changed.
+
+**"Not for urgent problems" sits beside the message box** and on the sign-in
+screen, not in terms of use. Somebody describing chest pain into a contact
+form and waiting is a foreseeable harm, and a system that accepts the message
+without saying so has invited it.
+
+**A 401 signs the patient out rather than retrying.** There is no refresh
+token: sessions are rows on the server, and one that has been revoked should
+stop working immediately and visibly.
+
+**Affects.** `patient/` (new application).

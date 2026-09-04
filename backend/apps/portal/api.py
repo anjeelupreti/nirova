@@ -157,7 +157,10 @@ class InviteSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(serializers.Serializer):
-    patient = serializers.UUIDField()
+    #: The number on the patient's card. Not a UUID: building the patient app
+    #: made it obvious that no patient has one, and a registration form that
+    #: asks for an internal identifier is a form nobody can complete.
+    mrn = serializers.CharField(max_length=32)
     code = serializers.CharField(max_length=16)
     login_identifier = serializers.CharField(max_length=128)
     password = serializers.CharField(max_length=128)
@@ -219,8 +222,19 @@ class PortalAuthView(APIView):
             serializer = RegisterSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
+            patient = Patient.objects.filter(
+                mrn__iexact=data["mrn"].strip(), merged_into__isnull=True,
+            ).first()
+            if patient is None:
+                # The same refusal as a wrong code, deliberately: a distinct
+                # "no such patient" would turn this form into a way of
+                # checking whether a given MRN belongs to anybody here.
+                raise PortalError(
+                    "That code is not valid for this patient, or it has "
+                    "expired. Ask at the desk for a new one."
+                )
             account = register(
-                get_object_or_404(Patient, uuid=data["patient"]),
+                patient,
                 code=data["code"],
                 login_identifier=data["login_identifier"],
                 password=data["password"],

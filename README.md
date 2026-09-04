@@ -51,7 +51,8 @@ multi-branch group.
 >   than a silence.
 > - **Patient portal** — its own credential and its own session, registration
 >   only by invitation, critical results held while a clinician rings, and
->   proxy access that stops the moment consent is withdrawn.
+>   proxy access that stops the moment consent is withdrawn. Patients use a
+>   separate 63 kB application, not the staff console.
 >
 > Employee self-service and the analytics engine are not built yet.
 > 51 of the specification's 132 sections are complete; see
@@ -112,6 +113,11 @@ cp .env.example .env
 cd ../frontend
 npm install
 npm run dev          # http://localhost:5173
+
+# 4. The patient's application, on its own origin
+cd ../patient
+npm install
+npm run dev          # http://localhost:5174
 ```
 
 `seed_demo` builds a working customer by running the real code paths — it
@@ -177,7 +183,9 @@ backend/
     bloodbank/         donors, donations, units, matching, reactions    [tenant]
     referrals/         providers, referrals, responses, the loop        [tenant]
     portal/            patient accounts, sessions, proxy access         [tenant]
-frontend/              React + Vite + TypeScript + shadcn/ui
+frontend/              React + Vite + TypeScript + shadcn/ui — the staff console
+patient/               the patient's own application: separate bundle,
+                       separate origin, separate auth store
 docs/
   DEVELOPMENT_LOG.md          every change, and why it was made that way
   IMPLEMENTATION_CHECKLIST.md all 132 spec sections, with status
