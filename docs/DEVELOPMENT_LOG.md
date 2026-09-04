@@ -4571,3 +4571,108 @@ token: sessions are rows on the server, and one that has been revoked should
 stop working immediately and visibly.
 
 **Affects.** `patient/` (new application).
+
+---
+
+## 154 - The scope that refuses but does not narrow
+2026-09-04 · Backend · finding
+
+The question was whether a pharmacy in tenant A can see the data of a patient
+of hospital A in the same tenant. Rather than read the code and assert, I
+signed into the running server as `counter@manakamana.test` -- a
+`pharmacy_counter`, whose maximum scope is `Scope.FACILITY` -- sent
+`X-Facility` naming the Kathmandu pharmacy, and asked for things belonging to
+the Bhaktapur hospital and the Kathmandu clinic.
+
+Across tenants the answer is no, and it is structural: separate databases, no
+connection, nothing a missing filter can undo.
+
+Inside the tenant:
+
+| asked for | | |
+|---|---|---|
+| every patient | 200 | all 7, hospital inpatients included |
+| a named inpatient's record | 200 | demographics, identifiers, allergies |
+| search by their MRN | 200 | found |
+| prescriptions | 200 | **all 23** -- 21 written at the clinic, with names, MRNs, prescribers and drug lines |
+| invoices | 200 | **all 72** -- 28 the clinic's, with line items |
+| encounters | 403 | needs `encounter.read` |
+| diagnostic orders | 403 | needs `encounter.read` |
+| ward census | 403 | needs `encounter.read` |
+| staff records | 403 | needs `employee.read` |
+
+Two deliberate decisions meeting somewhere neither anticipated.
+
+The first is in `apps/patients/models.py` and is correct: *"Registration is per
+organization, not per facility"*, and `registered_at_facility` is documented as
+*provenance, not a restriction*. Narrowing it would give one person four MRNs
+and four allergy lists inside one hospital group, which is how somebody gets a
+drug they are allergic to.
+
+The second is that `_apply_facility_scope` **records** the facility on the
+request context and filters nothing. No queryset downstream reads it. So a
+facility-scoped role is scoped in where it may act, not in what it may see.
+
+The prescriptions result is the one that matters. Identifying a patient at a
+counter is the job; paging through every prescription written anywhere in the
+group is not.
+
+**Why nothing was changed.** Narrowing visibility touches every facility in
+every tenant, and it is not a defect with an obviously right fix -- a group
+pharmacy dispensing against a hospital prescription is a real workflow that a
+naive facility filter would break. It is queued as a decision with the shape
+of the change written down, in §129 of the checklist.
+
+**Worth recording about the method.** The checklist had carried
+`- [x] Scope filters querysets rather than only refusing` for weeks. It was
+false. Reading the RBAC module would not have caught it, because the module
+does exactly what it says; the absence was in every *other* module, which is
+the class of defect that only shows up when something outside the code asks
+the running system a question. Same lesson as the serializer audit and the
+write-then-raise scan: defects of omission are invisible to the file you would
+think to open.
+
+**Affects.** Nothing yet. `docs/IMPLEMENTATION_CHECKLIST.md` §16 and §129.
+
+---
+
+## 155 - Recounting the checklist
+2026-09-04 · Documentation · maintenance
+
+The progress table read 684 done of 1289 feature lines. The file held 1020 and
+617. Five modules had landed since anybody counted. A progress table nobody
+recounts is worse than no progress table, because it is read as current.
+
+Recounted, and three other corrections while there.
+
+**The diamond had drifted.** Its legend entry said *"architecturally provided
+for -- the seam exists, the feature does not"*, and it now sits on ICU,
+finance, insurance, blood bank, referrals and the portal, all of which are
+built and running. The mark meant one thing in the legend and another in the
+document, which makes it useless for reading. Redefined to match the usage:
+built to depth, with named lines still outstanding.
+
+**§16 went from `[x]` to `[~]`,** because entry 154 found one of its lines was
+not true. A section marked done while listing a control that does not exist is
+the most expensive kind of wrong entry: it stops anybody looking.
+
+**§16 also said twelve seeded roles.** There are fifteen.
+
+**Two absences in §94 were nowhere on the list:** a patient cannot correct
+their own address, and cannot take a copy of anything -- no result document,
+no printable invoice, no export of any kind. Both are things a patient meets
+on their first day, and neither appeared anywhere, which is how "the portal is
+done" gets said.
+
+**§95 expanded from two grouped rows to forty lines,** because it is next and
+grouped rows are not something anybody can build from. The expansion names the
+question the whole section turns on before any of it is written: whether
+employee self-service is a section of the staff console behind an `own` scope
+or a separate application the way the patient's is. They are different
+decisions -- a nurse already signs in daily and would resent a second login; a
+patient does not. And it records that `own` scope must be made to actually
+filter first, since entry 154 established that scope narrows nothing, and an
+employee reading their own payslip through a queryset that filters nothing
+reads everybody's.
+
+**Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.

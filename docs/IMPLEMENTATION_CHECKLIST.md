@@ -11,20 +11,28 @@ line here, it is not scoped.**
 | `[x]` | Built and verified against a running stack |
 | `[~]` | Section partially built — the lines below say which parts |
 | `[ ]` | Not started |
-| 🔷 | Architecturally provided for — the seam exists, the feature does not |
+| 🔷 | Built to depth and running, with named lines still outstanding |
 
 **Progress**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Done | 46 of 132 | 684 |
-| Outstanding | 86 | 605 |
+| Built `[x]` | 22 | — |
+| Built to depth 🔷 | 8 | — |
+| Partial `[~]` | 45 | — |
+| Not started `[ ]` | 48 | — |
+| **Done** | **30 of 132** | **1022** |
+| **Outstanding** | **102** | **655** |
+
+*Recounted from the file on 4 September 2026. The earlier figures (684 done of
+1289) predated five modules and had stopped matching what is written below;
+a progress table nobody recounts is worse than no progress table.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-676 understates the remaining work: in the later phases some lines group
+655 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -255,14 +263,26 @@ rather than redesigning around it.
 - [ ] Password policy enforcement and rotation
 - [ ] Failed-login alerting
 
-## §16 RBAC + ABAC `[x]`
+## §16 RBAC + ABAC `[~]`
 
 - [x] Permission catalogue declared in code
 - [x] Roles as customer-editable data
 - [x] Role inheritance
-- [x] Twelve seeded system roles
+- [x] Fifteen seeded system roles
 - [x] Seven-level scope ladder: own → own patients → unit → department → facility → multi-facility → organization
-- [x] Scope filters querysets rather than only refusing
+- [x] Scope decides whether a request is refused
+- [ ] **Scope narrows what an allowed request returns.** This line read
+      `[x]` until it was probed on 4 September 2026 and found false.
+      `X-Facility` is recorded on the request context and filters nothing;
+      no queryset reads it. A facility-scoped pharmacy counter assistant
+      was served every patient, all 23 prescriptions (21 of them written
+      at another facility, with drug lines) and all 72 invoices in the
+      organization. See §129 for the decision this is waiting on
+- [ ] **`assign_role` refuses a facility-scoped assignment with no
+      facility named.** It currently accepts one, which resolves to no
+      access at all — the user appears to hold a role and can do nothing.
+      Queued rather than done because it would invalidate assignments
+      that already exist
 - [x] Per-user permission grants
 - [x] Per-user denials that beat role grants
 - [x] Time-bounded role assignments
@@ -2089,6 +2109,26 @@ rather than redesigning around it.
 - [x] Physical tenant isolation
 - [x] Access logging on sensitive reads
 - [x] Data minimisation in audit diffs
+
+**Visibility between facilities of one tenant** — *awaiting a decision, not
+work. Narrowing this touches every facility in every tenant, so it is the
+owner's call. Probed 4 September 2026; findings are measured, not assumed.*
+- [x] The patient record is deliberately organization-wide. `Patient` has no
+      facility restriction and `registered_at_facility` is documented as
+      provenance, not a restriction — the alternative is one person holding
+      four MRNs and four allergy lists inside one hospital group
+- [x] Clinical detail is already out of reach of a counter: encounters,
+      diagnostic orders and the ward census all refuse without
+      `encounter.read`
+- [ ] **Transactional lists narrow by facility for a facility-scoped role.**
+      Prescriptions, invoices, dispenses, sales and orders currently return
+      the whole organization to anyone allowed to read them at all. An
+      organization-scoped role keeps the full view
+- [ ] **`patient.read` split into a demographic read and a clinical read.**
+      Identifying somebody at a counter and reading their record are
+      different acts and should not share one permission
+- [ ] **Prescription and invoice reads logged** the way patient retrieval
+      already is — `record_patient_access` exists and is not called on either
 - [ ] Sensitive clinical data controls
 - [ ] Consent enforcement
 - [ ] Data retention
@@ -2161,6 +2201,18 @@ rather than redesigning around it.
 - [ ] Queue position in real time
 - [ ] Telemedicine
 
+**What the patient may change or take away** — *nothing, today. Both lines
+are absent from the API as well as the screen.*
+- [ ] Correcting their own details: address, telephone, next of kin.
+      Demographics are staff-write only and there is no request-a-correction
+      flow either, so a patient who has moved house has no route at all
+- [ ] Taking a copy: a result as a document, a printable invoice, a discharge
+      summary, or the whole record. There is no export endpoint and no
+      download control anywhere in the application
+- [ ] Uploading anything — an outside report, a photograph, a scanned
+      insurance card
+- [ ] Booking, rescheduling or cancelling an appointment themselves
+
 **The patient's application**
 - [x] A separate build (`patient/`), not a section of the staff console —
       its own bundle, its own origin, its own auth store
@@ -2207,8 +2259,76 @@ rather than redesigning around it.
 - [ ] Per-facility breakdown
 
 ## §95 Employee self-service `[ ]`
-- [ ] Profile · attendance · leave · roster · shift · payslip
-- [ ] Loans · advances · claims · documents · performance · training · announcements
+
+*Next up. The data all exists — `apps/hr` and `apps/payroll` hold it — so this
+is an access surface, not a new domain. The whole of it turns on one question
+answered before the first line is written: is this a section of the staff
+console behind an `own` scope, or a separate application the way the patient's
+is? They are not the same decision. A nurse already signs in to the console
+daily and would resent a second login; a patient does not.*
+
+**The scope question, which everything below depends on**
+- [ ] `own` scope actually filters, rather than being declared and ignored.
+      This is the same defect §16 records for facility scope, and it lands
+      here first: an employee reading their own payslip through a queryset
+      that filters nothing reads everybody's
+- [ ] Whichever surface is chosen, an employee reading their own record needs
+      no HR permission — the permission model must express "mine" without
+      granting `employee.read`
+
+**My profile**
+- [ ] Read: position, department, employment type, joining date, reporting
+      line, contract
+- [ ] Propose a correction to address, telephone or next of kin — a request
+      HR approves, not a direct write, because these feed payroll and
+      statutory returns
+- [ ] Upload and replace their own documents; see which are expiring
+- [ ] Their own professional credentials with expiry, and a warning before it
+      lapses rather than after
+
+**My time**
+- [ ] Attendance for the month, with late and early-leaving flags shown as
+      the system recorded them
+- [ ] Raise a regularisation when the clock was missed, with a reason, routed
+      to their manager
+- [ ] Their roster, forward as far as it is published
+- [ ] Shift-swap request between two named people, needing both to accept and
+      the manager to approve
+
+**My leave**
+- [ ] Balance per leave type, and the ledger it was summed from — a balance
+      that cannot be explained line by line will be disputed
+- [ ] Apply, with the working days computed against the holiday calendar
+      rather than typed
+- [ ] Refused if the balance is short, or if it collides with a roster the
+      employee is already on
+- [ ] Cancel or amend a request that has not yet been approved
+- [ ] Approval status, and who it is sitting with
+- [ ] The team calendar their manager sees, so a request is not made blind
+
+**My pay**
+- [ ] Payslips for approved runs only — a draft run is not a payslip
+- [ ] Line-by-line earnings, deductions and employer contributions
+- [ ] Year-to-date, and the tax computation that produced the deduction
+- [ ] Statutory statements: PF, CIT, SSF
+- [ ] A payslip as a document to keep. This is the first genuine export in
+      the system and settles the pattern for §129's export authorisation
+- [ ] Bank account on file, changed by request rather than directly
+
+**My manager's side**
+- [ ] One queue holding every request from the team — leave, regularisation,
+      swap, correction — rather than four screens
+- [ ] Approve or refuse with a reason the requester sees
+- [ ] Who is away when, before deciding
+
+**Deferred, and named so they are not forgotten**
+- [ ] Loans and advances against salary
+- [ ] Expense claims and reimbursement (§70)
+- [ ] Performance reviews (§118)
+- [ ] Training records (§119)
+- [ ] Announcements and acknowledgements
+- [ ] Grievances and disciplinary records, which need a confidentiality model
+      of their own before they go anywhere near self-service
 
 ## §96 My workspace `[~]`
 - [x] Doctor worklist — open encounters, triage-ordered
