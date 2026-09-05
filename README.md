@@ -79,6 +79,10 @@ facility, and grows into a chain without restructuring anything.
 
 ## Running it
 
+> **[docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md)** walks through the same
+> steps and then shows what to look at as each role — which accounts exist,
+> what each one can and cannot reach, and how to turn the access controls on.
+
 **Requirements:** Docker, Python 3.12+, Node 20+.
 
 ```bash
@@ -113,6 +117,7 @@ cp .env.example .env
 # the real tenant database rather than a throwaway one, because every defect
 # it exists to catch is a disagreement between two layers that a mock removes.
 .venv/Scripts/python.exe -m pytest -q            # 55 tests, ~45s
+
 .venv/Scripts/python.exe -m pytest -q -m "not seeds"   # skip the slow half
 
 # 3. Frontend
