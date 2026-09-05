@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import apply_scope_filter, HasPermission, get_authorization
 from apps.organization.models import Facility
 from apps.patients.models import Patient
 from apps.pharmacy.models import (
@@ -297,6 +297,18 @@ class DispenseViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 prescription_uuid=self.request.query_params["prescription"]
             )
+        # A dispensing record is the branch's own -- who handed what over at
+        # this counter. Note the asymmetry with prescriptions, which are
+        # deliberately *not* filtered this way: a prescription may be
+        # presented at any pharmacy, and the patient presenting it is the care
+        # relationship. See ACCESS_DESIGN.md.
+        # Filtered on the permission the endpoint actually gates reads with.
+        # The first version passed `prescription.dispense`, which a counter
+        # assistant does not hold -- so `apply_scope_filter` correctly denied
+        # everything and the counter saw none of its own dispensings. The
+        # scope filter and the permission check have to name the same
+        # permission, or the filter is answering a question nobody asked.
+        queryset = apply_scope_filter(queryset, self.request, "stock.read")
         return queryset.order_by("-created_at")
 
     def create(self, request, *args, **kwargs):

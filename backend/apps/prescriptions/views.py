@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.patients.services import record_patient_access
 
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
@@ -46,6 +47,22 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     )
     ordering_fields = ["prescribed_at"]
     http_method_names = ["get", "post", "head", "options"]
+
+    def retrieve(self, request, *args, **kwargs):
+        """Log the read.
+
+        ACCESS_DESIGN.md: where access cannot be narrowed, it must be
+        recorded. Patient retrieval has always written an access record;
+        prescriptions did not -- and what somebody is being treated for is
+        usually legible from what they have been prescribed.
+        """
+        instance = self.get_object()
+        if instance.patient_id:
+            record_patient_access(
+                instance.patient,
+                reason=f"Prescription {instance.reference}",
+            )
+        return Response(self.get_serializer(instance).data)
 
     def get_queryset(self):
         queryset = Prescription.objects.select_related(

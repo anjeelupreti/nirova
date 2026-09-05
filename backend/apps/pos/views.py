@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import apply_scope_filter, HasPermission, get_authorization
 from apps.organization.models import Facility
 from apps.patients.models import Patient
 from apps.pharmacy.models import Batch, Product, StockLocation
@@ -66,6 +66,10 @@ class CounterSessionViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = CounterSession.objects.select_related("facility", "location")
         if self.request.query_params.get("mine") == "true":
             queryset = queryset.filter(cashier_id=self.request.user.uuid)
+        # A till belongs to a counter. Whose float was short at which branch is
+        # a question for that branch and for the organization, not for another
+        # branch's assistant.
+        queryset = apply_scope_filter(queryset, self.request, "till.open")
         return queryset.order_by("-opened_at")
 
     @action(detail=False, methods=["get"], url_path="active")
@@ -180,10 +184,15 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["sold_at", "total"]
 
     def get_queryset(self):
-        return (
+        # A branch's own trading record. ACCESS_DESIGN.md: business records
+        # carry no clinical safety argument, so unlike prescriptions they
+        # narrow to the facility a facility-scoped role stands in.
+        return apply_scope_filter(
             Sale.objects.select_related("session", "facility", "patient")
             .prefetch_related("lines__product", "lines__batch")
-            .order_by("-sold_at")
+            .order_by("-sold_at"),
+            self.request,
+            "sale.read",
         )
 
     def create(self, request, *args, **kwargs):

@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1108** |
-| **Outstanding** | **100** | **634** |
+| **Done** | **32 of 132** | **1111** |
+| **Outstanding** | **100** | **632** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-634 understates the remaining work: in the later phases some lines group
+632 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2170,9 +2170,13 @@ September; findings measured, not assumed.*
 - [x] `pharmacist` and `pharmacy_counter` hold `patient.safety.read`, which is
       what makes restricting the rest safe
 - [x] `assign_role` refuses a narrow scope naming no facility or department
-- [ ] Facility-filter the **business** lists — invoices, sales, dispenses,
-      till sessions, stock. No clinical safety argument applies to these
-- [ ] Prescription and invoice reads logged through `record_patient_access`
+- [x] Facility-filter the **business** lists — invoices, sales, dispensings,
+      till sessions. No clinical safety argument applies to these, and
+      organization-scoped roles keep the whole view
+- [x] Prescriptions deliberately **not** filtered this way, with a test
+      asserting it, so nobody tidies it later. A prescription may be presented
+      at any pharmacy; Phase 2 narrows it by relationship instead
+- [x] Prescription and invoice reads logged through `record_patient_access`
 
 **Phase 2 — relationship and break-glass**
 - [ ] `has_care_relationship(user, patient)` computed from admissions,

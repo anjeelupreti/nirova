@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.patients.services import record_patient_access
 
 from apps.billing.models import (
     Charge,
@@ -40,7 +41,11 @@ from apps.billing.services import (
     resolve_price,
 )
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import (
+    apply_scope_filter,
+    HasPermission,
+    get_authorization,
+)
 from apps.encounters.models import Encounter
 from apps.organization.models import Facility
 from apps.patients.models import Patient
@@ -204,6 +209,22 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     ordering_fields = ["issued_at", "total"]
     http_method_names = ["get", "post", "head", "options"]
 
+    def retrieve(self, request, *args, **kwargs):
+        """Log the read.
+
+        ACCESS_DESIGN.md: where access cannot be narrowed, it must be
+        recorded. Patient retrieval has always written an access record;
+        invoices did not -- and an itemised bill names every procedure and
+        every test somebody had.
+        """
+        instance = self.get_object()
+        if instance.patient_id:
+            record_patient_access(
+                instance.patient,
+                reason=f"Invoice {instance.number}",
+            )
+        return Response(self.get_serializer(instance).data)
+
     def get_queryset(self):
         queryset = Invoice.objects.select_related(
             "patient", "facility", "encounter", "credited_by"
@@ -213,6 +234,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(patient__uuid=params["patient"])
         if params.get("unpaid") == "true":
             queryset = queryset.filter(status__in=["issued", "partially_paid"])
+        # An invoice is a facility's own business record. A counter assistant
+        # at one branch has no reason to page through another branch's
+        # takings, and unlike clinical data there is no safety argument for
+        # letting them -- see ACCESS_DESIGN.md. Organization-scoped roles
+        # (accountant, auditor, owner) keep the whole view.
+        queryset = apply_scope_filter(queryset, self.request, "invoice.read")
         return queryset.order_by("-created_at")
 
     def create(self, request, *args, **kwargs):

@@ -5549,3 +5549,56 @@ Still outstanding in Phase 1: facility-filtering the business lists, and
 logging prescription and invoice reads.
 
 **Affects.** `apps/rbac/permissions.py`, `apps/rbac/services.py`.
+
+---
+
+## 172 - Phase 1 finished: the business records, and a filter that denied everything
+2026-09-05 · Backend · feature, bug
+
+The rest of Phase 1 of `ACCESS_DESIGN.md`.
+
+**Business lists narrow to the facility.** Invoices, counter sales, till
+sessions and dispensings now pass through `apply_scope_filter`. These are a
+branch's own trading records; unlike clinical data there is no safety argument
+for a counter assistant at one branch paging through another branch's takings.
+Organization-scoped roles -- accountant, auditor, owner -- keep the whole view.
+
+**Prescriptions are deliberately *not* filtered this way,** and there is now a
+test asserting that they are not, so nobody tidies it later. A prescription may
+be presented at any pharmacy; `Prescription.facility` records where it was
+*written*. Narrowing that list by facility would break group dispensing, which
+is a real workflow. Phase 2 narrows it by care relationship instead and keeps
+lookup by reference open.
+
+**Prescription and invoice reads are logged** through `record_patient_access`,
+which patient retrieval has always used and these never did. What somebody is
+being treated for is usually legible from what they have been prescribed, and
+an itemised bill names every procedure and every test they had.
+
+**And the first version of the dispensing filter denied everything.** It passed
+`prescription.dispense` to `apply_scope_filter`, which a counter assistant does
+not hold -- so the filter correctly returned nothing and the counter could not
+see its own dispensings. The endpoint gates reads on `stock.read`. **The scope
+filter and the permission check have to name the same permission**, or the
+filter is answering a question nobody asked, and it fails closed in a way that
+looks like an empty list rather than an error.
+
+Found by measuring rather than by reading, and worth recording how: a count on
+its own says nothing. 88 invoices is correct or wrong depending entirely on how
+many exist. The probe prints what is in the database, what belongs to the
+pharmacy, what the counter sees and what the owner sees, side by side --
+
+    | in db | at pharmacy | counter | owner
+    invoices        160          88        88     160
+    sales            45          45        45      45
+    dispensings      44          44        44      44
+    prescriptions    60           -        60      60
+
+-- and the wrong number is obvious in a way that `dispensings: 0` on its own
+was not. The test asserts against the database counts for the same reason.
+
+The `prescriptions 60/60` row is the design, not a gap: browse-narrowing is
+Phase 2.
+
+**Affects.** `apps/billing/views.py`, `apps/pos/views.py`,
+`apps/pharmacy/views.py`, `apps/prescriptions/views.py`, `tests/`.

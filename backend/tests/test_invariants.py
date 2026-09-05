@@ -291,3 +291,64 @@ def test_a_scope_that_reaches_nothing_cannot_be_assigned(tenant):
             user=user, role_code="pharmacy_counter",
             scope=Scope.FACILITY, reason="test",
         )
+
+
+def test_business_lists_narrow_to_the_facility(tenant):
+    """ACCESS_DESIGN.md Phase 1. Invoices, sales, dispensings and till
+    sessions are a facility's own business records; unlike clinical data there
+    is no safety argument for a counter assistant at one branch paging through
+    another branch's takings.
+
+    Asserted against the database rather than a fixed number, because a count
+    on its own says nothing -- 88 rows is correct or wrong depending entirely
+    on how many exist.
+    """
+    import types
+
+    from apps.billing.models import Invoice
+    from apps.common.permissions import apply_scope_filter
+    from apps.organization.models import Facility
+    from apps.rbac.permissions import Scope
+    from apps.rbac.services import UserAuthorization, _merge
+
+    pharmacy = Facility.objects.filter(facility_type="pharmacy").first()
+    if pharmacy is None:
+        pytest.skip("no pharmacy facility; run seed_demo")
+
+    total = Invoice.objects.count()
+    at_pharmacy = Invoice.objects.filter(facility=pharmacy).count()
+    if total == at_pharmacy:
+        pytest.skip("every invoice is at the pharmacy; nothing to distinguish")
+
+    auth = UserAuthorization(user_id="test", organization_id=tenant.id)
+    _merge(auth, "invoice.read", Scope.FACILITY, "test",
+           facility_ids={pharmacy.id})
+    request = types.SimpleNamespace(_authorization=auth, user=None)
+
+    got = apply_scope_filter(
+        Invoice.objects.all(), request, "invoice.read",
+    ).count()
+    assert got == at_pharmacy, (
+        f"a facility-scoped role saw {got} invoices; {at_pharmacy} belong to "
+        f"its facility and {total} exist in the tenant"
+    )
+
+
+def test_prescriptions_are_deliberately_not_facility_filtered(tenant):
+    """The asymmetry, asserted so nobody 'fixes' it later.
+
+    A prescription may be presented at any pharmacy -- that is what a
+    prescription is -- and `Prescription.facility` records where it was
+    *written*. Narrowing the prescription list by facility would break group
+    dispensing, which is a real workflow. Phase 2 narrows it by *care
+    relationship* instead, and keeps lookup by reference open: the patient
+    handing over the number is the relationship and is the consent.
+    """
+    from apps.prescriptions.views import PrescriptionViewSet
+    import inspect
+
+    source = inspect.getsource(PrescriptionViewSet.get_queryset)
+    assert "apply_scope_filter" not in source, (
+        "the prescription list has been facility-filtered; see "
+        "ACCESS_DESIGN.md for why that breaks group dispensing"
+    )
