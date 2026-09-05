@@ -24,6 +24,7 @@ from apps.hr.views import (
     CredentialViewSet,
     EmployeeViewSet,
     HrDashboardView,
+    LoginCoverageView,
     PositionViewSet,
 )
 
@@ -46,6 +47,7 @@ router.register("shift-swaps", ShiftSwapViewSet, basename="shift-swap")
 urlpatterns = [
     # Before the router, so "dashboard" and "me" are not read as an employee code.
     path("dashboard/", HrDashboardView.as_view(), name="hr-dashboard"),
+    path("logins/", LoginCoverageView.as_view(), name="hr-login-coverage"),
     path("me/summary/", ESSMeSummaryView.as_view(), name="ess-me-summary"),
     path("manager-queue/", ManagerQueueView.as_view(), name="ess-manager-queue"),
     path("leave-balance/", LeaveBalanceView.as_view(), name="leave-balance"),

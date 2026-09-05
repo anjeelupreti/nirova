@@ -56,6 +56,9 @@ from apps.hr.services import (
     current_contract,
     expiring_contracts,
     expiring_credentials,
+    # give_login / unlinked_employees: creating an employee and creating their
+    # login are two acts, and nothing used to insist on the second.
+    give_login,
     headcount,
     hire,
     issue_contract,
@@ -64,6 +67,7 @@ from apps.hr.services import (
     separate,
     separations,
     suspend,
+    unlinked_employees,
     team_of,
     transfer,
     verify_credential,
@@ -539,4 +543,64 @@ class HrDashboardView(APIView):
                 ),
                 "separations": separations(facility),
             }
+        )
+
+
+class LoginCoverageView(APIView):
+    """How many active staff can actually sign in, and who cannot.
+
+    Its own endpoint rather than a field on the dashboard, because the number
+    is the point. Employee self-service, every notification addressed to a
+    member of staff, and `Scope.OWN` filtering all resolve through
+    `Employee.user_id`; when it is null those features are not broken, they
+    simply reach nobody. That is the kind of absence that stays invisible for
+    a year unless something counts it.
+    """
+
+    permission_classes = [IsAuthenticated, HasPermission.of("employee.read")]
+
+    def get(self, request):
+        facility = None
+        if request.query_params.get("facility"):
+            facility = get_object_or_404(
+                Facility, uuid=request.query_params["facility"]
+            )
+        return Response(unlinked_employees(facility))
+
+    def post(self, request):
+        """Give one employee a login. Needs the authority to hire, not to read.
+
+        Creating an account that can reach a medical record is closer to
+        hiring somebody than to editing their telephone number, so it is gated
+        on `employee.hire` rather than `employee.manage`.
+        """
+        authorization = get_authorization(request)
+        authorization.require("employee.hire", scope=Scope.FACILITY)
+
+        employee = get_object_or_404(
+            Employee, uuid=request.data.get("employee")
+        )
+        result = give_login(
+            employee,
+            request.organization,
+            email=request.data.get("email", ""),
+            actor=request.user,
+        )
+        return Response(
+            {
+                "employee": employee.full_name,
+                "employee_code": employee.employee_code,
+                "email": result["email"],
+                "user_created": result["user_created"],
+                # Said explicitly in the response, because the screen has to
+                # tell somebody the account cannot be used yet. An account
+                # created silently without a password looks like a failure.
+                "password_set": result["password_set"],
+                "role": result["role"],
+                "next_step": (
+                    "The account has no password yet. They set one through the "
+                    "ordinary sign-in route."
+                ),
+            },
+            status=status.HTTP_201_CREATED,
         )

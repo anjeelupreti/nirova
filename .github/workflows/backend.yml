@@ -1,0 +1,120 @@
+# Backend checks.
+#
+# The suite is not hermetic and that is deliberate: this project is
+# database-per-tenant, so a tenant's schema lives in its own database, is
+# registered at runtime, and is reached through a router that reads a context
+# variable. Reproducing that against a throwaway test database means
+# reimplementing provisioning inside the harness, and a harness that
+# reimplements the thing it is testing does not test it.
+#
+# So CI provisions a real tenant the same way a developer does, then runs the
+# tests against it. Everything below the `seed` step is exactly the sequence in
+# the README.
+
+name: backend
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nirova
+          POSTGRES_PASSWORD: nirova
+          POSTGRES_DB: nirova
+        ports: ["5432:5432"]
+        # Without the health check the first migration races the server's
+        # startup and fails perhaps one run in five, which is worse than
+        # failing every time.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_SECRET_KEY: ci-only-not-a-real-key-0123456789abcdef
+      DATABASE_URL: postgres://nirova:nirova@localhost:5432/nirova
+      REDIS_URL: redis://localhost:6379/0
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: System check
+        run: python manage.py check
+
+      - name: Control plane
+        run: |
+          python manage.py migrate
+          python manage.py seed_catalog
+
+      # Provisions the tenant database and registers its connection. Everything
+      # after this point needs it to exist.
+      - name: Provision a tenant
+        run: python manage.py seed_demo
+
+      - name: Baseline data the seeds build on
+        run: |
+          python manage.py seed_hr_demo
+          python manage.py seed_clinical_demo
+
+      # Runs every seed twice and the invariants from the development log.
+      # Six defects were found by running the seeds a second time by hand;
+      # this is that, automated.
+      - name: Tests
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      # Both applications, because they are separate builds with separate
+      # dependency trees and one can break while the other compiles.
+      matrix:
+        app: [frontend, patient]
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build

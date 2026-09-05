@@ -1002,3 +1002,164 @@ def cancel_profile_correction(
     correction.decided_at = timezone.now()
     correction.save(update_fields=["status", "decision_notes", "decided_at"])
     return correction
+
+
+# ---------------------------------------------------------------------------
+# The link between an employee and a login
+# ---------------------------------------------------------------------------
+
+
+def unlinked_employees(facility=None) -> dict:
+    """Active employees who cannot sign in, and what that costs.
+
+    Written because the gap was invisible. Employee self-service, every
+    notification addressed to a member of staff, and `Scope.OWN` filtering all
+    resolve through `Employee.user_id`, and in the demo tenant three of five
+    active employees had nothing on the other end of it. None of those features
+    was broken; they simply reached nobody, and nothing anywhere said so.
+
+    A number is the fix for that. An absence that can be counted gets chased;
+    one that cannot be counted gets discovered by a nurse asking why she never
+    sees her payslip.
+    """
+    queryset = Employee.objects.filter(status=EmployeeStatus.ACTIVE)
+    if facility is not None:
+        queryset = queryset.filter(facility=facility)
+
+    total = queryset.count()
+    unlinked = list(
+        queryset.filter(user_id__isnull=True)
+        .select_related("facility", "position")
+        .order_by("facility__code", "first_name")
+    )
+    return {
+        "active": total,
+        "linked": total - len(unlinked),
+        "unlinked": len(unlinked),
+        # Rounded for display but computed from the real counts, because a
+        # percentage nobody can reconstruct is a percentage nobody trusts.
+        "coverage_percent": round((total - len(unlinked)) / total * 100, 1)
+        if total else 0.0,
+        "employees": [
+            {
+                "uuid": str(e.uuid),
+                "employee_code": e.employee_code,
+                "full_name": e.full_name,
+                "facility": e.facility.name if e.facility else "",
+                "position": str(e.position) if e.position else "",
+                "email": e.work_email or e.personal_email or "",
+            }
+            for e in unlinked
+        ],
+    }
+
+
+@tenant_atomic_method
+def give_login(
+    employee: Employee,
+    organization,
+    email: str = "",
+    actor=None,
+    role_code: str = "staff",
+) -> dict:
+    """Give an employee a login, or attach the one they already have.
+
+    The operation that was missing. `hire()` has always accepted a `user_id`,
+    but nothing offered to produce one, so the ordinary path created an
+    employee record that no feature addressed to a person could ever reach.
+
+    Three decisions.
+
+    **The user and the membership live in the control plane; the employee lives
+    in the tenant.** They are different databases, so this cannot be one
+    transaction. The tenant half is wrapped; the control-plane half is not, and
+    is done first -- so a failure leaves a user with no employee link, which is
+    recoverable by running this again, rather than an employee pointing at a
+    user that does not exist, which is not.
+
+    **An existing user with that email is reused, not duplicated.** People are
+    rehired, and move between facilities in the same group. A second account
+    for the same person is how somebody keeps access after they leave.
+
+    **No password is set here.** The account is created without one, and cannot
+    be signed into until it is set through the ordinary route. Generating a
+    password and handing it to whoever pressed the button is how shared
+    credentials start.
+    """
+    from apps.identity.models import Membership, MembershipStatus, User
+    from apps.rbac.models import Role
+    from apps.rbac.services import assign_role
+    from apps.tenancy.db import control_plane_atomic
+
+    if employee.user_id:
+        raise HrError(
+            f"{employee.full_name} already has a login.",
+            detail={"employee": employee.employee_code},
+        )
+
+    address = (email or employee.work_email or employee.personal_email or "").strip()
+    if not address:
+        raise HrError(
+            "This employee has no email address on file, so there is nothing "
+            "to create a login against. Add one first, or pass an address.",
+            detail={"employee": employee.employee_code},
+        )
+    address = address.lower()
+
+    with control_plane_atomic():
+        user, created = User.objects.get_or_create(
+            email=address, defaults={"full_name": employee.full_name},
+        )
+        if created:
+            # Unusable until set through the ordinary route. A password
+            # generated here would have to be delivered somehow, and every way
+            # of delivering it is worse than not having one.
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+
+        membership, _ = Membership.objects.update_or_create(
+            user=user, organization=organization,
+            defaults={
+                "status": MembershipStatus.ACTIVE,
+                "joined_at": timezone.now(),
+            },
+        )
+
+    # Uniqueness is enforced by a constraint as well, but catching it here
+    # gives a sentence rather than an IntegrityError.
+    clash = Employee.objects.filter(user_id=user.uuid).exclude(pk=employee.pk).first()
+    if clash is not None:
+        raise HrError(
+            f"That login already belongs to {clash.full_name} "
+            f"({clash.employee_code}).",
+            detail={"employee": clash.employee_code},
+        )
+
+    employee.user_id = user.uuid
+    employee.save(update_fields=["user_id", "updated_at"])
+
+    # The base role, so the login can reach their own record and nothing else.
+    # Without it the account exists and every screen refuses it, which reads
+    # as a broken system rather than as an unfinished setup.
+    role = Role.objects.filter(code=role_code, is_active=True).first()
+    if role is not None:
+        assign_role(
+            user=user, role_code=role.code, scope=role.max_scope,
+            facility=employee.facility, assigned_by=actor,
+            reason="Base access on being given a login.",
+        )
+
+    record(
+        AuditAction.CREATE,
+        entity_type="hr.Employee",
+        entity_id=employee.uuid,
+        entity_label=f"Login for {employee.full_name} ({employee.employee_code})",
+        metadata={"email": address, "user_created": created, "role": role_code},
+    )
+    return {
+        "employee": employee,
+        "email": address,
+        "user_created": created,
+        "password_set": False,
+        "role": role.code if role else "",
+    }

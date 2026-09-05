@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1091** |
-| **Outstanding** | **100** | **622** |
+| **Done** | **32 of 132** | **1103** |
+| **Outstanding** | **100** | **627** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-622 understates the remaining work: in the later phases some lines group
+627 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -1362,13 +1362,27 @@ rather than redesigning around it.
 
 ## §62 Employee onboarding `[~]`
 
-> **Finding, 5 September 2026.** Creating an employee and creating their login
-> are two separate acts, and nothing insists on the second. Measured in the
-> demo tenant: **five active employees, two linked to a login.** Everything
-> built on `Employee.user_id` — self-service (§95), every employee-addressed
-> notification, `Scope.OWN` filtering — is inert for the rest. The features
-> are not wrong; they reach nobody, and nothing anywhere says so.
-- [ ] Creating an employee offers, or requires, creating their login
+> **Finding, 5 September 2026, now addressed.** Creating an employee and
+> creating their login were two separate acts and nothing insisted on the
+> second. Measured in the demo tenant: five active employees, two linked to a
+> login. Everything built on `Employee.user_id` — self-service (§95), every
+> employee-addressed notification, `Scope.OWN` filtering — was inert for the
+> rest. The features were not wrong; they reached nobody, and nothing said so.
+- [x] `give_login()` creates or attaches the account, adds the membership and
+      the base `staff` role, and refuses a second login for the same person
+- [x] No password is set: the account is unusable until one is set through the
+      ordinary route, because generating one here means delivering it somehow
+      and every way of delivering it is worse
+- [x] An existing account for that email is reused, never duplicated — people
+      are rehired and move between facilities in one group
+- [x] Gated on `employee.hire`, not `employee.manage`. Creating an account that
+      can reach a medical record is closer to hiring than to correcting a phone
+      number
+- [x] `GET /api/hr/logins/` counts it: active staff, how many can sign in, who
+      cannot. An absence that can be counted gets chased
+- [ ] Offered at the point of hiring, rather than only afterwards
+- [ ] Invitation email, so the account can be used without an administrator
+      setting the password
 
 - [x] Employee record creation
 - [x] Position and facility assignment
@@ -2588,6 +2602,34 @@ because three modules were already working around its absence.*
 - [ ] Tickets · priority · SLA · category · agent · escalation
 - [ ] Internal notes · customer response · attachments · resolution
 - [ ] Knowledge base · training
+
+---
+
+# Testing and CI `[~]`
+
+*Added 5 September 2026. There were no tests at all until then — the seeds
+were the whole verification mechanism, which worked only because somebody
+remembered to run them twice by hand.*
+
+- [x] `pytest` + `pytest-django`, 55 tests, 45 seconds
+- [x] Every seed run twice, in dependency order, as separate parametrised
+      tests — so a failure says whether it never worked or only worked once
+- [x] One invariant test per numbered development-log entry. That is the
+      selection rule: a record of what has actually broken, not an attempt at
+      coverage
+- [x] `makemigrations --check`, which would have caught log 156 on the day
+- [x] Deliberately not hermetic: the suite drives the real router, the real
+      migrations and the real constraints, because every defect it exists to
+      catch is a disagreement between two layers that a mock removes
+- [x] GitHub Actions: the same sequence a developer runs, plus a type check
+      and a real build of both frontends
+- [x] `patient/` lockfile generated — `npm ci` would have failed there and its
+      builds were never reproducible
+- [ ] Coverage measurement
+- [ ] A hermetic unit layer for the pure calculations (NEWS2, tax slabs,
+      ageing buckets) that needs no database
+- [ ] Frontend tests beyond the type check
+- [ ] Load and concurrency tests on the tenant router
 
 ---
 

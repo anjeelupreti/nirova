@@ -109,6 +109,12 @@ cp .env.example .env
 .venv/Scripts/python.exe manage.py seed_emergency_demo   # a shift in the department
 .venv/Scripts/python.exe manage.py runserver
 
+# Tests. Needs the stack above running: the suite drives the real router and
+# the real tenant database rather than a throwaway one, because every defect
+# it exists to catch is a disagreement between two layers that a mock removes.
+.venv/Scripts/python.exe -m pytest -q            # 55 tests, ~45s
+.venv/Scripts/python.exe -m pytest -q -m "not seeds"   # skip the slow half
+
 # 3. Frontend
 cd ../frontend
 npm install

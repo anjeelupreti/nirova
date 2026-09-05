@@ -10,3 +10,9 @@ celery==5.4.0
 redis==5.2.1
 argon2-cffi==23.1.0
 python-dateutil==2.9.0.post0
+
+# Testing. The seeds are this project's verification mechanism -- they run the
+# real service layer and narrate what they expect -- so the test suite mostly
+# drives them rather than replacing them.
+pytest==9.1.1
+pytest-django==4.14.0

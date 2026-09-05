@@ -5304,3 +5304,119 @@ Recorded against §62 employee onboarding: creating the employee and creating
 their login are currently two acts, and nothing insists on the second.
 
 **Affects.** `apps/hr/attendance.py`.
+
+---
+
+## 167 - The link that was optional, and everything built on it
+2026-09-05 · Backend · feature
+
+Entry 166 found that three of five active employees had no login, and that
+employee self-service, every employee-addressed notification and `Scope.OWN`
+filtering all resolve through `Employee.user_id`. None of those features was
+broken. They reached nobody, and nothing anywhere said so.
+
+Two things fix that, and the second matters more than the first.
+
+**`give_login(employee, organization, email)`** -- the operation that was
+missing. `hire()` has always accepted a `user_id`, but nothing offered to
+produce one, so the ordinary path created an employee record that no feature
+addressed to a person could ever reach.
+
+Three decisions inside it.
+
+*The user and membership live in the control plane; the employee lives in the
+tenant.* Different databases, so this cannot be one transaction. The
+control-plane half is done first and left unwrapped, so a failure leaves a user
+with no employee link -- recoverable by running it again -- rather than an
+employee pointing at a user that does not exist, which is not.
+
+*An existing account for that email is reused, never duplicated.* People are
+rehired and move between facilities in one group. A second account for the same
+person is how somebody keeps access after they leave.
+
+*No password is set.* The account is created unusable and cannot be signed into
+until a password is set through the ordinary route. Generating one and handing
+it to whoever pressed the button is how shared credentials start. The API says
+so in the response, because an account created silently without a password
+looks like a failure.
+
+**`GET /api/hr/logins/`** -- the number. Active staff, how many can sign in,
+who cannot, and the coverage percentage. Its own endpoint rather than a field
+on the dashboard, because the number *is* the point: an absence that can be
+counted gets chased, and one that cannot gets discovered by a nurse asking why
+she has never seen a payslip.
+
+Coverage in the demo tenant went from 40% to 100%, and the leave-decision
+notification that had been raising zero now reaches the applicant. That was the
+test: the wiring was correct all along and had nothing on the other end.
+
+Creating the login is gated on `employee.hire` rather than `employee.manage`.
+Creating an account that can reach a medical record is closer to hiring
+somebody than to correcting their telephone number.
+
+**Affects.** `apps/hr/services.py`, `apps/hr/views.py`, `apps/hr/urls.py`.
+
+---
+
+## 168 - A test suite, finally, and what it is for
+2026-09-05 · Tooling · feature
+
+There were no tests. Not few -- none: no pytest configuration, no test file, no
+CI. The seeds were the entire verification mechanism, which worked, but only
+because somebody remembered to run them twice by hand.
+
+The record justifies the shape of what has been added. Across three sessions,
+running the suite a second time found:
+
+* a table missing two columns its model declared, so a feature with a model,
+  four service functions, an API and two user interfaces could not store a row;
+* a partial unique constraint that disagreed with its own manager, silently
+  killing every future notification under a dedupe key;
+* four seeds that only worked once, one of which had been failing every
+  Saturday since it was written.
+
+Not one of those would have been caught by a unit test, because each was a
+disagreement between two layers that a mock removes.
+
+So `tests/` drives the real thing:
+
+**`test_seeds.py`** runs all twenty-one seeds in dependency order, then runs
+them all again. The two passes are separate parametrised tests rather than a
+loop, so a failure says which half broke -- "works once, fails twice" and
+"never worked" are different bugs.
+
+**`test_invariants.py`** guards the defects that have actually occurred, one
+test per numbered log entry. That is the selection rule; it is not an attempt
+at coverage. Scope filtering denies on an empty facility set (157). A
+soft-deleted notification does not block its dedupe key (161). A critical
+notification cannot be dismissed without a note, and no preference can silence
+one (160). Generated patient documents escape what they interpolate (158).
+`holders_of` agrees with `resolve_authorization` in both directions (164).
+
+**`test_migrations.py`** is `makemigrations --check`. One second, and it would
+have caught entry 156 on the day.
+
+**The suite is not hermetic, deliberately.** `pytest-django` would normally
+create a throwaway test database, but this project is database-per-tenant: a
+tenant's schema lives in its own database, is registered at runtime, and is
+reached through a router reading a context variable. Reproducing that in the
+harness means reimplementing provisioning inside it, and a harness that
+reimplements the thing it is testing does not test it. So `django_db_setup` is
+overridden to use the running development stack, and every test is marked
+`databases="__all__"` -- necessary because the tenant alias is registered at
+runtime and cannot be enumerated at import time. The cost is that the suite
+needs `docker compose up`. The benefit is that it exercises the router, the
+migrations and the constraints exactly as the application does.
+
+Fifty-five tests, forty-five seconds.
+
+CI runs the same sequence a developer runs -- migrate, seed the catalogue,
+provision a tenant, then pytest -- plus a type check and a real build of both
+frontends, because they are separate builds with separate dependency trees and
+one can break while the other compiles.
+
+`patient/` had no lockfile, so `npm ci` would have failed there and its builds
+were never reproducible. Generated and committed.
+
+**Affects.** `backend/pytest.ini`, `backend/tests/`, `backend/requirements.txt`,
+`.github/workflows/backend.yml`, `patient/package-lock.json`.
