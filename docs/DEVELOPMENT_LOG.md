@@ -6413,3 +6413,42 @@ mean rewriting audit rows, which is worse than a transitional gap.
 
 **Affects.** `apps/audit/access_reports.py`, `apps/common/permissions.py`,
 `apps/rbac/privacy_api.py`, `apps/rbac/urls.py`, `apps/portal/api.py`.
+
+---
+
+## 190 - The screens for Phase 3
+2026-09-06 · Frontend · feature
+
+Both reports had an API and nowhere to read them, which for this phase in
+particular is not a small gap: **a log nobody reads is the failure mode the
+whole phase exists to fix.** Two screens, and the interesting decisions are
+about restraint rather than display.
+
+**"Who saw my record", in the patient application.** A tile like any other,
+last in the list, because it is not something anybody opens daily -- but
+present, because *a right nobody can find is not a right.*
+
+Staff are named. The note explaining that somebody treating you reads your
+record constantly sits **above** the list rather than below it: a screen that
+presents forty entries with no context invites a complaint about the forty
+rather than about the one that matters. Every row carries the reason the system
+recorded at the time, because who and when without why is what produces a
+telephone call.
+
+**The access-pattern panels, on the privacy screen.** Both show the server's
+hedge **verbatim and above the list**, so that somebody scrolling straight to
+the names has read the caveat first.
+
+**Neither list is actionable from the screen, deliberately.** No "clear", no
+"mark reviewed". These are prompts to go and ask somebody, not a queue to be
+emptied -- and a button would turn them into one. The break-glass queue above
+has buttons because those rows genuinely are individually reviewable; these are
+not, and giving them the same affordance would teach whoever reads this page
+that all three lists work the same way.
+
+Outliers are shaded rather than sorted to the top: the table is a ranking
+already, and moving rows around would hide the shape of the distribution, which
+is the thing that tells you whether an outlier is really an outlier.
+
+**Affects.** `patient/src/App.tsx`, `frontend/src/pages/Privacy.tsx`,
+`frontend/src/types/index.ts`.

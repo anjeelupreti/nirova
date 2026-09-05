@@ -4717,3 +4717,47 @@ export interface BreakGlassQueue {
   by_outcome: Record<string, number>;
   grants: Array<Record<string, unknown>>;
 }
+
+/* -------------------------------------------------------------------------
+ * Access-pattern reporting (ACCESS_DESIGN.md Phase 3)
+ *
+ * Both reports carry their own hedge in a `note`. That is deliberate: the
+ * person reading them on a Monday has to decide what they mean, and a report
+ * that overstates its case is dismissed wholesale after the first false
+ * positive. The screen shows the note, it does not summarise it away.
+ * ---------------------------------------------------------------------- */
+
+export interface UnrelatedRead {
+  at: string;
+  who: string;
+  role: string;
+  patient: string;
+  reason: string;
+}
+
+export interface ReaderVolume {
+  who: string;
+  role: string;
+  reads: number;
+  role_median: number;
+  /** 2.5x the median for the same role, and at least twenty reads. */
+  is_outlier: boolean;
+}
+
+export interface AccessPatterns {
+  unrelated_reads: {
+    window_days: number;
+    reads_checked: number;
+    without_a_relationship: number;
+    /** The number to read. Forty means one thing against fifty and another against four thousand. */
+    percent: number;
+    note: string;
+    reads: UnrelatedRead[];
+  };
+  read_volume: {
+    window_days: number;
+    people: ReaderVolume[];
+    outliers: ReaderVolume[];
+    note: string;
+  };
+}

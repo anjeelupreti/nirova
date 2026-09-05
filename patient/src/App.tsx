@@ -31,6 +31,7 @@ import {
   Printer,
   Receipt,
   Send,
+  Eye,
   ShieldCheck,
   Smartphone,
   UserCog,
@@ -77,7 +78,22 @@ type Screen =
   | "referrals"
   | "messages"
   | "sessions"
-  | "profile";
+  | "profile"
+  | "access";
+
+interface AccessEntry {
+  at: string;
+  who: string;
+  role: string;
+  facility: string;
+  reason: string;
+  severity: string;
+}
+
+interface AccessLog {
+  entries: AccessEntry[];
+  note: string;
+}
 
 const dateTime = (value: string | null) =>
   value
@@ -450,6 +466,7 @@ const TILES: {
   { screen: "invoices", label: "Bills", icon: Receipt, needs: "invoices" },
   { screen: "referrals", label: "Referrals", icon: Send },
   { screen: "messages", label: "Messages", icon: MessageSquare },
+  { screen: "access", label: "Who saw my record", icon: Eye },
   { screen: "profile", label: "My details", icon: UserCog },
 ];
 
@@ -663,6 +680,7 @@ const TITLES: Record<Screen, string> = {
   invoices: "Bills",
   prescriptions: "Medicines",
   referrals: "Referrals",
+  access: "Who saw my record",
   messages: "Messages",
   sessions: "Where I am signed in",
   profile: "My details & corrections",
@@ -759,6 +777,9 @@ function Section({
       )}
       {data !== null && screen === "sessions" && (
         <Sessions rows={data as SessionRow[]} onChanged={load} />
+      )}
+      {data !== null && screen === "access" && (
+        <AccessLogView data={data as AccessLog} />
       )}
       {data !== null && screen === "profile" && (
         <ProfileView
@@ -1501,3 +1522,64 @@ function ProfileView({
   );
 }
 
+
+/**
+ * Who has opened this record.
+ *
+ * The one report a patient is entitled to without asking anybody, and the
+ * screen has to be careful in two directions at once.
+ *
+ * **Staff are named.** A log saying "a member of staff" answers nothing, and
+ * the fact that the people reading records know they are named is most of what
+ * makes the logging work at all.
+ *
+ * **But a long list of names is frightening if it is not explained.** Somebody
+ * treating you reads your record constantly — that is what treating you looks
+ * like — and a screen that presents forty entries with no context invites a
+ * complaint about the forty rather than about the one that matters. So the
+ * note sits above the list, not below it, and every row says *why*.
+ */
+function AccessLogView({ data }: { data: AccessLog }) {
+  const entries = data.entries ?? [];
+  return (
+    <section className="space-y-3">
+      <p className="text-sm text-slate-600">{data.note}</p>
+
+      {entries.length === 0 ? (
+        <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">
+          Nobody has opened your record in the last year.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {entries.map((entry, index) => (
+            <li
+              key={`${entry.at}-${index}`}
+              className="rounded-lg border border-slate-200 bg-white p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-medium text-slate-900">{entry.who}</p>
+                <p className="shrink-0 text-xs text-slate-500">
+                  {dateTime(entry.at)}
+                </p>
+              </div>
+              {entry.role && (
+                <p className="text-xs text-slate-500">{entry.role}</p>
+              )}
+              {/* The reason, in the words the system recorded at the time.
+                  A row that says who and when but not why is the one that
+                  produces a phone call. */}
+              {entry.reason && (
+                <p className="mt-1 text-sm text-slate-700">{entry.reason}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="text-xs text-slate-500">
+        If something here looks wrong, say so — use Messages, or ask at the
+        desk. Every entry is kept.
+      </p>
+    </section>
+  );
+}

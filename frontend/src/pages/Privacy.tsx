@@ -40,7 +40,11 @@ import {
 
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { BreakGlassGrant, BreakGlassQueue } from "@/types";
+import type {
+  AccessPatterns,
+  BreakGlassGrant,
+  BreakGlassQueue,
+} from "@/types";
 import {
   Alert,
   AlertTitle,
@@ -81,6 +85,7 @@ function remaining(value: string): string {
 
 export default function Privacy() {
   const [queue, setQueue] = useState<BreakGlassQueue | null>(null);
+  const [patterns, setPatterns] = useState<AccessPatterns | null>(null);
   const [pending, setPending] = useState<BreakGlassGrant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,13 +100,15 @@ export default function Privacy() {
     setLoading(true);
     setError("");
     try {
-      const [summary, list] = await Promise.all([
+      const [summary, list, reports] = await Promise.all([
         api.get<BreakGlassQueue>("/privacy/grants/summary/"),
         api.get<{ results?: BreakGlassGrant[] } | BreakGlassGrant[]>(
           "/privacy/grants/?pending=true",
         ),
+        api.get<AccessPatterns>("/privacy/access-patterns/"),
       ]);
       setQueue(summary);
+      setPatterns(reports);
       setPending(Array.isArray(list) ? list : (list.results ?? []));
     } catch (err) {
       setError(
@@ -248,6 +255,8 @@ export default function Privacy() {
             is not a control.
           </p>
 
+          {patterns && <AccessPatternPanels patterns={patterns} />}
+
           {pending.length === 0 ? (
             <Card>
               <CardContent className="text-muted-foreground py-12 text-center text-sm">
@@ -391,6 +400,126 @@ export default function Privacy() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+
+/**
+ * The two access-pattern reports.
+ *
+ * Both carry a hedge from the server, and both show it. That is the point: the
+ * relationship is recomputed at report time, so a clinician who legitimately
+ * saw somebody in March appears here in July — and volume is the crudest
+ * signal there is. A screen that presented either as a finding would be
+ * dismissed wholesale after its first false positive, and then the real one
+ * goes unread with it.
+ *
+ * Neither list is actionable from here on purpose. There is no "clear" and no
+ * "mark reviewed": these are prompts to go and ask somebody, not a queue to be
+ * emptied. The break-glass queue above is the thing with buttons, because
+ * those rows *are* individually reviewable.
+ */
+function AccessPatternPanels({ patterns }: { patterns: AccessPatterns }) {
+  const unrelated = patterns.unrelated_reads;
+  const volume = patterns.read_volume;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Reads with no current care relationship
+          </CardTitle>
+          <CardDescription>
+            {unrelated.without_a_relationship} of {unrelated.reads_checked}{" "}
+            reads checked ({unrelated.percent}%) over {unrelated.window_days}{" "}
+            days
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* The server's hedge, verbatim and above the list rather than
+              under it. Somebody who scrolls straight to the names should
+              have read the caveat first. */}
+          <p className="text-muted-foreground text-xs italic">
+            {unrelated.note}
+          </p>
+
+          {unrelated.reads.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Every read in this window has a relationship behind it.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {unrelated.reads.slice(0, 8).map((read, index) => (
+                <li
+                  key={`${read.at}-${index}`}
+                  className="rounded border p-2 text-sm"
+                >
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium">{read.who}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {when(read.at)}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground">{read.patient}</p>
+                  {read.reason && (
+                    <p className="text-xs">{read.reason}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How much people read</CardTitle>
+          <CardDescription>
+            {volume.outliers.length} above the median for their role, over{" "}
+            {volume.window_days} days
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-muted-foreground text-xs italic">{volume.note}</p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-muted-foreground text-left text-xs">
+                  <th className="pb-1 pr-3 font-normal">Who</th>
+                  <th className="pb-1 pr-3 font-normal">Role</th>
+                  <th className="pb-1 pr-3 text-right font-normal">Reads</th>
+                  <th className="pb-1 text-right font-normal">Median</th>
+                </tr>
+              </thead>
+              <tbody>
+                {volume.people.slice(0, 10).map((person, index) => (
+                  <tr
+                    key={`${person.who}-${person.role}-${index}`}
+                    className={cn(
+                      "border-t",
+                      person.is_outlier && "bg-amber-50 dark:bg-amber-950/30",
+                    )}
+                  >
+                    <td className="py-1 pr-3">{person.who}</td>
+                    <td className="text-muted-foreground py-1 pr-3">
+                      {person.role}
+                    </td>
+                    <td className="py-1 pr-3 text-right tabular-nums">
+                      {person.reads}
+                    </td>
+                    <td className="text-muted-foreground py-1 text-right tabular-nums">
+                      {person.role_median}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

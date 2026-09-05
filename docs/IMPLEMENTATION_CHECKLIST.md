@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1129** |
-| **Outstanding** | **100** | **628** |
+| **Done** | **32 of 132** | **1131** |
+| **Outstanding** | **100** | **626** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-628 understates the remaining work: in the later phases some lines group
+626 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2239,9 +2239,11 @@ September; findings measured, not assumed.*
       five reads against a median of one is not an "outlier"
 - [x] `actor_role` is recorded, which it never was — the report compared
       everybody to everybody until 6 September 2026
-- [ ] A screen for the access-pattern reports; the API exists, the staff
-      console does not show it yet
-- [ ] Patient-facing screen for the access log in the patient application
+- [x] The access-pattern reports on the `/privacy` screen, showing the
+      server's hedge above each list and offering no way to clear either —
+      they are prompts to go and ask somebody, not a queue to be emptied
+- [x] "Who saw my record" in the patient application, staff named, with the
+      explanation above the list rather than under it
 - [ ] Sensitive clinical data controls
 - [ ] Consent enforcement
 - [ ] Data retention
