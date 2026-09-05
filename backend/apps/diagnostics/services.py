@@ -10,6 +10,10 @@ from apps.audit.models import AuditAction
 from apps.audit.services import record, record_version
 from apps.catalog.keys import ModuleCode
 from apps.common.exceptions import DomainError
+# notify: a critical result needs to reach a person, not only a log
+# file. Raising is best-effort by design and never throws back here.
+from apps.notifications.models import NotificationCategory
+from apps.notifications.services import notify
 from apps.diagnostics.models import (
     OPEN_ORDER_STATUSES,
     AlertStatus,
@@ -478,12 +482,23 @@ def _resolve_analyte(order: DiagnosticOrder, entry: dict) -> TestDefinition:
 
 
 def _raise_critical_alert(result: DiagnosticResult, reference) -> CriticalValueAlert:
-    """Open a critical-value alert and log it loudly.
+    """Open a critical-value alert, tell the ordering clinician, and log it.
 
-    The log line is deliberate. Until the notification module exists, a
-    WARNING in the application log is the only thing that will reach an
-    operations dashboard, and a critical result that nobody sees is precisely
-    the failure this whole mechanism exists to prevent.
+    The log line stays even though the notification module now exists. A
+    notification reaches somebody who is looking at the application; the
+    WARNING reaches an operations dashboard whether anybody is logged in or
+    not. A critical result that nobody sees is the failure this whole
+    mechanism exists to prevent, and two independent routes to a human is the
+    right number for that.
+
+    The notification is raised inside this function's transaction on purpose,
+    which is the opposite of the rule log entry 149 sets out -- and correctly
+    so. That rule is for facts that must *outlive* a refusal. This one must
+    not: if the result is rolled back, no such result exists, and a
+    notification saying a patient has a potassium of 6.8 would be a lie that
+    survived the correction. `notify` writes inside its own savepoint, so a
+    failure to tell somebody cannot abort the transaction recording the
+    result.
     """
     threshold = ""
     if reference is not None:
@@ -519,6 +534,39 @@ def _raise_critical_alert(result: DiagnosticResult, reference) -> CriticalValueA
         severity="critical",
         metadata={"order": result.order.reference, "threshold": threshold},
     )
+
+    order = result.order
+    # The ordering clinician, because they are the person who asked the
+    # question and the one who will be asked what they did about the answer.
+    # Deliberately not "everyone with encounter.read at the facility": a
+    # critical alert that goes to forty people is one that forty people assume
+    # somebody else is dealing with.
+    if order.ordered_by_id:
+        notify(
+            source="diagnostics",
+            event="critical_value",
+            category=NotificationCategory.CRITICAL,
+            title=f"{result.analyte_name} {result.display_value} {result.unit}".strip()
+                  + f" — {order.patient.full_name}",
+            body=(
+                f"{result.get_flag_display()}"
+                + (f", threshold {threshold}" if threshold else "")
+                + f". Order {order.reference}, MRN {order.patient.mrn}."
+            ),
+            link="/diagnostics",
+            recipients=[{
+                "id": order.ordered_by_id,
+                "name": order.ordered_by_name,
+                "reason": "You ordered this test",
+            }],
+            subject_type="diagnostics.CriticalValueAlert",
+            subject_uuid=alert.uuid,
+            facility=order.facility,
+            actor_name="Laboratory",
+            # One open notification per alert. A laboratory that re-releases a
+            # result should not ring the same bell twice.
+            dedupe_key=f"critical_value:{alert.uuid}",
+        )
     return alert
 
 

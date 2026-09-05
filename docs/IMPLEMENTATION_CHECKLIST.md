@@ -18,19 +18,19 @@ line here, it is not scoped.**
 | | Sections | Feature lines |
 |---|---|---|
 | Built `[x]` | 22 | — |
-| Built to depth 🔷 | 9 | — |
+| Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
-| Not started `[ ]` | 47 | — |
-| **Done** | **31 of 132** | **1060** |
-| **Outstanding** | **101** | **619** |
+| Not started `[ ]` | 46 | — |
+| **Done** | **32 of 132** | **1086** |
+| **Outstanding** | **100** | **622** |
 
-*Recounted from the file on 4 September 2026 following Phase 9 §96 / Phase 6 §28 Nurse & Bedside Clinical Workspace landing.*
+*Recounted from the file on 5 September 2026, after the notification centre (§101) landed.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-619 understates the remaining work: in the later phases some lines group
+622 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2373,10 +2373,85 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
 - [ ] Owner · department · facility · priority · deadline · SLA · status
 - [ ] Checklist · attachments · comments · escalation · audit
 
-## §101 Notification centre `[ ]`
-- [ ] Critical, warning, approval, task, reminder and information categories
-- [ ] Central inbox across modules
-- [ ] Read state and preferences
+## §101 Notification centre 🔷
+
+*Built and running. `apps/notifications`, one screen at `/notifications`, and
+the first producer wired in diagnostics. Built ahead of the analytics work
+because three modules were already working around its absence.*
+
+**The shape**
+- [x] One event, many recipients: a `Notification` is what happened, a
+      `NotificationReceipt` is one person's copy and read state. Five
+      clinicians told about one result is one row and five receipts, so
+      "how many were told" and "how many read it" stay different questions
+- [x] Six categories: critical, warning, approval, task, reminder,
+      information
+- [x] The text is frozen at the moment of raising, like the referral letter —
+      a notification states what was true then, not what is true now
+- [x] Subject recorded as a type name and a UUID rather than a foreign key,
+      so a notification outlives the row it refers to and no cascade can
+      delete the evidence that somebody was told
+- [x] Channel recorded although only in-app is delivered, so §93 adds a row
+      rather than restructuring the table everything reads
+
+**Read state**
+- [x] Read and dismissed are separate acts: seen, versus dealt with
+- [x] A critical notification refuses to be dismissed without a note saying
+      what was done, and the note is audited
+- [x] Dismissing is one person's act — it does not clear anybody else's copy,
+      and does not resolve the underlying situation
+- [x] "Mark all read" clears the badge and dismisses nothing. Said out loud on
+      the screen, because it is the control people misread
+- [x] Constraint: dismissed implies read, so the unread count cannot go
+      negative
+
+**Counting**
+- [x] The badge is summed from receipts on every request. No stored counter —
+      one is wrong the first time two requests race and nobody notices
+- [x] "Outstanding" is not "unread": a thing can be read three times and still
+      be waiting. Outstanding is the default view
+
+**Repetition**
+- [x] A `dedupe_key` unique among *open* notifications, so an hourly sweep
+      produces one row and not twenty-four
+- [x] The key is released when the situation resolves, so "this fired every
+      morning for a week" stays countable
+- [x] `resolve_by_key` for a sweep whose condition has cleared
+- [x] Information and reminders age out; approvals and tasks never do — one
+      nobody has touched in ninety days is the most interesting row in the
+      system, not a stale one
+
+**Preferences**
+- [x] Per person, per category
+- [x] Critical cannot be switched off, and `set_preference` refuses rather
+      than storing a value it would then ignore
+- [x] Shown on the screen as locked with the reason, not hidden from the list
+- [x] Applied when the notification is raised, not when it is read
+
+**Raising**
+- [x] `notify()` never raises into its caller — the event has already
+      happened and failing to mention it must not undo it
+- [x] Its writes sit in a savepoint, so a swallowed database error cannot
+      abort the caller's transaction (log 162)
+- [x] Recipients resolved and frozen at raise time, each with the reason they
+      were chosen, so "why was I told?" survives a roster change
+- [x] No endpoint lets a client post an arbitrary notification to arbitrary
+      people. The single exception is an announcement, gated on
+      `notification.broadcast`, carrying the sender's name, and unable to be
+      critical
+- [x] Reading an inbox needs no permission and takes no recipient parameter:
+      the queryset narrows to `request.user` first, so nothing later can
+      widen it
+
+**Producers**
+- [x] Diagnostics: a critical value notifies the clinician who ordered the
+      test, alongside the log line. Deliberately not everyone at the facility
+- [ ] Backfill for alerts already open when the wiring is deployed
+- [ ] Approvals: purchase orders, leave, payroll, facility change requests
+- [ ] Expiry sweeps: credentials, licences, contracts, stock
+- [ ] Patient portal: invitation codes, so the desk stops reading them aloud
+- [ ] Digest and quiet hours
+- [ ] Delivery beyond in-app (§93)
 
 ## §122 Document management `[ ]`
 - [ ] Upload · versioning · metadata · owner · category

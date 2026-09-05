@@ -5051,3 +5051,160 @@ The suite now runs twenty of twenty, twice through, in sequence.
 **Affects.** `apps/hr/management/commands/seed_ess_demo.py`,
 `apps/inpatient/management/commands/seed_nurse_demo.py`,
 `apps/patients/management/commands/seed_clinical_demo.py`.
+
+---
+
+## 160 - The notification centre
+2026-09-05 · Backend · feature
+
+`apps/notifications`. Built before the analytics work because three modules
+were already working around its absence: the portal hands invitation codes
+over at the desk because nothing can send them, critical diagnostic alerts stay
+open until somebody records a telephone call, and approvals sit in five
+separate queues because there is nowhere to put "things waiting for you". Each
+of those is a workaround to unpick later.
+
+**The shape follows the invariant this project keeps rediscovering.** A
+notification is a fact about what *happened*; whether somebody has read it is a
+fact about what is *true now*. So a critical potassium result telling five
+clinicians is one `Notification` and five `NotificationReceipt` rows -- not
+five notifications. Storing it five times makes "how many people were told" and
+"how many read it" indistinguishable from "it happened five times", and the
+second is the question asked after somebody dies.
+
+The rest of the decisions, briefly.
+
+**Read and dismissed are separate acts.** Read means seen; dismissed means
+dealt with. A `CRITICAL` receipt refuses to be dismissed without a note saying
+what was done -- the same position the diagnostics module already takes, for
+the same reason: an alert cleared silently is a record that somebody silenced
+it, which is worse than no record.
+
+**Recipients are resolved at raise time and frozen,** with the reason they were
+chosen stored on the receipt. A nurse who moves ward next week was still the
+person told on Tuesday, and "why was I told about this?" needs an answer after
+the roster has changed.
+
+**A `dedupe_key` is unique among *open* notifications only.** An hourly sweep
+produces one row rather than twenty-four, but the key is released when the
+situation resolves, so "this fired every morning for a week" stays countable.
+
+**Preferences cannot silence `CRITICAL`, and `set_preference` refuses rather
+than storing a value it would ignore.** Accepting the setting and delivering
+anyway would leave the screen telling somebody something is off while it is on.
+
+**Nothing counted is stored.** The badge is summed from receipts on every
+request. A stored unread count is wrong the first time two requests race, and
+nobody notices, because a badge showing 3 when the answer is 4 looks exactly
+like a badge.
+
+Wired into diagnostics: a critical value now notifies the clinician who ordered
+the test, alongside the WARNING log line that was previously the only route to
+a human. Deliberately *not* everyone with `encounter.read` at the facility --
+an alert that goes to forty people is one that forty people assume somebody
+else is handling. Note for deployment: the wiring fires when an alert is
+created, so alerts already open at deploy time are not backfilled.
+
+**Affects.** `apps/notifications/` (new), `apps/diagnostics/services.py`,
+`apps/rbac/permissions.py`, `apps/rbac/services.py`, `config/settings/base.py`,
+`config/urls.py`, `frontend/src/pages/Notifications.tsx`.
+
+---
+
+## 161 - A constraint the manager could not see
+2026-09-05 · Backend · bug
+
+The notification seed passed once and then failed with an assertion that made
+no sense: twelve sweeps under one dedupe key produced *zero* notifications, not
+one.
+
+`Notification` inherits `BaseModel`, so `.delete()` is a soft delete. The
+partial unique constraint read:
+
+    condition=Q(resolved_at__isnull=True) & ~Q(dedupe_key="")
+
+A soft-deleted row still satisfies that -- `deleted_at` is set, but
+`resolved_at` is still null -- so it went on blocking the key forever. And
+`notify` looks for the blocker through `Notification.objects`, the soft-delete
+manager, which *cannot see it*. So the code found nothing, inserted, the
+database refused, and `notify` swallowed the error exactly as designed.
+
+Silent and permanent: every future notification under that key gone, with a log
+line nobody reads as the only trace.
+
+The rule this yields: **any partial constraint on a soft-deleting model must
+agree with the manager**, or the code and the database are enforcing two
+different rules and only one of them is visible from the application. Both
+constraints now carry `deleted_at__isnull=True`.
+
+Found the same way as most things in this log -- by running the seed twice.
+
+**Affects.** `apps/notifications/models.py`,
+`apps/notifications/migrations/0002_constraints_respect_soft_delete.py`.
+
+---
+
+## 162 - Swallowing an error inside somebody else's transaction
+2026-09-05 · Backend · bug
+
+`notify` catches everything by design: the event it is reporting has already
+happened, and failing to mention it must not undo it.
+
+That is right, and on PostgreSQL it was also dangerous. A caught database error
+inside an open transaction leaves that transaction aborted -- every subsequent
+statement fails with "current transaction is aborted, commands ignored until
+end of transaction block". So `notify`, called from inside a service that had
+opened a transaction, could swallow its own failure and take the caller's
+entire operation down with it. A released laboratory result rolled back because
+the notification table had a duplicate key is precisely the outcome the
+swallowing was meant to prevent.
+
+The writes now happen inside `tenant_atomic()`, which is a savepoint when a
+transaction is already open. A failure rolls back to the savepoint and the
+caller carries on.
+
+Worth stating alongside entry 149, because it is the mirror image. Entry 149:
+*a fact that must outlive a refusal cannot be written inside the transaction
+the refusal aborts.* This one: *a failure that must not propagate cannot be
+swallowed inside a transaction it has already poisoned.* Both are about the
+boundary between what a transaction covers and what it must not.
+
+The diagnostics wiring is the case that makes it concrete, and the comment
+there says why the notification is raised *inside* the result's transaction
+rather than outside it: if the result is rolled back, no such result exists,
+and a notification saying a patient has a potassium of 6.8 would be a lie that
+outlived its correction.
+
+**Affects.** `apps/notifications/services.py`.
+
+---
+
+## 163 - Two more seeds that only worked once
+2026-09-05 · Tooling · bug
+
+Entry 159 fixed four. Running the suite twice again, with the notification
+module in it, found two more.
+
+**`seed_notifications_demo`, my own.** It asserted
+`summary()["critical"] == 1` -- a count across the whole tenant -- while
+claiming to check one event. It passed until the diagnostics wiring began
+raising real critical notifications for the same person, then reported 5. The
+assertion is now scoped to this scenario's own notification. A test that
+measures more than it claims to measure is a test that will one day be
+"fixed" by changing the expected number.
+
+**`seed_attendance_demo`, pre-existing and more interesting.** It applies for
+sick leave dated `today`, and `apply_for_leave` correctly refuses a request
+landing entirely on weekly offs: *"Those dates are all weekly offs or holidays
+— no leave would be deducted, so none is needed."* So the seed passed from
+Sunday to Friday and failed every Saturday. It had presumably been failing one
+day in seven since it was written, and nobody had run it on a Saturday.
+
+It now walks back to the most recent working day and says so. **A seed whose
+result depends on the day of the week it is run is one that will be quietly
+abandoned the first time it goes red for a reason nobody can reproduce.**
+
+Suite: 21 of 21, twice through, in sequence.
+
+**Affects.** `apps/notifications/management/commands/seed_notifications_demo.py`,
+`apps/hr/management/commands/seed_attendance_demo.py`.

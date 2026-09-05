@@ -416,11 +416,32 @@ class Command(BaseCommand):
         sick = LeaveType.objects.get(code="sick")
         open_leave_year(employee, actor=manager)
 
+        # The most recent working day, not simply today. `apply_for_leave`
+        # correctly refuses a request that lands entirely on weekly offs or
+        # holidays -- so a scenario hard-coded to `today` passes from Sunday to
+        # Friday and fails every Saturday. A seed whose result depends on the
+        # day of the week it is run is a seed that will be quietly abandoned
+        # the first time it goes red for a reason nobody can reproduce.
         today = timezone.localdate()
+        for back in range(0, 14):
+            candidate = today - timedelta(days=back)
+            if working_days_between(candidate, candidate, employee.facility) > 0:
+                break
+        else:
+            self.stdout.write(self.style.WARNING(
+                "   no working day in the last fortnight — skipping"
+            ))
+            return
+        if candidate != today:
+            self.stdout.write(
+                f"   today is a weekly off, so using {candidate:%a %d %b}"
+            )
+        today = candidate
+
         blank = Attendance.objects.filter(employee=employee, date=today).first()
         self.stdout.write(
             f"   {employee.full_name} is marked {blank.status if blank else '—'} "
-            "for today"
+            f"for {today:%d %b}"
         )
 
         # A request from an earlier run already covers today, and the

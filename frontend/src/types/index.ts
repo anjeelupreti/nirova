@@ -4609,3 +4609,64 @@ export interface NurseAssignment {
   notes: string;
   assigned_by_name: string;
 }
+
+/* -------------------------------------------------------------------------
+ * Notification centre (§101)
+ *
+ * The row a client sees is a flattened receipt: the notification is the fact
+ * that something happened, the receipt is this person's copy of it. The split
+ * matters to the database and not to the screen -- but the UUID here is the
+ * *receipt's*, because acting on a notification is always acting on your own
+ * copy, never on everybody's.
+ * ---------------------------------------------------------------------- */
+
+export type NotificationCategory =
+  | "critical"
+  | "warning"
+  | "approval"
+  | "task"
+  | "reminder"
+  | "information";
+
+export interface NotificationRow {
+  uuid: string;
+  category: NotificationCategory;
+  source: string;
+  event: string;
+  title: string;
+  body: string;
+  link: string;
+  subject_type: string;
+  subject_uuid: string | null;
+  facility_name: string;
+  actor_name: string;
+  raised_at: string;
+  /** When the underlying situation stopped being true -- not when it was read. */
+  resolved_at: string | null;
+  is_open: boolean;
+  needs_action: boolean;
+  /** Why this person was told. Frozen when it was raised. */
+  reason: string;
+  read_at: string | null;
+  dismissed_at: string | null;
+  dismissed_note: string;
+}
+
+export interface NotificationSummary {
+  /** Seen or not. A fact about attention. */
+  unread: number;
+  /** Not dismissed and still open. A fact about work, and the one that matters. */
+  outstanding: number;
+  critical: number;
+  needs_action: number;
+  by_category: Record<string, number>;
+}
+
+export interface NotificationPreference {
+  category: NotificationCategory;
+  label: string;
+  channel: string;
+  enabled: boolean;
+  /** False for critical, which no stored value may switch off. */
+  can_change: boolean;
+}

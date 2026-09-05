@@ -198,6 +198,13 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("payroll.approve", "Approve payroll", "People",
        conflicts_with=("payroll.process",)),
 
+    # -- notifications ----------------------------------------------------
+    # Reading an inbox needs no permission: an inbox is not shared, and every
+    # endpoint resolves the recipient from the caller. Broadcasting is the one
+    # act that reaches other people, so it is the one that is gated.
+    _p("notification.broadcast", "Send an announcement to the organization",
+       "Notifications"),
+
     # -- oversight --------------------------------------------------------
     _p("report.read", "View reports", "Oversight"),
     _p("report.build", "Build custom reports", "Oversight"),

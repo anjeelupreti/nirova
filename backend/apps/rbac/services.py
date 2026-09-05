@@ -295,7 +295,7 @@ SYSTEM_ROLES = [
             "organization.read", "facility.read", "facility.request_change",
             "department.read", "department.manage", "config.read",
             "employee.read", "report.read", "analytics.read",
-            "subscription.read",
+            "subscription.read", "notification.broadcast",
         ],
     },
     {
