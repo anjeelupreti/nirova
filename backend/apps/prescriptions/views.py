@@ -40,7 +40,7 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = PrescriptionSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Prescription, relations=['facility'], fields=['status', 'prescriber_id']
@@ -181,7 +181,7 @@ class ActiveMedicationsView(APIView):
     is the list a clinician checks before adding anything new.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.read", scope=Scope.OWN)]
 
     def get(self, request, uuid):
         patient = get_object_or_404(Patient, uuid=uuid)

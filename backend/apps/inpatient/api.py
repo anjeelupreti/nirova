@@ -309,7 +309,7 @@ class RoundSerializer(serializers.Serializer):
 
 class WardViewSet(viewsets.ModelViewSet):
     serializer_class = WardSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Ward, relations=["facility", "department"],
@@ -342,7 +342,7 @@ class WardViewSet(viewsets.ModelViewSet):
 
 class BedViewSet(viewsets.ModelViewSet):
     serializer_class = BedSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Bed, relations=["ward"], fields=["status", "is_active", "is_isolation"]
@@ -394,7 +394,7 @@ class BedViewSet(viewsets.ModelViewSet):
 
 
 class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Admission, relations=["facility", "patient", "department"],
@@ -590,7 +590,7 @@ class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
 class CensusView(APIView):
     """Who is in the hospital, and where. Computed, never stored."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
 
     def get(self, request):
         facility = get_object_or_404(

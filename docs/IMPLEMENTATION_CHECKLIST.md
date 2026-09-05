@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1117** |
-| **Outstanding** | **100** | **628** |
+| **Done** | **32 of 132** | **1118** |
+| **Outstanding** | **100** | **629** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-628 understates the remaining work: in the later phases some lines group
+629 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -298,6 +298,16 @@ rather than redesigning around it.
 - [ ] `Scope.UNIT` and `Scope.DEPARTMENT` narrow to the unit or
       department rather than to the parent facility. Currently bounded to
       the facility, which is looser than the ladder implies
+- [x] **Clinical reads no longer demand facility scope.** `doctor`, `nurse`
+      and `lab_technician` all carry `max_scope = department`, so they could
+      never satisfy the `Scope.FACILITY` default — a doctor was refused seven
+      of nine clinical endpoints, including the patient list. Fixed per
+      endpoint, and scheduling gained the queryset narrowing it had never
+      needed while the check was refusing everybody anyway
+- [ ] **The remaining 119 `HasPermission.of` call sites still use the default
+      facility floor.** They gate writes and administrative actions, where a
+      facility floor is often right — but each needs the question asked of it
+      individually rather than assumed either way
 - [x] Per-user permission grants
 - [x] Per-user denials that beat role grants
 - [x] Time-bounded role assignments

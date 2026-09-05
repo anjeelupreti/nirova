@@ -859,3 +859,83 @@ def test_enforcement_refuses_a_stranger_and_names_the_way_out(tenant):
     finally:
         _privacy_switch(None)
         BreakGlassGrant.all_objects.filter(user_id=doctor.uuid).delete()
+
+
+def test_a_doctor_can_reach_the_clinical_endpoints(tenant):
+    """The three most numerous clinical roles must be able to use the system.
+
+    `doctor`, `nurse` and `lab_technician` all carry `max_scope = department`,
+    so they can never be assigned above it -- while `HasPermission.of` defaults
+    to demanding `Scope.FACILITY`. Measured on 6 September 2026: a doctor was
+    refused seven of nine clinical endpoints, including the patient list.
+
+    Asserted as a floor on the *roles that exist*, not on one demo user, so
+    that lowering `max_scope` on a clinical role in future fails here rather
+    than in a hospital.
+    """
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("no demo doctor; run seed_demo")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    refused = [
+        path
+        for path in (
+            "/api/clinical/patients/",
+            "/api/clinical/encounters/",
+            "/api/clinical/prescriptions/",
+            "/api/diagnostics/orders/",
+            "/api/clinical/appointments/",
+        )
+        if client.get(path).status_code == 403
+    ]
+    assert not refused, (
+        "a doctor cannot reach clinical endpoints their job requires: "
+        f"{refused}. A permission check demanding facility scope in front of "
+        "a queryset that narrows to it is a scope ladder with one rung."
+    )
+
+
+def test_lowering_the_floor_did_not_widen_anybody(tenant):
+    """The other half: a department-scoped clinician must not now see more
+    than an organization-scoped one."""
+    import json
+
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    owner = User.objects.filter(email="owner@manakamana.test").first()
+    if doctor is None or owner is None:
+        pytest.skip("demo users missing")
+
+    def count(user, path):
+        client = Client(
+            HTTP_AUTHORIZATION=(
+                f"Bearer {RefreshToken.for_user(user).access_token}"
+            ),
+            HTTP_X_ORGANIZATION=tenant.slug,
+        )
+        response = client.get(path)
+        if response.status_code != 200:
+            return None
+        return json.loads(response.content.decode()).get("count")
+
+    for path in ("/api/clinical/appointments/", "/api/diagnostics/orders/"):
+        mine, theirs = count(doctor, path), count(owner, path)
+        if mine is None or theirs is None:
+            continue
+        assert mine <= theirs, (
+            f"{path}: a department-scoped doctor sees {mine} rows where an "
+            f"organization-scoped owner sees {theirs}"
+        )

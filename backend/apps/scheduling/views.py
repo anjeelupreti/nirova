@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import apply_scope_filter, HasPermission, get_authorization
 from apps.organization.models import Department, Facility
 from apps.patients.models import Patient
 from apps.rbac.permissions import Scope
@@ -111,7 +111,7 @@ class AvailabilityView(APIView):
 
 class AppointmentViewSet(viewsets.ModelViewSet):
     serializer_class = AppointmentSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Appointment, relations=['facility', 'department'], fields=['status', 'provider_uuid', 'source']
@@ -120,8 +120,17 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
 
     def get_queryset(self):
-        queryset = Appointment.objects.select_related(
-            "patient", "facility", "department"
+        # Narrowed by scope, added when the permission floor was lowered to
+        # Scope.OWN. Before that the check refused every department-scoped
+        # clinician outright, so there was nothing to narrow; loosening the
+        # check without adding this would have widened a department-scoped
+        # user to every appointment in the organization.
+        queryset = apply_scope_filter(
+            Appointment.objects.select_related(
+                "patient", "facility", "department"
+            ),
+            self.request,
+            "encounter.read",
         )
 
         # Default to today unless a date range is asked for. An unfiltered
@@ -202,7 +211,7 @@ class QueueViewSet(viewsets.ReadOnlyModelViewSet):
     """The live queue and the actions that move it along."""
 
     serializer_class = QueueTokenSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
 
     def get_queryset(self):

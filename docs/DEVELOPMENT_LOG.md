@@ -5981,3 +5981,71 @@ correct and told me nothing:
     switch OFF   stranger 200
 
 **Affects.** `apps/common/permissions.py`, `apps/encounters/views.py`.
+
+---
+
+## 181 - A doctor could not use the application
+2026-09-06 · Backend · bug
+
+Entry 180 lowered one permission floor to unblock Phase 2 and noted the same
+fault had appeared twice, which suggested the default was wrong rather than the
+two call sites. Measuring it turned out to be worse than that.
+
+    HasPermission.of(code)                 124 call sites, all defaulting to
+                                           Scope.FACILITY
+    HasPermission.of(code, scope=...)      2
+
+And in the role catalogue:
+
+    doctor           max_scope = department
+    nurse            max_scope = department
+    lab_technician   max_scope = department
+    staff            max_scope = own
+
+Those roles can **never** be assigned above department scope -- `max_scope` is
+a ceiling. So every one of those 124 checks refuses them outright.
+
+Swept as a doctor, against nine clinical endpoints:
+
+    403  patients            403  diagnostic orders   403  appointments
+    200  encounters          403  lab worklist        403  queue
+    403  prescriptions       403  ward census         200  own notifications
+
+**Seven of nine.** A doctor could not open the patient list. The one endpoint
+that worked was the one lowered an hour earlier for an unrelated reason.
+
+The mistake is a category error in what `required_scope` means. It reads as
+*"the minimum breadth of authority this operation needs"* -- correct for
+reconciling a till or closing a period. It was being used as *"you must hold
+this permission at facility scope or wider"*, which for a **read** is the wrong
+question entirely: the right one is "do you hold this permission at all", with
+the queryset doing the narrowing. That is what `apply_scope_filter` and
+`accessible_facility_ids` are for, and what the comment in `EncounterViewSet`
+already claimed: *scope narrows rather than refuses, as everywhere else.*
+
+**Fixed per endpoint, not by flipping the default.** Flipping it would loosen
+124 sites at once, including ones with nothing narrowing behind them. Each of
+the five files changed here was checked for what happens *after* the permission
+passes:
+
+* patients and prescriptions have no facility filter **by design** -- Phase 1,
+  with a test asserting the prescription case;
+* diagnostics and inpatient narrow already;
+* **scheduling had no narrowing at all**, so it got one in the same change
+  rather than being quietly widened. Worth noting: the missing filter was
+  invisible until now precisely *because* the check refused everybody who would
+  have needed it.
+
+A doctor now reaches all nine, and sees no more rows than the organization
+owner does -- both halves asserted, because "can reach it" and "cannot see more
+than they should" are different properties and fixing the first is how you
+break the second.
+
+**The other 119 sites are untouched and this is not finished.** They gate
+writes and administrative actions, where a facility floor is often right; each
+needs the same question asked of it individually. Recorded as outstanding
+rather than left to be rediscovered.
+
+**Affects.** `apps/patients/views.py`, `apps/prescriptions/views.py`,
+`apps/diagnostics/views.py`, `apps/scheduling/views.py`,
+`apps/inpatient/api.py`.

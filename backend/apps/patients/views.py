@@ -27,7 +27,7 @@ from apps.rbac.permissions import Scope
 class PatientViewSet(viewsets.ModelViewSet):
     """Register, search and maintain patient records."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_fields = ["gender", "category", "status", "district", "blood_group"]
     ordering_fields = ["registered_on", "last_name", "mrn"]

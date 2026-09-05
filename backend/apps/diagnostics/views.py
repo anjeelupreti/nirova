@@ -55,7 +55,7 @@ class TestDefinitionViewSet(viewsets.ModelViewSet):
     """The catalogue of orderable investigations."""
 
     serializer_class = TestDefinitionSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         TestDefinition, relations=['department'], fields=['modality', 'is_active', 'is_panel']
@@ -82,7 +82,7 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
     second pair of eyes. Neither is safe as a PATCH.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         DiagnosticOrder, relations=['facility'], fields=['status', 'modality', 'priority']
@@ -238,7 +238,7 @@ class WorklistView(APIView):
     plain list would give and is the wrong answer whenever anyone is sick.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
 
     def get(self, request):
         facility = get_object_or_404(
@@ -264,7 +264,7 @@ class CriticalAlertViewSet(viewsets.ReadOnlyModelViewSet):
     """Critical values awaiting communication or acknowledgement."""
 
     serializer_class = CriticalValueAlertSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_fields = ["status", "flag"]
 
