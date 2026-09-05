@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1103** |
-| **Outstanding** | **100** | **627** |
+| **Done** | **32 of 132** | **1108** |
+| **Outstanding** | **100** | **634** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-627 understates the remaining work: in the later phases some lines group
+634 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2144,9 +2144,11 @@ rather than redesigning around it.
 - [x] Access logging on sensitive reads
 - [x] Data minimisation in audit diffs
 
-**Visibility between facilities of one tenant** — *awaiting a decision, not
-work. Narrowing this touches every facility in every tenant, so it is the
-owner's call. Probed 4 September 2026; findings are measured, not assumed.*
+**Visibility between facilities of one tenant** — *decided 5 September 2026.
+The design and its reasoning are in [ACCESS_DESIGN.md](ACCESS_DESIGN.md);
+the short version is that facility is the wrong unit of access control, and
+the model is relationship-based with an emergency override. Probed 4
+September; findings measured, not assumed.*
 - [x] The patient record is deliberately organization-wide. `Patient` has no
       facility restriction and `registered_at_facility` is documented as
       provenance, not a restriction — the alternative is one person holding
@@ -2154,15 +2156,42 @@ owner's call. Probed 4 September 2026; findings are measured, not assumed.*
 - [x] Clinical detail is already out of reach of a counter: encounters,
       diagnostic orders and the ward census all refuse without
       `encounter.read`
-- [ ] **Transactional lists narrow by facility for a facility-scoped role.**
-      Prescriptions, invoices, dispenses, sales and orders currently return
-      the whole organization to anyone allowed to read them at all. An
-      organization-scoped role keeps the full view
-- [ ] **`patient.read` split into a demographic read and a clinical read.**
-      Identifying somebody at a counter and reading their record are
-      different acts and should not share one permission
-- [ ] **Prescription and invoice reads logged** the way patient retrieval
-      already is — `record_patient_access` exists and is not called on either
+**Phase 1 — the tiers and the safety net**
+- [x] `patient.read` split into three: identity (`patient.read`), safety
+      (`patient.safety.read`), clinical (`patient.clinical.read`). Granted to
+      every role holding `encounter.read` today, so this step changes no
+      behaviour — the vocabulary comes before the enforcement
+- [x] **Dispensing runs the allergy, interaction and duplicate checks the
+      prescriber has always faced.** It had none. The demo data itself
+      contained a seed handing amoxicillin to a patient with a severe
+      penicillin allergy, on every run, since it was written
+- [x] It refuses rather than forbids: a typed reason overrides, because a
+      control that cannot be overridden gets worked around outside the system
+- [x] `pharmacist` and `pharmacy_counter` hold `patient.safety.read`, which is
+      what makes restricting the rest safe
+- [x] `assign_role` refuses a narrow scope naming no facility or department
+- [ ] Facility-filter the **business** lists — invoices, sales, dispenses,
+      till sessions, stock. No clinical safety argument applies to these
+- [ ] Prescription and invoice reads logged through `record_patient_access`
+
+**Phase 2 — relationship and break-glass**
+- [ ] `has_care_relationship(user, patient)` computed from admissions,
+      appointments, orders and prescriptions
+- [ ] `patient.clinical.read` enforced against it
+- [ ] Lists narrow to the relationship; **lookup by reference stays open** to
+      the dispensing role and is logged — the patient handing over the
+      reference is the care relationship and is the consent
+- [ ] `BreakGlassGrant`: immediate, time-boxed, reason required, audited at
+      critical severity
+- [ ] `privacy.review` queue, and a `CRITICAL` notification on every override.
+      A break-glass nobody reviews is theatre
+- [ ] Switchable per organization — a single-site clinic pays the complexity
+      and gets nothing, the same position §17 takes for segregation of duties
+
+**Phase 3 — making it visible**
+- [ ] "Who looked at my record" in the patient portal
+- [ ] Access-pattern reporting: reads without a relationship, overrides never
+      reviewed, read-volume outliers
 - [ ] Sensitive clinical data controls
 - [ ] Consent enforcement
 - [ ] Data retention

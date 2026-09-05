@@ -11,6 +11,10 @@ from apps.audit.services import record
 from apps.catalog.keys import ModuleCode
 from apps.common.exceptions import DomainError
 from apps.entitlements.services import require_module
+# run_safety_checks / Severity: the same checks the prescriber faces at
+# signing. Dispensing is the last point at which a prescribing error can
+# be caught, and it was running none of them.
+from apps.prescriptions.safety import Severity, run_safety_checks
 from apps.pharmacy.models import (
     DISPENSABLE_STATUSES,
     INBOUND_MOVEMENTS,
@@ -42,6 +46,17 @@ QUANTUM = Decimal("0.001")
 
 class PharmacyError(DomainError):
     code = "pharmacy_operation_failed"
+
+
+class SafetyOverrideRequired(PharmacyError):
+    """Dispensing would hand over a drug the patient's record warns against.
+
+    Its own class rather than a bare `PharmacyError`, so a client can tell an
+    allergy warning apart from an out-of-stock and put the warnings in front of
+    the pharmacist instead of showing them a generic failure.
+    """
+
+    code = "safety_override_required"
 
 
 class InsufficientStock(PharmacyError):
@@ -356,6 +371,7 @@ def dispense(
     encounter_uuid=None,
     counselling_notes: str = "",
     approved_by=None,
+    safety_override_reason: str = "",
 ) -> Dispense:
     """Hand medicines to a patient, taking stock FEFO.
 
@@ -377,6 +393,45 @@ def dispense(
             f"{location.name} is not a dispensing location.",
             detail={"location": location.code},
         )
+
+    # ---- the safety check, before anything is written --------------------
+    #
+    # The prescriber's signing flow has run allergy, interaction and duplicate
+    # checks since this system was built. Dispensing ran none, which left the
+    # pharmacist -- the last person between a prescribing error and a patient
+    # -- with no net at all. A prescription can also be days old: an allergy
+    # recorded after it was signed would otherwise never be seen by anybody.
+    #
+    # Refused before the Dispense row is created, so a hand-over stopped for
+    # safety leaves nothing behind to explain. This is the same shape as the
+    # FEFO override below: it does not forbid, it demands a reason. Sometimes a
+    # drug is genuinely given despite a listed allergy, and a control that
+    # cannot be overridden is one that gets worked around outside the system.
+    safety = {}
+    if patient is not None:
+        safety = run_safety_checks(
+            patient,
+            [
+                {
+                    "generic_name": item["product"].generic_name,
+                    "brand_name": item["product"].brand_name,
+                }
+                for item in items
+            ],
+        )
+        if safety["requires_override"] and not safety_override_reason.strip():
+            worst = "; ".join(
+                w["message"] for w in safety["warnings"]
+                if w["severity"] in Severity.REQUIRES_OVERRIDE
+            )
+            raise SafetyOverrideRequired(
+                f"{patient.full_name}: {worst} Give a reason to dispense "
+                "anyway.",
+                detail={
+                    "warnings": safety["warnings"],
+                    "by_severity": safety["by_severity"],
+                },
+            )
 
     record_ = Dispense.objects.create(
         reference=generate_dispense_reference(),

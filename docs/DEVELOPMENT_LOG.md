@@ -5420,3 +5420,132 @@ were never reproducible. Generated and committed.
 
 **Affects.** `backend/pytest.ini`, `backend/tests/`, `backend/requirements.txt`,
 `.github/workflows/backend.yml`, `patient/package-lock.json`.
+
+---
+
+## 169 - Who may see a patient's record, decided
+2026-09-05 · Design · decision
+
+`docs/ACCESS_DESIGN.md`. The isolation finding of 4 September has been sitting
+as an open question with three options attached. All three were wrong, and
+researching the domain properly showed why.
+
+**All three took facility as the unit of access control.** Three things say it
+is the wrong primitive.
+
+`Prescription.facility` records where a prescription was *written*. A patient
+may take a prescription to any pharmacy -- that is what a prescription is.
+There is no "dispensable at" field and inventing one models a restriction that
+does not exist in the world.
+
+**Dispensing ran no safety checks at all.** `run_safety_checks` -- allergies,
+interactions, duplicates -- runs when a prescriber signs. Nothing ran when a
+pharmacist dispensed. That reframes the question completely: a pharmacist
+*needs* the allergy list, and restricting their access without first giving
+them that data would not make the system safer, it would make it more
+dangerous while looking like an improvement.
+
+And facility is not how care works. A consultant covers two sites; a patient is
+admitted at one and followed up at another. Any facility filter strict enough
+to be worth having is one clinicians route around, and a routed-around control
+is worse than none because it produces false confidence.
+
+**The decision** follows the model large systems actually use -- Epic, Cerner,
+the NHS Spine -- which is relationship-based with an emergency override, and
+rests on principles common to HIPAA's minimum-necessary, GDPR's data
+minimisation and Nepal's Individual Privacy Act 2075.
+
+Three changes, none of them a facility filter.
+
+*Data is tiered.* `patient.read` keeps identity -- organization-wide, because
+every counter has to establish who is in front of them, and restricting it
+produces duplicate records, which is how somebody is given a drug they are
+allergic to. `patient.safety.read` is new and deliberately generous: allergies,
+active medicines, dosing-relevant conditions. `patient.clinical.read` is new
+and is the tier the privacy question is actually about.
+
+*Browsing and looking up are different acts.* Listing narrows to what the
+caller has a relationship with. Looking up by reference -- "here is
+RX-2026-000023" -- stays open to the dispensing role and is logged, because the
+patient handing over the reference **is** the care relationship and **is** the
+consent. That distinction replaces facility filtering, and it is how pharmacies
+work.
+
+*A care relationship is computed, not assigned* -- from admissions,
+appointments, orders and prescriptions the system already keeps. With
+break-glass as the escape: immediate, time-boxed, audited at critical severity,
+notified to a privacy officer, and on a review list until signed off. A
+break-glass nobody reviews is theatre.
+
+Worth noting the plan is a **widening** as well as a narrowing: today a
+consultant covering two sites cannot see their own patient at the other one
+without an organization-scoped role. Under a relationship model they can.
+
+**Affects.** `docs/ACCESS_DESIGN.md`.
+
+---
+
+## 170 - The last line of defence
+2026-09-05 · Backend · bug
+
+Phase 1, step 3, and the reason the phasing is what it is: this had to land
+before anything was restricted.
+
+`dispense()` now runs the same `run_safety_checks` the prescriber faces, and
+refuses without a typed reason when a warning is at HIGH or CRITICAL. Refused
+*before* the `Dispense` row is created, so a hand-over stopped for safety
+leaves nothing behind to explain. Its own exception class, so a client can tell
+an allergy warning from an out-of-stock and put the warnings in front of the
+pharmacist rather than showing a generic failure.
+
+It refuses; it does not forbid. Sometimes a drug is genuinely given despite a
+listed allergy, and a control that cannot be overridden is one that gets worked
+around outside the system, where nobody can see it. Same shape as the FEFO
+override that has always sat twenty lines below it.
+
+**Then the seed suite failed, and it was right to.** `seed_pharmacy_demo`
+dispensed **amoxicillin to a patient with a severe penicillin allergy recorded
+with facial swelling** -- on every run, since the seed was written. Amoxicillin
+is a penicillin; the cross-reactivity check caught it by drug family. The
+scenario was written to demonstrate a *stock* rule and had picked that
+patient and that drug by coincidence.
+
+Nothing in the system would have stopped that hand-over before today. The
+FEFO scenario now uses a patient it cannot harm, and the refusal has its own
+scenario, because it is worth watching happen.
+
+A prescriber has had this protection since the system was built. The person
+actually putting the box into somebody's hand had none.
+
+**Affects.** `apps/pharmacy/services.py`,
+`apps/pharmacy/management/commands/seed_pharmacy_demo.py`, `tests/`.
+
+---
+
+## 171 - Phase 1: the tiers, and a scope that reaches nothing
+2026-09-05 · Backend · feature
+
+The rest of Phase 1.
+
+**`patient.safety.read` and `patient.clinical.read` exist** and are granted to
+every role holding `encounter.read` today, so **nothing changes behaviourally
+on this step** -- the point is to have the vocabulary before Phase 2 enforces
+it. `privacy.review` added for the break-glass queue that does not exist yet.
+
+The one grant that is not neutral: **`pharmacist` and `pharmacy_counter` now
+hold `patient.safety.read`**, which is the permission that makes entry 170's
+check meaningful rather than an obstacle.
+
+**`assign_role` refuses a narrow scope naming nothing.** A facility-, unit-,
+department- or multi-facility-scoped assignment with no facility and no
+department was storable, and produced a user who appeared to hold a role and
+could see no rows -- the worst kind of failure, because it looks like a working
+assignment on the administration screen and like a broken product to the person
+holding it. It briefly became the opposite failure when `apply_scope_filter`
+arrived and its fall-through returned everything (log 157). That is fixed, but
+the row should never have been storable.
+
+Still outstanding in Phase 1: facility-filtering the business lists, and
+logging prescription and invoice reads.
+
+**Affects.** `apps/rbac/permissions.py`, `apps/rbac/services.py`.

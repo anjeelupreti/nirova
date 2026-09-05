@@ -223,3 +223,71 @@ def test_holders_of_agrees_with_resolve_authorization(tenant):
         f"leave: only in holders_of {forward - backward}, "
         f"only in resolve {backward - forward}"
     )
+
+
+# ---------------------------------------------------------------------------
+# ACCESS_DESIGN.md Phase 1 — the pharmacist's safety net
+# ---------------------------------------------------------------------------
+
+
+def test_dispensing_refuses_a_recorded_allergy_without_a_reason(tenant):
+    """The last line of defence, which did not exist until 5 September 2026.
+
+    A prescriber has faced allergy, interaction and duplicate checking since
+    this system was built. Dispensing faced none, so a pharmacist -- the last
+    person between a prescribing error and a patient -- had no net. The demo
+    data itself contained the case: a patient with a severe penicillin allergy
+    and facial swelling, and a seed that handed them amoxicillin on every run.
+
+    It refuses; it does not forbid. A control that cannot be overridden is one
+    that gets worked around outside the system, where nobody can see it.
+    """
+    from apps.patients.models import PatientAllergy
+    from apps.pharmacy.models import Product, StockLocation
+    from apps.pharmacy.services import SafetyOverrideRequired, dispense
+
+    allergy = (
+        PatientAllergy.objects.select_related("patient")
+        .filter(status="active", substance__icontains="penicillin")
+        .first()
+    )
+    if allergy is None:
+        pytest.skip("no penicillin allergy in the demo data")
+
+    product = Product.objects.filter(
+        generic_name__icontains="amoxicillin", is_active=True,
+    ).first()
+    location = StockLocation.objects.filter(is_dispensable=True).first()
+    if product is None or location is None:
+        pytest.skip("no amoxicillin in a dispensable location")
+
+    items = [{"product": product, "quantity": 1}]
+
+    with pytest.raises(SafetyOverrideRequired):
+        dispense(tenant, allergy.patient, location.facility, location, items)
+
+    dispensed = dispense(
+        tenant, allergy.patient, location.facility, location, items,
+        safety_override_reason="Prescriber consulted; tolerated previously.",
+    )
+    assert dispensed.reference
+
+
+def test_a_scope_that_reaches_nothing_cannot_be_assigned(tenant):
+    """ACCESS_DESIGN.md Phase 1. A facility-scoped assignment naming no
+    facility used to be storable, and produced a user who appeared to hold a
+    role and could see nothing -- then, briefly, everything (log 157)."""
+    from apps.common.exceptions import PermissionDeniedError
+    from apps.identity.models import User
+    from apps.rbac.permissions import Scope
+    from apps.rbac.services import assign_role
+
+    user = User.objects.filter(email="counter@manakamana.test").first()
+    if user is None:
+        pytest.skip("no counter user; run seed_demo")
+
+    with pytest.raises(PermissionDeniedError):
+        assign_role(
+            user=user, role_code="pharmacy_counter",
+            scope=Scope.FACILITY, reason="test",
+        )

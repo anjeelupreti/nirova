@@ -326,6 +326,7 @@ SYSTEM_ROLES = [
             "patient.read", "patient.create", "patient.update",
             "encounter.read", "encounter.create",
             "prescription.create", "report.read",
+                    "patient.safety.read", "patient.clinical.read",
         ],
     },
     {
@@ -337,6 +338,7 @@ SYSTEM_ROLES = [
             "facility.read", "department.read",
             "patient.read", "patient.update",
             "encounter.read", "encounter.create", "stock.read",
+                    "patient.safety.read", "patient.clinical.read",
         ],
     },
     {
@@ -351,6 +353,7 @@ SYSTEM_ROLES = [
             "purchase.read", "purchase.create",
             "invoice.read", "invoice.create", "payment.record", "report.read",
             "sale.read", "sale.create", "sale.return", "till.open",
+                    "patient.safety.read",
         ],
     },
     {
@@ -365,6 +368,7 @@ SYSTEM_ROLES = [
             "facility.read", "patient.read", "stock.read",
             "sale.read", "sale.create", "sale.return", "till.open",
             "invoice.read", "payment.record",
+                    "patient.safety.read",
         ],
     },
     {
@@ -393,6 +397,7 @@ SYSTEM_ROLES = [
         "permissions": [
             "facility.read", "department.read", "patient.read",
             "encounter.read", "stock.read", "report.read",
+                    "patient.safety.read",
         ],
     },
     {
@@ -460,6 +465,7 @@ SYSTEM_ROLES = [
             "employee.read", "credential.read", "credential.verify",
             "patient.read", "encounter.read", "prescription.approve",
             "report.read", "analytics.read", "audit.read",
+                    "patient.safety.read", "patient.clinical.read", "privacy.review",
         ],
     },
     {
@@ -474,6 +480,7 @@ SYSTEM_ROLES = [
             "employee.read", "credential.read", "salary.read",
             "report.read", "analytics.read",
             "audit.read", "audit.export", "subscription.read",
+                    "patient.safety.read", "patient.clinical.read", "privacy.review",
         ],
     },
     {
@@ -532,6 +539,24 @@ def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
             f"maximum is {role.max_scope}.",
             detail={"role": role_code, "requested_scope": scope,
                     "max_scope": role.max_scope},
+        )
+
+    # A scope that names nothing reaches nothing. This was storable until now,
+    # and produced a user who appeared to hold a role and could see no rows --
+    # the worst kind of failure, because it looks like a working assignment
+    # from the administration screen and like a broken product to the person
+    # holding it. It briefly became the *opposite* failure when
+    # `apply_scope_filter` arrived and its fall-through returned everything
+    # (log 157); that is fixed, but the row should never have existed.
+    narrow = {
+        Scope.UNIT, Scope.DEPARTMENT, Scope.FACILITY, Scope.MULTI_FACILITY,
+    }
+    if scope in narrow and facility is None and department is None:
+        raise PermissionDeniedError(
+            f"A {scope}-scoped assignment has to name a facility or a "
+            "department. Without one it reaches nothing, and the person would "
+            "appear to hold the role while seeing none of it.",
+            detail={"role": role_code, "scope": scope},
         )
 
     assignment, _ = RoleAssignment.objects.update_or_create(

@@ -46,6 +46,7 @@ from apps.pharmacy.services import (
     start_count,
     stock_valuation,
     sweep_expired,
+    SafetyOverrideRequired,
 )
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -114,6 +115,7 @@ class Command(BaseCommand):
             self._receive(dispensary, store, pharmacist)
             self._fefo(organization, facility, dispensary, pharmacist)
             self._override(organization, facility, dispensary, pharmacist, supervisor)
+            self._allergy(organization, facility, dispensary, pharmacist)
             self._recall(dispensary, supervisor)
             self._expiry(pharmacist)
             self._count(facility, dispensary, pharmacist, supervisor)
@@ -235,10 +237,70 @@ class Command(BaseCommand):
             self.stdout.write(
                 "   one batch covered it — the earliest expiry in stock")
 
+    # -- 2b. The last line of defence -------------------------------------
+
+    def _allergy(self, organization, facility, dispensary, actor):
+        """The check that was not there.
+
+        A prescriber has had allergy, interaction and duplicate checking since
+        this system was built. Dispensing had none, which left the pharmacist
+        -- the last person between a prescribing error and a patient -- with
+        no net at all.
+
+        The scenario is real: Ram has a severe penicillin allergy recorded with
+        facial swelling, and amoxicillin is a penicillin. Nothing in the system
+        would have stopped that hand-over before today, and the FEFO scenario
+        above was performing it on every run.
+        """
+        patient = _live("Ram")
+        amoxicillin = Product.objects.get(code="MED-001")
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            "\n2b. Dispensing against a recorded allergy"))
+
+        allergies = ", ".join(
+            f"{a.substance} ({a.severity})"
+            for a in patient.allergies.filter(status="active")
+        ) or "none recorded"
+        self.stdout.write(f"   {patient.full_name} is allergic to: {allergies}")
+        self.stdout.write(f"   the counter is handing over: {amoxicillin.display_name}")
+
+        items = [{"product": amoxicillin, "quantity": Decimal("10")}]
+        try:
+            dispense(organization, patient, facility, dispensary, items=items,
+                     actor=actor)
+            self.stdout.write(self.style.ERROR(
+                "   BUG: handed over a drug the record warns against, with "
+                "nothing typed"))
+        except SafetyOverrideRequired as exc:
+            self.stdout.write(f"   refused: {exc.message}")
+
+        # It refuses; it does not forbid. Sometimes a drug is genuinely given
+        # despite a listed allergy -- a mild childhood rash, a prescriber who
+        # has weighed it -- and a control that cannot be overridden is one that
+        # gets worked around outside the system, where nobody can see it.
+        result = dispense(
+            organization, patient, facility, dispensary, items=items,
+            actor=actor,
+            safety_override_reason=(
+                "Prescriber consulted: reaction was a mild childhood rash, "
+                "patient has since tolerated amoxicillin twice."
+            ),
+        )
+        self.stdout.write(
+            f"   {result.reference} dispensed with a reason on the record — "
+            "the refusal is a demand for a decision, not a wall"
+        )
+
     # -- 2. FEFO override ------------------------------------------------
 
     def _override(self, organization, facility, dispensary, actor, supervisor):
-        patient = _live("Ram")
+        # Sita, not Ram. Ram has a severe penicillin allergy, and amoxicillin
+        # is a penicillin -- so this scenario, written to demonstrate a *stock*
+        # rule, was quietly handing a drug to somebody it could kill. The
+        # dispensing safety check now refuses it, which is how the seed data
+        # was found to contain that combination at all. The refusal has its own
+        # scenario below; this one is about batches.
+        patient = _live("Sita")
         amoxicillin = Product.objects.get(code="MED-001")
         later = amoxicillin.batches.order_by("-expires_on").first()
         self.stdout.write(self.style.MIGRATE_HEADING(

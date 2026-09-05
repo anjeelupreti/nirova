@@ -97,7 +97,21 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
        conflicts_with=("role.manage",)),
 
     # -- clinical ---------------------------------------------------------
+    # The three tiers of ACCESS_DESIGN.md. `patient.read` keeps its meaning --
+    # identity, which every counter in the group needs in order to establish
+    # who is standing in front of them -- and the two acts it used to imply
+    # are separated out.
     _p("patient.read", "View patients", "Clinical", is_sensitive=True),
+    # Deliberately generous, and what makes the rest safe to restrict: a
+    # pharmacist without an allergy list is more dangerous than one who can
+    # see too much.
+    _p("patient.safety.read",
+       "View allergies, active medicines and dosing-relevant conditions",
+       "Clinical", is_sensitive=True),
+    # The tier the privacy question is actually about, and the one Phase 2
+    # puts behind a care relationship.
+    _p("patient.clinical.read", "View the clinical record", "Clinical",
+       is_sensitive=True),
     _p("patient.create", "Register patients", "Clinical", is_sensitive=True),
     _p("patient.update", "Edit patient records", "Clinical", is_sensitive=True),
     _p("patient.merge", "Merge duplicate patients", "Clinical", is_sensitive=True),
@@ -204,6 +218,12 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     # act that reaches other people, so it is the one that is gated.
     _p("notification.broadcast", "Send an announcement to the organization",
        "Notifications"),
+
+    # -- privacy -----------------------------------------------------------
+    # Reviewing emergency access (Phase 2). An override nobody reviews is not
+    # a control, it is a log entry.
+    _p("privacy.review", "Review emergency access to patient records",
+       "Privacy", is_sensitive=True),
 
     # -- oversight --------------------------------------------------------
     _p("report.read", "View reports", "Oversight"),
