@@ -325,3 +325,68 @@ class PrescriptionLine(BaseModel):
             raise ValidationError(
                 {"end_date": "A course cannot end before it starts."}
             )
+
+
+class PrescriptionPresentation(BaseModel):
+    """A prescription handed over at a pharmacy counter.
+
+    The missing half of the browse-versus-lookup design. `Prescription.facility`
+    records where a prescription was **written**, and a patient may take it to
+    any pharmacy -- that is what a prescription is -- so nothing in the system
+    knew which pharmacy was holding one.
+
+    The consequence was concrete: with the relationship check on, a pharmacist
+    browsed an **empty list**. Correct for dispensing against a reference
+    somebody hands you, and useless for the ordinary question *"what is waiting
+    to be dispensed here?"*
+
+    So the act of presenting is recorded as a fact rather than inferred from a
+    filter. It is the same reasoning as everywhere else in this project: what
+    happened is a row, and what is true now is derived from the rows.
+
+    **This is a care relationship.** A patient who walks into a pharmacy and
+    hands over a prescription has chosen that pharmacy and consented to it
+    being read. Recording the moment is what lets the relationship outlive the
+    single request that created it -- otherwise the prescription vanishes from
+    the counter's screen the instant they navigate away from it.
+    """
+
+    prescription = models.ForeignKey(
+        Prescription, on_delete=models.CASCADE, related_name="presentations",
+    )
+    #: Where it was handed over -- which is the point, and is usually *not*
+    #: `prescription.facility`.
+    facility = models.ForeignKey(
+        Facility, on_delete=models.PROTECT, related_name="presented_prescriptions",
+    )
+
+    presented_at = models.DateTimeField(default=timezone.now, db_index=True)
+    presented_to_id = models.UUIDField(null=True, blank=True, db_index=True)
+    presented_to_name = models.CharField(max_length=255, blank=True)
+
+    #: Cleared when the prescription is dispensed or the patient takes it
+    #: elsewhere. Separate from the prescription's own status, because "this
+    #: pharmacy is holding it" and "it has been dispensed somewhere" are
+    #: different facts -- the recurring rule in this project.
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        db_table = "prescription_presentation"
+        ordering = ["-presented_at"]
+        indexes = [
+            models.Index(fields=["facility", "is_active", "-presented_at"]),
+            models.Index(fields=["prescription", "is_active"]),
+        ]
+        constraints = [
+            # One live presentation per prescription per pharmacy. Presenting
+            # the same prescription twice at the same counter is one patient
+            # standing there, not two.
+            models.UniqueConstraint(
+                fields=["prescription", "facility"],
+                condition=models.Q(is_active=True, deleted_at__isnull=True),
+                name="uniq_live_presentation_per_pharmacy",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.prescription.reference} @ {self.facility.code}"

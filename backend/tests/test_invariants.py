@@ -1104,3 +1104,89 @@ def test_patient_results_actually_runs_its_object_check(tenant):
         )
     finally:
         _privacy_switch(None)
+
+
+# ---------------------------------------------------------------------------
+# The presented-at relationship source
+# ---------------------------------------------------------------------------
+
+
+def test_a_presented_prescription_is_a_relationship_at_that_counter(tenant):
+    """`Prescription.facility` is where it was *written*, and a patient may
+    take it anywhere -- so nothing knew which pharmacy was holding one, and a
+    pharmacist with enforcement on browsed an empty list.
+
+    Bounded to the branch it was presented at: a prescription handed over in
+    Kathmandu does not concern the Bhaktapur counter, and which pharmacy is
+    holding it is the entire point of the row.
+    """
+    import types
+
+    from apps.organization.models import Facility
+    from apps.prescriptions.models import Prescription, PrescriptionPresentation
+    from apps.prescriptions.services import close_presentations, present
+    from apps.rbac.permissions import Scope
+    from apps.rbac.relationships import DEFAULT_RECENCY_DAYS, _presented
+    from apps.rbac.services import UserAuthorization, _merge
+
+    pharmacy = Facility.objects.filter(facility_type="pharmacy").first()
+    other = Facility.objects.exclude(pk=pharmacy.pk).first() if pharmacy else None
+    prescription = (
+        Prescription.objects.exclude(status="superseded")
+        .select_related("patient").first()
+    )
+    if not (pharmacy and other and prescription):
+        pytest.skip("need two facilities and a prescription; run seed_demo")
+
+    PrescriptionPresentation.all_objects.filter(
+        prescription=prescription,
+    ).delete()
+
+    def dispenser_at(facility):
+        authorization = UserAuthorization(user_id="t", organization_id=tenant.id)
+        _merge(authorization, "prescription.dispense", Scope.FACILITY, "t",
+               facility_ids={facility.id})
+        return authorization
+
+    patient = prescription.patient
+    assert _presented(
+        "t", patient, dispenser_at(pharmacy), DEFAULT_RECENCY_DAYS,
+    ) is None
+
+    try:
+        present(prescription, pharmacy)
+        found = _presented(
+            "t", patient, dispenser_at(pharmacy), DEFAULT_RECENCY_DAYS,
+        )
+        assert found is not None and found.source == "presented"
+        assert _presented(
+            "t", patient, dispenser_at(other), DEFAULT_RECENCY_DAYS,
+        ) is None, (
+            "a prescription presented at one branch reached another"
+        )
+
+        close_presentations(prescription)
+        assert _presented(
+            "t", patient, dispenser_at(pharmacy), DEFAULT_RECENCY_DAYS,
+        ) is None, "dispensing did not release the counter's hold"
+    finally:
+        PrescriptionPresentation.all_objects.filter(
+            prescription=prescription,
+        ).delete()
+
+
+def test_audit_records_survive_a_facility_header(tenant):
+    """`facility_code` was `varchar(32)` and holds a 36-character UUID.
+
+    So **every request carrying `X-Facility` failed its audit write**,
+    silently, because `record()` catches and logs rather than raising. The
+    audit log is what the whole access-control design leans on, and it had
+    been dropping events for facility-scoped requests since the header existed.
+    """
+    from apps.audit.models import AuditEvent
+
+    field = AuditEvent._meta.get_field("facility_code")
+    assert field.max_length >= 36, (
+        f"facility_code holds {field.max_length} characters and a UUID is 36; "
+        "audit writes will fail silently for facility-scoped requests"
+    )

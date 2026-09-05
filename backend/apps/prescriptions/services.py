@@ -445,3 +445,92 @@ def _snapshot(prescription: Prescription) -> dict:
             for line in prescription.lines.all()
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Presentation: a prescription handed over at a counter
+# ---------------------------------------------------------------------------
+
+
+def present(prescription, facility, actor=None):
+    """Record that this prescription has been handed over at this pharmacy.
+
+    Called when somebody who can dispense opens a prescription by reference.
+    That act -- a patient standing at a counter with a piece of paper -- is
+    the care relationship and the consent, and recording it is what lets the
+    relationship outlive the single request that created it. Without the row,
+    the prescription disappears from the counter's screen the moment they
+    navigate away.
+
+    Idempotent: presenting the same prescription at the same counter twice is
+    one patient standing there, not two.
+    """
+    from apps.prescriptions.models import PrescriptionPresentation
+
+    if prescription is None or facility is None:
+        return None
+
+    presentation, created = PrescriptionPresentation.objects.get_or_create(
+        prescription=prescription,
+        facility=facility,
+        is_active=True,
+        defaults={
+            "presented_to_id": getattr(actor, "uuid", None),
+            "presented_to_name": getattr(actor, "full_name", "") or "",
+        },
+    )
+    if created:
+        record(
+            AuditAction.VIEW_SENSITIVE,
+            entity_type="prescriptions.Prescription",
+            entity_id=prescription.uuid,
+            entity_label=f"{prescription.reference} presented at "
+                         f"{facility.code}",
+            metadata={"facility": facility.code},
+        )
+    return presentation
+
+
+def close_presentations(prescription, reason: str = "") -> int:
+    """Stop a prescription counting as held at any counter.
+
+    Called when it is dispensed, cancelled or superseded. Deactivated rather
+    than deleted, because "this was presented at the Kathmandu branch on
+    Tuesday and dispensed on Thursday" is a fact worth keeping -- and because
+    somebody will eventually ask which pharmacy a patient actually used.
+    """
+    from apps.prescriptions.models import PrescriptionPresentation
+
+    return PrescriptionPresentation.objects.filter(
+        prescription=prescription, is_active=True,
+    ).update(is_active=False)
+
+
+def awaiting_dispensing(facility) -> list:
+    """What is waiting to be dispensed at this counter.
+
+    The question a pharmacist actually asks, and the one that had no answer
+    until presentation was recorded.
+    """
+    from apps.prescriptions.models import PrescriptionPresentation
+
+    rows = (
+        PrescriptionPresentation.objects.filter(
+            facility=facility, is_active=True,
+        )
+        .select_related("prescription", "prescription__patient")
+        .order_by("presented_at")
+    )
+    return [
+        {
+            "reference": row.prescription.reference,
+            "uuid": str(row.prescription.uuid),
+            "patient_name": row.prescription.patient.full_name,
+            "patient_mrn": row.prescription.patient.mrn,
+            "prescriber_name": row.prescription.prescriber_name,
+            "status": row.prescription.status,
+            "presented_at": row.presented_at,
+            "presented_to": row.presented_to_name,
+        }
+        for row in rows
+    ]

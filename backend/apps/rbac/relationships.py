@@ -124,6 +124,7 @@ def has_care_relationship(
         _own_orders,
         _appointment,
         _nursing,
+        _presented,
         _break_glass,
     ):
         found = check(user_id, patient, authorization, recency_days)
@@ -339,6 +340,44 @@ def _nursing(user_id, patient, authorization, recency_days):
     )
 
 
+def _presented(user_id, patient, authorization, recency_days):
+    """A prescription for this patient is being held at the caller's counter.
+
+    The source `ACCESS_DESIGN.md` named and Phase 2 shipped without, because
+    there was nothing to read: `Prescription.facility` is where a prescription
+    was *written*, and a patient may take it anywhere. Recording the act of
+    presenting gave it something to stand on.
+
+    Bounded by the caller's facility scope. A prescription presented in
+    Kathmandu does not concern the Bhaktapur counter, and the whole point of
+    the row is *which* pharmacy is holding it.
+    """
+    from apps.prescriptions.models import PrescriptionPresentation
+
+    if authorization is None:
+        return None
+    facility_ids = authorization.accessible_facility_ids("prescription.dispense")
+    if facility_ids == set():
+        return None
+
+    presentations = PrescriptionPresentation.objects.filter(
+        prescription__patient=patient, is_active=True,
+    )
+    if facility_ids is not None:
+        presentations = presentations.filter(facility_id__in=facility_ids)
+
+    presentation = (
+        presentations.select_related("prescription", "facility").first()
+    )
+    if presentation is None:
+        return None
+    return Relationship(
+        "presented",
+        f"{presentation.prescription.reference} was presented at "
+        f"{presentation.facility.name}.",
+    )
+
+
 def _break_glass(user_id, patient, authorization, recency_days):
     """An emergency override, if one is live.
 
@@ -485,6 +524,22 @@ def related_patient_ids(user_id, authorization=None,
         .exclude(admission__isnull=True)
         .values_list("admission__patient_id", flat=True)
     )
+
+    presented_facilities = (
+        authorization.accessible_facility_ids("prescription.dispense")
+        if authorization is not None else set()
+    )
+    if presented_facilities != set():
+        from apps.prescriptions.models import PrescriptionPresentation
+
+        presentations = PrescriptionPresentation.objects.filter(is_active=True)
+        if presented_facilities is not None:
+            presentations = presentations.filter(
+                facility_id__in=presented_facilities
+            )
+        ids.update(
+            presentations.values_list("prescription__patient_id", flat=True)
+        )
 
     # Break-glass is deliberately *not* counted towards uses here. A list is
     # not a read of a record: counting it would make one page view look like

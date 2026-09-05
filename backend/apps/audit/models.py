@@ -74,7 +74,14 @@ class AuditEvent(UUIDModel, TimeStampedModel):
 
     # -- where ------------------------------------------------------------
     facility_id = models.BigIntegerField(null=True, blank=True, db_index=True)
-    facility_code = models.CharField(max_length=32, blank=True)
+    #: The facility a request named, as the `X-Facility` header carried it --
+    #: which is a UUID, not a code, despite the field name. It was declared
+    #: `max_length=32` and a UUID is 36 characters, so **every request carrying
+    #: that header failed its audit write**, silently, because `record()`
+    #: catches and logs rather than raising. Found on 6 September 2026 while
+    #: probing something else. Widened rather than renamed: the column is read
+    #: by existing rows and an audit table is append-only.
+    facility_code = models.CharField(max_length=64, blank=True)
     department_id = models.BigIntegerField(null=True, blank=True)
 
     # -- what -------------------------------------------------------------

@@ -556,6 +556,19 @@ def dispense(
             "prescription": prescription_reference,
         },
     )
+
+    # The counter is no longer holding it. Closed here rather than left to
+    # expire, because "waiting to be dispensed" and "dispensed" are different
+    # facts and a worklist that keeps finished work is one people stop
+    # reading. Deactivated, not deleted -- which pharmacy a patient actually
+    # used is worth being able to answer later.
+    if prescription_uuid:
+        from apps.prescriptions.models import Prescription
+        from apps.prescriptions.services import close_presentations
+
+        prescription = Prescription.objects.filter(uuid=prescription_uuid).first()
+        if prescription is not None:
+            close_presentations(prescription, reason="Dispensed")
     return record_
 
 

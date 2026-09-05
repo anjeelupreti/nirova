@@ -6195,3 +6195,112 @@ decision rather than something missed.
 
 **Affects.** `apps/rbac/management/commands/seed_access_demo.py`,
 `apps/diagnostics/views.py`, `tests/test_seeds.py`.
+
+---
+
+## 185 - Presenting a prescription
+2026-09-06 · Backend · feature
+
+The relationship source `ACCESS_DESIGN.md` named and Phase 2 shipped without.
+With enforcement on, a pharmacist browsed an **empty list** -- correct for
+dispensing against a reference somebody hands you, useless for the ordinary
+question *"what is waiting to be dispensed here?"*
+
+It could not be a filter. `Prescription.facility` records where a prescription
+was **written**, and a patient may take it to any pharmacy -- that is what a
+prescription is. Nothing in the system knew which counter was holding one.
+
+So the act of presenting is recorded as a fact: `PrescriptionPresentation`,
+written when somebody who can dispense opens a prescription by reference. The
+same reasoning as everywhere else here -- what happened is a row, what is true
+now is derived from the rows. A patient who walks into a pharmacy and hands
+over a prescription has chosen that pharmacy and consented to it being read;
+recording the moment is what lets the relationship **outlive the single request
+that created it**, instead of the prescription vanishing from the counter's
+screen the instant they navigate away.
+
+Closed on dispensing rather than left to expire, and deactivated rather than
+deleted -- which pharmacy a patient actually used is worth being able to answer.
+`is_active` is separate from the prescription's own status, because "this
+counter is holding it" and "it has been dispensed somewhere" are different
+facts.
+
+Verified end to end and bounded to the branch it was presented at:
+
+    before presenting                none
+    presented at MKP-KTM             presented | RX-2026-000062 was presented at…
+    the same, from another branch    correctly nothing
+    after dispensing                 gone
+
+    waiting at this counter          0 -> 1 -> 0
+
+**Affects.** `apps/prescriptions/models.py`, `apps/prescriptions/services.py`,
+`apps/prescriptions/views.py`, `apps/pharmacy/services.py`,
+`apps/rbac/relationships.py`.
+
+---
+
+## 186 - Every request with a facility header lost its audit record
+2026-09-06 · Backend · bug
+
+Found while probing something else, which is how most of these arrive.
+
+`AuditEvent.facility_code` was declared `max_length=32`. The audit middleware
+fills it from `X-Facility`, which carries a **UUID -- 36 characters**.
+
+So every request naming a facility failed its audit write. Silently: `record()`
+catches and logs rather than raising, deliberately, because losing an audit
+line must not fail the operation being audited. The consequence is that the
+failure has been invisible for as long as the header has existed.
+
+    a facility UUID is 36 characters
+    facility_code column holds     : 32
+
+**The audit log is what this entire access-control design leans on.** Phase 1
+added logging to prescription and invoice reads on the argument that where
+access cannot be narrowed it must be recorded; Phase 2's break-glass writes a
+critical-severity event as its durable record. All of it was being dropped for
+facility-scoped requests -- which is to say, for exactly the pharmacy and
+counter traffic the 4 September finding was about.
+
+Widened to 64 rather than renamed: an audit table is append-only and existing
+rows read the column. The field name still says *code* while it holds an
+identifier, and the model now says so rather than leaving the next reader to
+work it out.
+
+A test asserts the column is wide enough for a UUID, since the failure mode is
+a log line nobody reads rather than an exception.
+
+**A second thing this exposed.** `present()` never fired on the first attempt
+because the view read `request.facility`, which is always `None` -- the tenancy
+middleware resolves `X-Facility` into a **context variable**, not onto the
+request object. Two bugs in one afternoon from the same header being handled
+two different ways.
+
+**Affects.** `apps/audit/models.py`,
+`apps/audit/migrations/0002_widen_facility_code.py`,
+`apps/prescriptions/views.py`.
+
+---
+
+## 187 - The demo tenant had no pharmacist
+2026-09-06 · Tooling · finding
+
+Testing the presentation loop needed somebody who could dispense. Asking
+`holders_of("prescription.dispense")` returned **one person: the organization
+owner.**
+
+`pharmacy_counter` sells and takes payment; `pharmacy_manager` runs the branch;
+neither carries `prescription.dispense`, and no user held `pharmacist`. So the
+demo pharmacy could not legally hand over a prescription-only medicine, and
+nothing had noticed because no seed exercised that path through the API.
+
+Assigned `pharmacist` to the person who runs the pharmacy -- the same human
+usually does both, and the model has always supported holding two roles.
+
+Worth recording rather than quietly fixing: **a role catalogue can be complete
+and still leave a workflow with nobody able to perform it.** The gap is not in
+the roles, it is in who was given them, and only the second is visible from the
+outside.
+
+**Affects.** demo data.

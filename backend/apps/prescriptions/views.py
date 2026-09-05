@@ -1,3 +1,4 @@
+import logging
 """Prescription endpoints."""
 
 from django.shortcuts import get_object_or_404
@@ -25,10 +26,15 @@ from apps.prescriptions.services import (
     active_medications,
     create_prescription,
     discontinue_line,
+    awaiting_dispensing,
+    present,
     preview_prescription,
     revise_prescription,
 )
 from apps.rbac.permissions import Scope
+
+
+logger = logging.getLogger("nirova.prescriptions")
 
 
 class PrescriptionViewSet(viewsets.ModelViewSet):
@@ -62,7 +68,50 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
                 instance.patient,
                 reason=f"Prescription {instance.reference}",
             )
+
+        # Somebody who can dispense has opened this by reference, which means
+        # a patient is standing at their counter holding it. Recorded as a
+        # fact rather than inferred, so the prescription stays on that
+        # counter's worklist instead of vanishing the moment they navigate
+        # away -- and so `_presented` can make it a care relationship.
+        #
+        # Best-effort: failing to note the presentation must not stop the
+        # pharmacist reading the prescription in front of them.
+        authorization = get_authorization(request)
+        facility = _facility_of(request)
+        if (
+            authorization is not None
+            and facility is not None
+            and authorization.has("prescription.dispense", Scope.OWN)
+        ):
+            try:
+                present(instance, facility, actor=request.user)
+            except Exception:
+                logger.exception(
+                    "could not record presentation of %s", instance.reference,
+                )
         return Response(self.get_serializer(instance).data)
+
+    @action(detail=False, methods=["get"], url_path="awaiting")
+    def awaiting(self, request):
+        """What is waiting to be dispensed at this counter.
+
+        The question a pharmacist actually asks, and the one that had no answer
+        while `Prescription.facility` was the only link -- that records where a
+        prescription was *written*, and a patient may take it anywhere. This
+        reads the presentations instead: prescriptions handed over here and not
+        yet dispensed.
+        """
+        facility = _facility_of(request)
+        if facility is None:
+            return Response(
+                {"detail": "Name a facility to see what is waiting there.",
+                 "results": []},
+            )
+        return Response({
+            "facility": facility.code,
+            "results": awaiting_dispensing(facility),
+        })
 
     def get_queryset(self):
         queryset = Prescription.objects.select_related(
@@ -201,3 +250,20 @@ class ActiveMedicationsView(APIView):
                 "medications": medications,
             }
         )
+
+
+def _facility_of(request):
+    """The facility a request is acting at, from the tenant context.
+
+    `X-Facility` is resolved by the tenancy middleware into the context
+    variable, not onto the request object -- so `request.facility` is always
+    `None` and the first version of the presentation code silently never
+    fired. The header is a UUID; this turns it back into the row.
+    """
+    from apps.organization.models import Facility
+    from apps.tenancy.context import get_current_facility_id
+
+    facility_id = get_current_facility_id()
+    if not facility_id:
+        return None
+    return Facility.objects.filter(uuid=facility_id).first()

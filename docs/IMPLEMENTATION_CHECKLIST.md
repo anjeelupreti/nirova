@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1121** |
-| **Outstanding** | **100** | **629** |
+| **Done** | **32 of 132** | **1123** |
+| **Outstanding** | **100** | **628** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-629 understates the remaining work: in the later phases some lines group
+628 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2217,9 +2217,12 @@ September; findings measured, not assumed.*
       the dispensing role — the patient handing over the reference is the care
       relationship and is the consent. Measured: a counter assistant
       enumerates 0 prescriptions and still opens the one presented
-- [ ] A *presented at this facility* relationship source, so a pharmacist can
-      see prescriptions waiting to be dispensed here. `Prescription.facility`
-      is where it was **written**, so this needs an event rather than a filter
+- [x] A *presented at this facility* relationship source. `Prescription.facility`
+      is where it was **written**, so this is an event — `PrescriptionPresentation`,
+      written when a dispenser opens one by reference, closed on dispensing,
+      and bounded to the branch it was presented at
+- [x] `GET /api/clinical/prescriptions/awaiting/` — what is waiting to be
+      dispensed at this counter, the question that had no answer
 
 **Phase 3 — making it visible**
 - [ ] "Who looked at my record" in the patient portal

@@ -179,7 +179,7 @@ should be. It starts mattering the day `_admission` narrows to a ward.
 
 ## Verification, and its limits
 
-**79 tests**, including 12 new invariant tests for this phase, and the seed
+**81 tests**, including 12 new invariant tests for this phase, and the seed
 suite twice through.
 
 The switch is now **on for the `manakamana` demo tenant**, which is
@@ -202,10 +202,6 @@ stranger's order?" and nobody asked "how many can I see?"
 
 ## Outstanding
 
-- **A *presented-at* relationship source.** A pharmacist browses an empty list
-  — correct for dispensing against a presented reference, wrong for
-  "prescriptions waiting here". Needs an event when a pharmacy pulls one up,
-  not a filter, because `Prescription.facility` is where it was *written*.
 - **119 `HasPermission.of` call sites** still on the strict facility default.
   They gate writes and administrative actions where a facility floor is often
   right, and each needs the question asked individually.
