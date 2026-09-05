@@ -234,7 +234,10 @@ class ESSMeSummaryView(APIView):
                 {
                     "uuid": str(c.uuid),
                     "name": c.name,
-                    "registration_number": c.registration_number,
+                    # `reference_number` on the model. The wrong name
+                    # here crashed every call to this endpoint, and
+                    # nothing noticed because no test drove it.
+                    "registration_number": c.reference_number,
                     "issuing_body": c.issuing_body,
                     "expires_on": c.expires_on,
                     "days_to_expiry": days,
@@ -313,15 +316,19 @@ class ESSMeSummaryView(APIView):
                     if today_attendance
                     else None
                 ),
+                # `leave_balance` returns the type's *code* and *name* as
+                # strings, not the object -- this read them as if they were a
+                # `LeaveType` and crashed. Third field-shape mistake in one
+                # endpoint, all of the same kind: written against what the
+                # data was assumed to look like rather than what it is, and
+                # never once called.
                 "leave_balances": [
                     {
-                        "code": b["leave_type"].code,
-                        "name": b["leave_type"].name,
-                        "colour": b["leave_type"].colour,
+                        "code": b["leave_type"],
+                        "name": b["leave_type_name"],
                         "balance": str(b["balance"]),
-                        "annual_entitlement": str(
-                            b["leave_type"].annual_entitlement
-                        ),
+                        "available": str(b["available"]),
+                        "annual_entitlement": str(b["entitlement"]),
                     }
                     for b in balances
                 ],

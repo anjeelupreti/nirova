@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1123** |
+| **Done** | **32 of 132** | **1125** |
 | **Outstanding** | **100** | **628** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
@@ -304,10 +304,15 @@ rather than redesigning around it.
       of nine clinical endpoints, including the patient list. Fixed per
       endpoint, and scheduling gained the queryset narrowing it had never
       needed while the check was refusing everybody anyway
-- [ ] **The remaining 119 `HasPermission.of` call sites still use the default
-      facility floor.** They gate writes and administrative actions, where a
-      facility floor is often right — but each needs the question asked of it
-      individually rather than assumed either way
+- [x] **Swept: every role against all 72 parameterless GET endpoints.** Most
+      refusals are correct; three were not — the doctor's own worklist, and
+      the emergency board and summary
+- [x] A test fails on any 5xx from any endpoint for any role. A 403 is an
+      answer; a 500 is a bug, and an endpoint only the right role can reach is
+      an endpoint only the right role can crash
+- [ ] The remaining `HasPermission.of` call sites on write and administrative
+      endpoints, where a facility floor is often right. Reads are now swept;
+      writes are not
 - [x] Per-user permission grants
 - [x] Per-user denials that beat role grants
 - [x] Time-bounded role assignments

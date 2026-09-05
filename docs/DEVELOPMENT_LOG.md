@@ -6304,3 +6304,61 @@ the roles, it is in who was given them, and only the second is visible from the
 outside.
 
 **Affects.** demo data.
+
+---
+
+## 188 - Every role against every endpoint
+2026-09-06 · Backend · bug
+
+Log 181 found that a doctor was refused seven of nine clinical endpoints, and
+noted that 124 permission checks use the default `Scope.FACILITY` while four
+seeded roles carry a `max_scope` below it. That was one role against nine
+endpoints, chosen by hand. This is the systematic version: **every role against
+every parameterless GET endpoint** -- 72 of them, six distinct role sets.
+
+    doctor                          ok  26   refused  42
+    hr_manager+operations_manager   ok  28   refused  32
+    organization_admin              ok  41   refused   1
+    pharmacist+pharmacy_manager     ok  33   refused  24
+    pharmacy_counter                ok  31   refused  35
+    staff                           ok  25   refused  45
+
+Most of those refusals are correct -- a counter assistant is rightly refused
+`stock/adjust`, and `/api/pos/summary/` shows *margin* as well as takings,
+which is not a counter assistant's business. What the sweep is for is the
+handful that are not.
+
+**A doctor was refused `/api/clinical/worklist/`.** Their landing screen. The
+view's own docstring calls it *"the doctor's landing screen: who is waiting on
+them right now"*, §96 records it as built, and it is scoped to the caller by
+construction -- it returns *their* open encounters and nobody else's. It
+demanded facility scope. **A "my" view that requires facility-wide authority is
+a contradiction in its own name.**
+
+The emergency board and summary went the same way, and for the same reason:
+they are bounded by the facility named in the query, so the check in front of
+them need only establish the permission.
+
+**And three crashes in one endpoint.** `/api/hr/me/summary/` raised
+`AttributeError` on every call, for every role that could reach it:
+
+* `Credential.registration_number` -- the field is `reference_number`;
+* `Employee.is_clinical` -- the flag lives on `Position`, and `Employee`
+  forwards `is_provider` but not `is_clinical`. That asymmetry was the real
+  bug, and the property now exists;
+* `b["leave_type"].code` -- `leave_balance` returns the code as a *string*, not
+  the object.
+
+Three field-shape mistakes of the same kind: written against what the data was
+assumed to look like rather than what it is. Employee self-service, built two
+days earlier, **crashing for the only people it exists for**, because nothing
+had ever called it through the API.
+
+**The general guard is worth more than any of the individual fixes.** A test
+now sweeps every role against every parameterless endpoint and fails on any
+5xx. A 403 is an answer; a 500 is a bug, and it hides behind permissions --
+**an endpoint only the right role can reach is an endpoint only the right role
+can crash.**
+
+**Affects.** `apps/encounters/views.py`, `apps/emergency/api.py`,
+`apps/hr/ess_api.py`, `apps/hr/models.py`, `tests/test_invariants.py`.

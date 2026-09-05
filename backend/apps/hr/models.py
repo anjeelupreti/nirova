@@ -283,6 +283,19 @@ class Employee(BaseModel):
         return self.status in WORKING_STATUSES
 
     @property
+    def is_clinical(self) -> bool:
+        """Whether this person treats patients.
+
+        Delegates to the position, the same way `is_provider` does. The
+        asymmetry was the bug: `Position` carries both flags, `Employee`
+        forwarded only one, and the self-service summary asking for the other
+        crashed every call. Not every clinical person is a provider -- a ward
+        nurse is clinical and is not scheduled for consultations -- so the two
+        are genuinely different questions and both need answering here.
+        """
+        return bool(self.position and self.position.is_clinical)
+
+    @property
     def is_provider(self) -> bool:
         """Whether this person may be scheduled and may prescribe."""
         return bool(self.position and self.position.is_provider)

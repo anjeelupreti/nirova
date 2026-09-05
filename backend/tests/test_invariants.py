@@ -1190,3 +1190,99 @@ def test_audit_records_survive_a_facility_header(tenant):
         f"facility_code holds {field.max_length} characters and a UUID is 36; "
         "audit writes will fail silently for facility-scoped requests"
     )
+
+
+# ---------------------------------------------------------------------------
+# The role sweep
+# ---------------------------------------------------------------------------
+
+
+def _parameterless_api_paths():
+    from django.urls import get_resolver
+
+    found = set()
+    for pattern in get_resolver().url_patterns:
+        for entry in getattr(pattern, "url_patterns", [pattern]):
+            route = str(getattr(entry.pattern, "_route", ""))
+            prefix = str(getattr(pattern.pattern, "_route", ""))
+            full = "/" + prefix + route
+            if "<" in full or not full.startswith("/api/"):
+                continue
+            if any(skip in full for skip in ("schema", "docs", "health", "auth")):
+                continue
+            found.add(full)
+    return sorted(found)
+
+
+def test_no_endpoint_crashes_for_any_role(tenant):
+    """No GET should return 5xx for anybody, whatever they are allowed to see.
+
+    A 403 is an answer. A 500 is a bug, and it hides behind permissions: an
+    endpoint only the right role can reach is an endpoint only the right role
+    can crash. This sweep found `/api/hr/me/summary/` raising
+    `AttributeError` on every call -- employee self-service, built two days
+    earlier, crashing for the only people it exists for, because nothing had
+    ever driven it through the API.
+    """
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import Membership, MembershipStatus, User
+    from apps.rbac.models import RoleAssignment
+
+    actors = {}
+    for membership in Membership.objects.filter(
+        organization=tenant, status=MembershipStatus.ACTIVE,
+    ).select_related("user"):
+        codes = sorted(
+            assignment.role.code
+            for assignment in RoleAssignment.objects.filter(
+                user_id=membership.user.uuid, status="active",
+            ).select_related("role")
+        )
+        if codes:
+            actors.setdefault("+".join(codes), membership.user.email)
+    if not actors:
+        pytest.skip("no role assignments; run seed_demo")
+
+    crashes = []
+    for role, email in sorted(actors.items()):
+        user = User.objects.get(email=email)
+        client = Client(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}",
+            HTTP_X_ORGANIZATION=tenant.slug,
+        )
+        for path in _parameterless_api_paths():
+            try:
+                status = client.get(path).status_code
+            except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+                crashes.append(f"{role} {path}: raised {type(exc).__name__}")
+                continue
+            if status >= 500:
+                crashes.append(f"{role} {path}: {status}")
+
+    assert not crashes, "\n".join(crashes[:12])
+
+
+def test_a_doctor_can_open_their_own_worklist(tenant):
+    """`MyWorklistView` is the doctor's landing screen and is scoped to the
+    caller by construction — it returns *their* open encounters.
+
+    It demanded `Scope.FACILITY`, so every department-scoped doctor was refused
+    their own screen, which §96 records as built. A "my" view that requires
+    facility-wide authority is a contradiction in its own name.
+    """
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("no demo doctor")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    assert client.get("/api/clinical/worklist/").status_code == 200

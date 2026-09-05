@@ -275,7 +275,7 @@ class DisposeSerializer(serializers.Serializer):
 class ArrivalViewSet(viewsets.ReadOnlyModelViewSet):
     """Emergency attendances."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Arrival, relations=["facility", "patient", "department"],
@@ -442,7 +442,7 @@ class ArrivalViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CriticalAlertSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         CriticalAlert, relations=["arrival"], fields=["pathway"]
@@ -482,7 +482,7 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
 class BoardView(APIView):
     """Everyone in the department, sickest and longest-waiting first."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
 
     def get(self, request):
         facility = get_object_or_404(
@@ -492,7 +492,7 @@ class BoardView(APIView):
 
 
 class DepartmentSummaryView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
 
     def get(self, request):
         facility = get_object_or_404(

@@ -310,7 +310,15 @@ class MyWorklistView(APIView):
     whoever booked first.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # `Scope.OWN`: this view is scoped to the caller by construction -- it
+    # returns *their* open encounters and nobody else's. Demanding facility
+    # scope in front of it refused every department-scoped doctor their own
+    # landing screen, which §96 records as built. A "my" view that requires
+    # facility-wide authority is a contradiction in its own name.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("encounter.read", scope=Scope.OWN),
+    ]
 
     def get(self, request):
         queryset = Encounter.objects.filter(
