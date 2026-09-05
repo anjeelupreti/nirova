@@ -5705,3 +5705,81 @@ in seven -- or one week in fifty-two -- is a test that gets ignored rather than
 read.
 
 **Affects.** `apps/hr/management/commands/seed_attendance_demo.py`.
+
+---
+
+## 175 - The care relationship
+2026-09-06 · Backend · feature
+
+`apps/rbac/relationships.py`. Step 1 of `PHASE2_PLAN.md`, and **nothing calls
+it** -- deliberately, so it can be measured and argued with before it starts
+refusing anybody.
+
+`has_care_relationship(user_id, patient, authorization)` returns a
+`Relationship` or `None`. Six sources, cheapest and likeliest first,
+short-circuited:
+
+* an **open encounter** this person is the provider on -- one indexed lookup on
+  `(provider_uuid, -started_at)`, and the overwhelmingly common case;
+* an **admission** at a facility the caller's scope reaches;
+* a **prescription or diagnostic order** they wrote;
+* an **appointment**, from a day before to a week after;
+* a **nursing assignment** to the patient's bed;
+* a **break-glass grant**, which step 3 builds.
+
+Three decisions worth stating.
+
+**It returns why, not whether.** A boolean cannot be written onto an access log
+and cannot be shown to the person reading the record. "You are seeing this
+because you admitted them on Tuesday" is what makes the control reviewable
+afterwards, and a `True` is not.
+
+**The admission branch is bounded by facility but not by prior contact.** A
+live inpatient is being cared for by whoever is on that site, including people
+who have not yet touched the record -- the on-call doctor who has just been
+bleeped has a relationship before they have written anything. But being
+admitted in Bhaktapur does not concern a clinician who only works in Kathmandu.
+
+**Exemptions are an explicit branch**, not something that falls out of a scope
+comparison somewhere else. Owner, `audit.read`, and clinical access held at
+organization scope. An exemption that is a side effect is one nobody knows
+exists until it is abused.
+
+Every branch was fired deliberately against real rows, because an unreachable
+branch is worse than no branch. Two needed arranging: the orderer branch was
+shadowed by the prescriber check on every patient in the demo data, and the
+admission branch fired for nobody because no role assignment names the hospital
+facility.
+
+---
+
+## 176 - A caller with no user id is nobody, not everybody
+2026-09-06 · Backend · bug
+
+Found while writing the negative case for entry 175, from a probe that crashed
+for an unrelated reason.
+
+The relationship checks compare `user_id` against nullable columns.
+`Encounter.objects.filter(provider_uuid=None)` is `provider_uuid IS NULL` in
+SQL -- so a caller with no user id would match **every encounter that has no
+provider recorded**, and be handed a care relationship with each of those
+patients.
+
+Measured against the demo tenant: three encounters, three strangers. Before
+entry 173 backfilled the attribution it would have been ninety-six.
+
+**This is reachable, not theoretical.** `relationship_for_request` reads
+`getattr(request.user, "uuid", None)`, and a portal principal -- the
+patient-facing half of the application -- has no `uuid` at all. The one class
+of caller who must never hold a clinical care relationship is exactly the one
+that would have collected a handful of them.
+
+The shape is worth naming, because it is the third time this project has met
+it: **a null compared against a nullable column is not "no match", it is "match
+the nulls".** Log 157 was the same mistake in a different dress -- an empty
+facility set that returned everything instead of nothing. Absence of a
+constraint reads as absence of a restriction unless something says otherwise.
+
+Guarded now, and tested.
+
+**Affects.** `apps/rbac/relationships.py`.

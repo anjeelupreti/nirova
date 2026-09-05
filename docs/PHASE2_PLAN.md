@@ -1,6 +1,6 @@
 # Access control, Phase 2 — development plan
 
-**Status:** planned, not started.
+**Status:** steps 0 and 1 done. Nothing is enforced yet.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the
@@ -94,7 +94,7 @@ name somebody who can sign in.
 
 ## Steps
 
-### Step 1 — `has_care_relationship`
+### Step 1 — `has_care_relationship` *(done, 6 September 2026)*
 
 `apps/rbac/relationships.py`.
 

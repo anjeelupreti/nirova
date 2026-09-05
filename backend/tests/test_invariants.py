@@ -416,3 +416,103 @@ def test_relationship_sources_point_at_real_members(tenant):
             )
 
     assert not problems, "; ".join(problems)
+
+
+# ---------------------------------------------------------------------------
+# PHASE2_PLAN.md step 1 — the care relationship
+# ---------------------------------------------------------------------------
+
+
+def test_no_user_id_is_nobody_not_everybody(tenant):
+    """A caller with no user id must not match unattributed records.
+
+    These checks compare `user_id` against nullable columns, so
+    `provider_uuid=None` becomes `provider_uuid IS NULL` and a `None` caller
+    would collect a relationship with every patient whose encounter has no
+    provider. Reachable: `relationship_for_request` reads
+    `getattr(request.user, "uuid", None)`, and a portal principal has none.
+    """
+    from apps.encounters.models import Encounter
+    from apps.rbac.relationships import has_care_relationship
+
+    orphan = Encounter.objects.filter(
+        provider_uuid__isnull=True,
+    ).select_related("patient").first()
+    if orphan is None:
+        pytest.skip("no unattributed encounter to test against")
+
+    assert has_care_relationship(None, orphan.patient) is None, (
+        "a caller with no user id was granted a relationship with a patient "
+        "whose encounter simply has no provider recorded"
+    )
+
+
+def test_relationship_reports_why_not_merely_whether(tenant):
+    """The reason is written onto the access log and shown to the reader.
+
+    A boolean cannot carry "you are seeing this because you admitted them on
+    Tuesday", and that sentence is what makes the control reviewable.
+    """
+    from apps.encounters.models import Encounter
+    from apps.rbac.relationships import has_care_relationship
+
+    encounter = Encounter.objects.filter(
+        provider_uuid__isnull=False,
+    ).select_related("patient").first()
+    if encounter is None:
+        pytest.skip("no attributed encounter")
+
+    found = has_care_relationship(encounter.provider_uuid, encounter.patient)
+    assert found is not None, "the provider of an encounter has no relationship"
+    assert found.source
+    assert found.reason and found.reason.endswith("."), (
+        "the reason is shown to a person; it should be a sentence"
+    )
+
+
+def test_admission_relationship_respects_facility_scope(tenant):
+    """A live inpatient concerns whoever is on that site, and nobody else.
+
+    The on-call doctor who has just been bleeped has a relationship before they
+    have written anything -- but being admitted in Bhaktapur does not concern a
+    clinician who only works in Kathmandu.
+    """
+    import types
+
+    from apps.inpatient.models import CLOSED_STATUSES, Admission
+    from apps.organization.models import Facility
+    from apps.rbac.permissions import Scope
+    from apps.rbac.relationships import DEFAULT_RECENCY_DAYS, _admission
+    from apps.rbac.services import UserAuthorization, _merge
+
+    admission = (
+        Admission.objects.exclude(status__in=CLOSED_STATUSES)
+        .select_related("patient", "facility")
+        .first()
+    )
+    if admission is None:
+        pytest.skip("nobody is currently admitted")
+
+    other = Facility.objects.exclude(pk=admission.facility_id).first()
+    user_id = admission.patient.uuid  # any uuid; this branch ignores identity
+
+    def scoped(facility_id):
+        auth = UserAuthorization(user_id="t", organization_id=tenant.id)
+        _merge(auth, "patient.clinical.read", Scope.FACILITY, "t",
+               facility_ids={facility_id})
+        return auth
+
+    inside = _admission(
+        user_id, admission.patient, scoped(admission.facility_id),
+        DEFAULT_RECENCY_DAYS,
+    )
+    assert inside is not None and inside.source == "admission"
+
+    if other is not None:
+        outside = _admission(
+            user_id, admission.patient, scoped(other.id), DEFAULT_RECENCY_DAYS,
+        )
+        assert outside is None, (
+            "a clinician scoped to another facility was given a relationship "
+            "with an inpatient they cannot reach"
+        )
