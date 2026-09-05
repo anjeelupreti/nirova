@@ -9,7 +9,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasClinicalAccess, HasPermission, get_authorization
+from apps.common.permissions import (
+    HasClinicalAccess,
+    HasPermission,
+    get_authorization,
+    narrow_to_relationship,
+)
 from apps.diagnostics.models import (
     AlertStatus,
     CriticalValueAlert,
@@ -121,6 +126,14 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
             if allowed is not None:
                 queryset = queryset.filter(facility_id__in=allowed)
 
+        # Narrowed for the same reason prescriptions and encounters are: an
+        # order names a patient, so a list of every order in the organization
+        # is a list of who is being investigated for what. Missed in the first
+        # pass and found by `seed_access_demo` on its first run -- the object
+        # check refused a stranger's order while the list still showed all 76
+        # of them.
+        if self.action == "list":
+            queryset = narrow_to_relationship(queryset, self.request)
         return queryset.order_by("-ordered_at")
 
     def create(self, request, *args, **kwargs):

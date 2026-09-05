@@ -6140,3 +6140,58 @@ recording that is better than counting it as coverage.
 
 **Affects.** `apps/diagnostics/views.py`, `apps/icu/api.py`,
 `apps/inpatient/api.py`.
+
+---
+
+## 184 - A seed that goes through the front door
+2026-09-06 · Tooling · feature, bug
+
+`seed_access_demo`. The gap named at the end of Phase 2: **every other seed in
+this project runs at the service layer, below the permission classes.** So a
+green suite proved enforcement did not break the domain logic and proved
+nothing at all about who can open what. The one bug that class of testing could
+never find -- a permission class listed in `permission_classes` and never
+invoked, because a plain `APIView` does not call `get_object()` -- was found by
+hand, and only because I went looking.
+
+This drives the real API as real users with real tokens, in both switch
+positions, and prints a table:
+
+    ENFORCEMENT OFF     patients  encounters  prescript  diagnostic  invoices
+    organization owner         7         123         63          76       160
+    doctor                     7          62         63          76       403
+    pharmacy counter           7         403         63         403        88
+
+    ENFORCEMENT ON
+    organization owner         7         123         63          76       160
+    doctor                     7          22         22          19       403
+    pharmacy counter           7         403          0         403        88
+
+A refusal and an empty list are printed differently on purpose. **"0" and "403"
+mean opposite things** about whether somebody is allowed to look, and a table
+that showed both as blank would hide the distinction the whole phase is about.
+
+**It found something on its first run.** Diagnostic orders were narrowed on
+`retrieve` and not on `list`: the doctor's count sat at 76 in both switch
+positions while a stranger's order correctly refused. So the object check
+worked and the list still named every patient under investigation -- which is
+the more revealing of the two, because a list of orders is a list of who is
+being investigated for what. Now 19.
+
+That is exactly the shape of bug this seed exists for, and it survived four
+commits of careful work plus a hand-written probe of the same endpoint. The
+probe asked "can I open a stranger's order?" and got the right answer; nobody
+asked "how many can I see?"
+
+**One thing it does not do:** it only reads. A seed that also wrote would
+change the answers underneath itself between runs, and the numbers are the
+point.
+
+**Left as a judgement call, not an oversight:** the appointment list is not
+narrowed by relationship. An appointment book is a genuinely shared facility
+artefact -- reception books it, nurses prepare from it -- and the facility
+filter added in Phase 1 already bounds it. Recorded here so it reads as a
+decision rather than something missed.
+
+**Affects.** `apps/rbac/management/commands/seed_access_demo.py`,
+`apps/diagnostics/views.py`, `tests/test_seeds.py`.

@@ -179,19 +179,24 @@ should be. It starts mattering the day `_admission` narrows to a ward.
 
 ## Verification, and its limits
 
-**77 tests**, including 12 new invariant tests for this phase, and the seed
+**79 tests**, including 12 new invariant tests for this phase, and the seed
 suite twice through.
 
 The switch is now **on for the `manakamana` demo tenant**, which is
 multi-facility and therefore the case this is for.
 
-**Stated plainly: the seed suite does not test this.** The seeds run at the
-service layer, below the permission classes — so "77 passing with the switch
-on" proves enforcement does not break the domain logic, not that the API
-behaves. Seven tests drive real HTTP as different roles, and those are the only
-coverage of the permission layer. **There is no seed that exercises the API as
-a doctor, a nurse and a counter assistant**, and that is the gap most likely to
-let a future change through unnoticed.
+**The seed suite used not to test this**, and now does. Every other seed runs
+at the service layer, below the permission classes — so a green suite proved
+enforcement did not break the domain logic and nothing about who can open what.
+`seed_access_demo` drives the real API as real users in both switch positions
+and prints a table of what each role sees.
+
+It found a real gap on its first run: **diagnostic orders were narrowed on
+`retrieve` and not on `list`.** The object check refused a stranger's order
+while the list still showed all 76 — and a list of orders is a list of who is
+being investigated for what. That survived four commits of careful work and a
+hand-written probe of the same endpoint, because the probe asked "can I open a
+stranger's order?" and nobody asked "how many can I see?" 
 
 ---
 
@@ -204,8 +209,6 @@ let a future change through unnoticed.
 - **119 `HasPermission.of` call sites** still on the strict facility default.
   They gate writes and administrative actions where a facility floor is often
   right, and each needs the question asked individually.
-- **An API-level seed** exercising each role against each endpoint, to close
-  the verification gap above.
 - **The recency window is a guess.** Ninety days covers an outpatient episode;
   a patient on annual review has a twelve-month cycle. Expect it to become
   per-speciality.

@@ -62,6 +62,12 @@ SEEDS = [
     "seed_referrals_demo",
     "seed_theatre_demo",
     "seed_notifications_demo",
+    # Last, and the only one that goes through HTTP. Every other seed runs at
+    # the service layer, *below* the permission classes -- so the suite proved
+    # enforcement did not break the domain logic and proved nothing about who
+    # can open what. On its first run this found that diagnostic orders were
+    # narrowed on retrieve and not on list.
+    "seed_access_demo",
 ]
 
 
