@@ -21,10 +21,11 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1086** |
+| **Done** | **32 of 132** | **1091** |
 | **Outstanding** | **100** | **622** |
 
-*Recounted from the file on 5 September 2026, after the notification centre (§101) landed.*
+*Recounted from the file on 5 September 2026, after the notification centre
+(§101) and its first producers landed.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -1361,6 +1362,14 @@ rather than redesigning around it.
 
 ## §62 Employee onboarding `[~]`
 
+> **Finding, 5 September 2026.** Creating an employee and creating their login
+> are two separate acts, and nothing insists on the second. Measured in the
+> demo tenant: **five active employees, two linked to a login.** Everything
+> built on `Employee.user_id` — self-service (§95), every employee-addressed
+> notification, `Scope.OWN` filtering — is inert for the rest. The features
+> are not wrong; they reach nobody, and nothing anywhere says so.
+- [ ] Creating an employee offers, or requires, creating their login
+
 - [x] Employee record creation
 - [x] Position and facility assignment
 - [x] Login provisioning with a seat check against the plan
@@ -2446,12 +2455,28 @@ because three modules were already working around its absence.*
 **Producers**
 - [x] Diagnostics: a critical value notifies the clinician who ordered the
       test, alongside the log line. Deliberately not everyone at the facility
+- [x] `holders_of(code, facility, exclude_user_id)` in `apps/rbac` — "who can
+      approve this", answered from the permission outwards. Cross-checked
+      against `resolve_authorization` in both directions
+- [x] Leave: an application notifies whoever holds `leave.approve` at that
+      facility, excluding the applicant; the decision resolves it and tells
+      the applicant back
+- [x] Expiry sweeps (`manage.py run_sweeps`): professional registrations in
+      three bands, ninety days / thirty days / expired, with the band in the
+      dedupe key so crossing a threshold raises a fresh notification rather
+      than rewriting one already read
+- [x] A sweep resolves as well as raises — renewing the licence clears the
+      reminder because the situation ended, not because somebody swiped it
+- [x] The sweep report distinguishes newly raised from already standing, and
+      prints per tenant rather than summed
 - [ ] Backfill for alerts already open when the wiring is deployed
-- [ ] Approvals: purchase orders, leave, payroll, facility change requests
-- [ ] Expiry sweeps: credentials, licences, contracts, stock
-- [ ] Patient portal: invitation codes, so the desk stops reading them aloud
+- [ ] Approvals: purchase orders, payroll, facility change requests
+- [ ] Expiry sweeps for contracts, supplier agreements and stock
 - [ ] Digest and quiet hours
-- [ ] Delivery beyond in-app (§93)
+- [ ] Delivery beyond in-app (§93). **Note:** patient invitation codes cannot
+      be moved off the desk by this module — the recipient has no account yet,
+      so an in-app notification reaches nobody. That one waits on §93, not
+      §101
 
 ## §122 Document management `[ ]`
 - [ ] Upload · versioning · metadata · owner · category

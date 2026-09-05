@@ -5208,3 +5208,99 @@ Suite: 21 of 21, twice through, in sequence.
 
 **Affects.** `apps/notifications/management/commands/seed_notifications_demo.py`,
 `apps/hr/management/commands/seed_attendance_demo.py`.
+
+---
+
+## 164 - Who can approve this?
+2026-09-05 · Backend · feature
+
+An approval nobody is told about is an approval that waits, and the notification
+centre could not tell anybody because nothing in the system could answer "who
+can approve this". `resolve_authorization` answers the question one user at a
+time, from the user inwards. A notification needs it the other way round.
+
+`holders_of(code, facility=None, exclude_user_id=None)` in `apps/rbac`, mirroring
+the resolver's rules so the two cannot disagree about who holds what: only
+assignments in effect, denials beating grants, facility narrowing as a filter
+rather than a requirement, and a suspended membership dropping the person
+entirely -- their role rows survive but they cannot sign in, so telling them is
+telling nobody.
+
+Cross-checked against `resolve_authorization` in both directions over every
+active member: same set, no difference either way.
+
+`exclude_user_id` drops whoever raised the thing. Segregation of duties (§17)
+refuses them at the point of approval anyway; asking them to try is just rude.
+
+**Affects.** `apps/rbac/services.py`.
+
+---
+
+## 165 - Sweeps, and a report that told the truth on the third run
+2026-09-05 · Backend · feature
+
+`apps/notifications/sweeps.py`, plus `manage.py run_sweeps`. §99's reminder
+engine is not built; this is its first concrete instance, and it lives in the
+notifications module rather than in `apps/hr` because the pattern is the point
+-- contracts, supplier agreements and stock nearing expiry are the same shape
+against different tables.
+
+Expiring professional registrations, in three bands: ninety days is a
+`REMINDER`, thirty a `WARNING`, expired a `CRITICAL`. **The band is part of the
+dedupe key**, so crossing a threshold raises a fresh notification rather than
+rewriting a sentence somebody has already read and filed. A notification is a
+statement about a moment.
+
+The sweep resolves as well as raises. Renewing the licence clears the reminder
+because the *situation* went away, not because somebody swiped it. Verified by
+renewing a real expired NMC registration and sweeping: resolved 1, zero open.
+Putting the date back raised a fresh one and kept both rows, so "this lapsed
+and was renewed" stays countable.
+
+**And the report lied for two runs.** It said `raised 1` every time, because
+`notify` returns the *existing* notification on a dedupe hit and there is no
+way to tell that from its return value. An hourly job reporting one new
+expiring licence every hour, forever, is a number that teaches people to stop
+reading the report. It now checks before calling and distinguishes `raised`
+from `already standing`. The per-tenant lines are printed separately rather
+than summed, because zero across forty tenants and zero for one particular
+tenant are different facts and only the second tells you where to look.
+
+**Affects.** `apps/notifications/sweeps.py`,
+`apps/notifications/management/commands/run_sweeps.py`.
+
+---
+
+## 166 - Leave that tells somebody, and the link that is usually missing
+2026-09-05 · Backend · feature, finding
+
+Applying for leave now notifies whoever holds `leave.approve` at that facility,
+and the applicant is excluded from their own approval list. Deciding it resolves
+that notification -- the approvers' copies stay readable, marked resolved,
+because "approved on Tuesday by Bikash" is worth being able to look up -- and
+tells the applicant, which is the half every leave system forgets.
+
+Both raised inside the caller's transaction, deliberately. Entry 149's rule is
+for facts that must *outlive* a refusal; this is the opposite case. If the
+application is refused there is no request to approve, and a notification
+pointing at a rolled-back row is worse than silence. `notify` writes in its own
+savepoint (entry 162), so failing to tell anybody cannot undo the application.
+
+**Then the verification found something.** The approval notification reached
+both approvers and resolved correctly. The applicant's notification raised
+zero. The guard is `if request.employee.user_id` -- and Deepa Karki has no
+login.
+
+Measured across the tenant: **five active employees, two linked to a login.**
+
+That is not a defect in this wiring; the guard is right. It is a finding about
+everything built on `Employee.user_id`. Employee self-service (§95, landed
+yesterday), every employee-addressed notification, and `Scope.OWN` filtering all
+resolve through that link, and for three of five staff there is nothing on the
+other end of it. The features are not wrong. They are inert, for most of the
+workforce, and nothing anywhere says so.
+
+Recorded against §62 employee onboarding: creating the employee and creating
+their login are currently two acts, and nothing insists on the second.
+
+**Affects.** `apps/hr/attendance.py`.

@@ -554,3 +554,109 @@ def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
         },
     )
     return assignment
+
+
+# ---------------------------------------------------------------------------
+# Who holds a permission
+# ---------------------------------------------------------------------------
+
+
+def holders_of(code: str, facility=None, exclude_user_id=None) -> list[dict]:
+    """Everybody in the active tenant who can currently exercise `code`.
+
+    The missing primitive underneath every approval notification: "this needs
+    approving" is useless without "by whom". `resolve_authorization` answers
+    the question one user at a time, from the user inwards; this answers it
+    from the permission outwards, which is the direction a notification needs.
+
+    Returns `[{"id", "name", "reason"}]`, shaped for `notify()` -- including
+    the reason, because the receipt stores *why* somebody was told and a
+    generic "you have permission" is not an answer anybody finds useful three
+    weeks later.
+
+    Three rules it keeps, each mirroring `resolve_authorization` so that the
+    two cannot disagree about who holds what:
+
+    **Only assignments in effect.** A lapsed locum is not an approver, and a
+    notification sent to one is a request that will sit forever.
+
+    **Denials beat grants,** exactly as they do at permission-check time.
+    Telling somebody to approve something they will then be refused is worse
+    than not telling them: they act on it, fail, and have no idea why.
+
+    **Facility narrowing is a filter, not a requirement.** A grant that names
+    no facility, or one held at organization scope, reaches everywhere -- so
+    passing a facility narrows the list rather than demanding a match.
+
+    `exclude_user_id` drops the person who raised the thing. Segregation of
+    duties will refuse them at the point of approval anyway (§17), and a
+    notification asking somebody to approve their own purchase order is an
+    invitation to try.
+    """
+    from apps.identity.models import Membership, MembershipStatus
+
+    facility_id = getattr(facility, "id", None)
+
+    granted: dict = {}
+    for assignment in (
+        RoleAssignment.objects.filter(status=AssignmentStatus.ACTIVE)
+        .select_related("role", "facility", "department")
+        .prefetch_related("role__inherits_from")
+    ):
+        if not assignment.is_in_effect:
+            continue
+        if code not in assignment.role.effective_permissions():
+            continue
+
+        # Which facilities this assignment reaches. `None` means all of them.
+        reach = None
+        if assignment.scope != Scope.ORGANIZATION:
+            reach = set()
+            if assignment.facility_id:
+                reach.add(assignment.facility_id)
+            if assignment.department_id and assignment.department:
+                reach.add(assignment.department.facility_id)
+        if facility_id is not None and reach is not None and facility_id not in reach:
+            continue
+
+        granted[assignment.user_id] = (
+            f"You hold {assignment.role.name}"
+        )
+
+    for override in PermissionOverride.objects.filter(permission_code=code):
+        if not override.is_in_effect:
+            continue
+        if not override.is_granted:
+            # A denial removes the person however they came to be here.
+            granted.pop(override.user_id, None)
+            continue
+        if (
+            facility_id is not None
+            and override.facility_id is not None
+            and override.facility_id != facility_id
+        ):
+            continue
+        granted.setdefault(
+            override.user_id, "You were granted this permission directly",
+        )
+
+    if exclude_user_id is not None:
+        granted.pop(exclude_user_id, None)
+
+    if not granted:
+        return []
+
+    # Names come from the control plane, in one query rather than per person.
+    members = {
+        m.user.uuid: (getattr(m.user, "full_name", "") or m.user.email)
+        for m in Membership.objects.filter(
+            user__uuid__in=list(granted), status=MembershipStatus.ACTIVE,
+        ).select_related("user")
+    }
+    return [
+        {"id": user_id, "name": members.get(user_id, ""), "reason": reason}
+        # A user whose membership has been suspended keeps their role rows but
+        # cannot sign in, so telling them is telling nobody.
+        for user_id, reason in granted.items()
+        if user_id in members
+    ]

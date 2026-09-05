@@ -24,6 +24,12 @@ from apps.audit.models import AuditAction
 # record: leave approvals and attendance corrections are both contested, and
 # the pattern of corrections is what an auditor actually looks at.
 from apps.audit.services import record
+# notify / holders_of: an approval nobody is told about is an approval
+# that waits. holders_of answers 'who can approve this' from the
+# permission outwards, which is the direction a notification needs.
+from apps.notifications.models import NotificationCategory
+from apps.notifications.services import notify, resolve_by_key
+from apps.rbac.services import holders_of
 from apps.billing.fiscal import fiscal_year_for
 from apps.common.exceptions import DomainError
 from apps.hr.models import (
@@ -865,6 +871,33 @@ def apply_for_leave(
         reason=reason,
         metadata={"days": str(working), "unpaid": is_unpaid},
     )
+
+    # Tell whoever can actually approve it. Raised inside this transaction on
+    # purpose: if the application is refused there is no request to approve,
+    # and a notification pointing at a row that was rolled back is worse than
+    # silence. `notify` writes in its own savepoint, so failing to tell anybody
+    # cannot undo the application itself.
+    notify(
+        source="hr",
+        event="leave_awaiting_approval",
+        category=NotificationCategory.APPROVAL,
+        title=f"{employee.full_name} has applied for {working} day"
+              f"{'' if working == 1 else 's'} of {leave_type.name.lower()}",
+        body=f"{starts_on:%d %b} to {ends_on:%d %b}. {reason}".strip(),
+        link="/time",
+        recipients=holders_of(
+            "leave.approve",
+            facility=employee.facility,
+            # The applicant does not approve their own leave. Segregation of
+            # duties refuses it anyway; asking them to try is just rude.
+            exclude_user_id=getattr(employee, "user_id", None),
+        ),
+        subject_type="hr.LeaveRequest",
+        subject_uuid=request.uuid,
+        facility=employee.facility,
+        actor_name=employee.full_name,
+        dedupe_key=f"leave_approval:{request.uuid}",
+    )
     return request
 
 
@@ -932,6 +965,41 @@ def decide_leave(
         entity_label=f"{request.reference} {request.status}",
         reason=notes or request.reason,
     )
+
+    # The approval is no longer waiting on anybody, so the situation that
+    # raised it has ended. Resolving is not the same as everybody dismissing
+    # it: their copies stay readable, marked as resolved, because "this was
+    # approved on Tuesday by Sunita" is worth being able to look up.
+    resolve_by_key(
+        f"leave_approval:{request.uuid}",
+        reason=f"{request.get_status_display()} by "
+               f"{request.decided_by_name or 'a manager'}",
+    )
+
+    # And tell the applicant, which is the half every leave system forgets.
+    # Somebody who applied on Monday should not have to keep opening the
+    # screen to find out.
+    if request.employee.user_id:
+        notify(
+            source="hr",
+            event="leave_decided",
+            category=NotificationCategory.INFORMATION,
+            title=f"Your leave request was "
+                  f"{request.get_status_display().lower()}",
+            body=f"{request.starts_on:%d %b} to {request.ends_on:%d %b}."
+                 + (f" {notes}" if notes.strip() else ""),
+            link="/self-service",
+            recipients=[{
+                "id": request.employee.user_id,
+                "name": request.employee.full_name,
+                "reason": "You applied for this leave",
+            }],
+            subject_type="hr.LeaveRequest",
+            subject_uuid=request.uuid,
+            facility=request.employee.facility,
+            actor_name=request.decided_by_name,
+            dedupe_key=f"leave_decided:{request.uuid}",
+        )
     return request
 
 
