@@ -2156,7 +2156,8 @@ September; findings measured, not assumed.*
 - [x] Clinical detail is already out of reach of a counter: encounters,
       diagnostic orders and the ward census all refuse without
       `encounter.read`
-**Phase 1 — the tiers and the safety net**
+**Phase 1 — the tiers and the safety net** — *shipped; full record in
+[PHASE1.md](PHASE1.md)*
 - [x] `patient.read` split into three: identity (`patient.read`), safety
       (`patient.safety.read`), clinical (`patient.clinical.read`). Granted to
       every role holding `encounter.read` today, so this step changes no
@@ -2178,7 +2179,8 @@ September; findings measured, not assumed.*
       at any pharmacy; Phase 2 narrows it by relationship instead
 - [x] Prescription and invoice reads logged through `record_patient_access`
 
-**Phase 2 — relationship and break-glass**
+**Phase 2 — relationship and break-glass** — *build plan in
+[PHASE2_PLAN.md](PHASE2_PLAN.md)*
 - [ ] `has_care_relationship(user, patient)` computed from admissions,
       appointments, orders and prescriptions
 - [ ] `patient.clinical.read` enforced against it

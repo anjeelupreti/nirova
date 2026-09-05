@@ -3,7 +3,8 @@
 A design decision, written down because it is the kind of decision that is
 expensive to reverse and dangerous to get wrong in either direction.
 
-**Status:** decided, 5 September 2026. Phase 1 ready to build.
+**Status:** decided, 5 September 2026. Phase 1 shipped — see
+[PHASE1.md](PHASE1.md). Phase 2 planned — see [PHASE2_PLAN.md](PHASE2_PLAN.md).
 **Supersedes:** the three options offered on 4 September, all of which were
 wrong for reasons this document explains.
 
