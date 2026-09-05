@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1111** |
-| **Outstanding** | **100** | **632** |
+| **Done** | **32 of 132** | **1117** |
+| **Outstanding** | **100** | **628** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-632 understates the remaining work: in the later phases some lines group
+628 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -239,7 +239,10 @@ rather than redesigning around it.
 
 ## §14 Configuration inheritance `[x]`
 
-- [x] Platform default → organization → facility → department
+- [x] Platform default → organization → facility → department. **Stored
+      since the module was built; nothing read it until 6 September 2026** —
+      this line was `[x]` on the strength of the table's shape. The resolver
+      is `apps/organization/config.py`
 - [x] Lockable values a facility cannot override
 - [x] Effective dating
 - [x] Namespaced keys
@@ -2181,18 +2184,21 @@ September; findings measured, not assumed.*
 
 **Phase 2 — relationship and break-glass** — *build plan in
 [PHASE2_PLAN.md](PHASE2_PLAN.md)*
-- [ ] `has_care_relationship(user, patient)` computed from admissions,
-      appointments, orders and prescriptions
-- [ ] `patient.clinical.read` enforced against it
+- [x] `has_care_relationship(user, patient)` computed from admissions,
+      appointments, orders and prescriptions — and returning *why*, since a
+      boolean cannot be written onto an access log
+- [x] `patient.clinical.read` enforced against it on encounters, behind
+      `privacy.require_care_relationship`, off by default
+- [x] The refusal names the way out rather than returning a bare 403
+- [x] `BreakGlassGrant`: immediate, four hours, a sentence not a category,
+      ends by time, cannot be self-reviewed, revocable by a reviewer
+- [x] `privacy.review` queue, screen at `/privacy`, `CRITICAL` notification on
+      every override, and no bulk sign-off anywhere
+- [x] Switchable per organization through the configuration hierarchy
+- [ ] Enforcement extended to results, ICU and the inpatient record
 - [ ] Lists narrow to the relationship; **lookup by reference stays open** to
       the dispensing role and is logged — the patient handing over the
       reference is the care relationship and is the consent
-- [ ] `BreakGlassGrant`: immediate, time-boxed, reason required, audited at
-      critical severity
-- [ ] `privacy.review` queue, and a `CRITICAL` notification on every override.
-      A break-glass nobody reviews is theatre
-- [ ] Switchable per organization — a single-site clinic pays the complexity
-      and gets nothing, the same position §17 takes for segregation of duties
 
 **Phase 3 — making it visible**
 - [ ] "Who looked at my record" in the patient portal

@@ -9,7 +9,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import (
+    HasClinicalAccess,
+    HasPermission,
+    get_authorization,
+)
 from apps.encounters.models import ClinicalNote, Encounter, OPEN_ENCOUNTER_STATUSES
 from apps.encounters.serializers import (
     ClinicalNoteInputSerializer,
@@ -50,7 +54,32 @@ class EncounterViewSet(viewsets.ModelViewSet):
     keeps the permission check in one place.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # `HasClinicalAccess` adds the object-level half: `encounter.read` says
+    # whether somebody may read encounters at all, and the care relationship
+    # says whether they may read *this* one. Kept as two classes rather than
+    # folded into one, because collapsing them is exactly how a permission
+    # comes to mean "everybody at this site" -- which is what the 4 September
+    # probe found.
+    #
+    # Inert until the organization turns `privacy.require_care_relationship`
+    # on. Off by default: a single-site clinic gets nothing from this and pays
+    # the complexity.
+    permission_classes = [
+        IsAuthenticated,
+        # `Scope.OWN` as the floor, not the default `Scope.FACILITY`. The
+        # queryset below already narrows by `accessible_facility_ids`, with a
+        # comment saying scope narrows rather than refuses -- and the check in
+        # front of it was doing the opposite. A department-scoped doctor, which
+        # is what the demo's own doctor role is, could not open a single
+        # encounter, and the narrowing written to handle exactly that case was
+        # unreachable for them. Pre-existing; found because Phase 2 needed to
+        # read an encounter as a doctor and could not.
+        #
+        # A permission check that demands facility scope in front of a
+        # queryset that narrows to it is a scope ladder with only one rung.
+        HasPermission.of("encounter.read", scope=Scope.OWN),
+        HasClinicalAccess,
+    ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Encounter, relations=['facility'], fields=['status', 'encounter_type', 'provider_uuid']

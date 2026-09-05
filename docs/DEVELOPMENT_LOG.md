@@ -5888,3 +5888,96 @@ is the distinction that matters and the one the default was obscuring.
 
 **Affects.** `apps/rbac/privacy_api.py`, `apps/rbac/urls.py`, `config/urls.py`,
 `frontend/src/pages/Privacy.tsx`, `frontend/src/types/index.ts`.
+
+---
+
+## 179 - A table with no reader
+2026-09-06 · Backend · finding, feature
+
+Phase 2 needs a per-organization switch, and the honest place for one is the
+mechanism that already exists. `ConfigSetting` has stored the hierarchy since
+the organization module was built -- platform default, organization, facility,
+department, most specific winning -- and **nothing has ever read it.** No
+resolver, no view, no caller anywhere in the codebase.
+
+§14 of the checklist recorded *"Platform default → organization → facility →
+department"* as `[x]`. The rows were right; the sentence describing what
+happened to them was not. Same class as the §16 scope-filtering line corrected
+on 4 September: a capability claimed because the *shape* of it exists.
+
+`apps/organization/config.py` now resolves it. Three things the resolver has to
+get right, all easy to lose:
+
+*Absence is not a value.* A facility row of `false` overrides an organization
+row of `true`; a **missing** facility row does not. That distinction is the
+entire reason the table has one row per level rather than a copied-down value.
+
+*A locked row beats a narrower one.* Checked on the way down rather than
+trusted to whoever writes the narrower row, because a rule enforced only at
+write time is one a data import walks past.
+
+*Effective dating is applied, not merely stored.* A window that has closed is
+not a value, and storing `effective_to` then ignoring it means a rate change
+scheduled for July silently applies in March.
+
+**Affects.** `apps/organization/config.py`.
+
+---
+
+## 180 - Enforcement, and a ladder with one rung
+2026-09-06 · Backend · feature, bug
+
+Step 2 of `PHASE2_PLAN.md`. `HasClinicalAccess` checks the permission and then
+the care relationship, kept as two classes rather than folded into one --
+collapsing them is exactly how a permission comes to mean "everybody at this
+site", which is what the 4 September probe found.
+
+Behind `privacy.require_care_relationship`, **off by default**. A single-site
+clinic gets nothing from a care-relationship requirement and pays the
+complexity, the same position §17 takes on segregation of duties.
+
+The refusal names the way out rather than returning a bare 403:
+
+> You are not currently treating Ram Bahadur Shrestha. If this is an
+> emergency, open the record by giving a reason -- it will be recorded against
+> your name and reviewed.
+
+A 403 on a clinical record at three in the morning, with no route through it,
+is how somebody decides the system is broken and borrows a colleague's login.
+The test asserts the *message*, not only the status.
+
+**Then the probe found something older and worse.** Every read was refused
+before the new check ran at all: `HasPermission.of("encounter.read")` defaults
+to `Scope.FACILITY`, and the demo's own doctor holds it at **department**
+scope, which is narrower. A department-scoped doctor could not open a single
+encounter, and never could.
+
+Twenty lines below, `get_queryset` narrows by `accessible_facility_ids` under a
+comment reading *"Scope narrows rather than refuses, as everywhere else."* The
+narrowing written for exactly this case was unreachable, because the check in
+front of it refused first.
+
+**A permission check demanding facility scope in front of a queryset that
+narrows to it is a scope ladder with only one rung.** Lowered to `Scope.OWN`,
+which is the floor the narrowing was designed for. Same fault as the
+break-glass endpoint in entry 178, which suggests the default is wrong rather
+than the two call sites.
+
+**And four role assignments reached nothing.** Facility-scoped rows naming no
+facility and no department -- the state `assign_role` now refuses, left over
+from before it did. Two were the demo doctors, which is why they could see
+nothing; two were pharmacy roles that had since been assigned correctly, so the
+dead row was simply removed. Repaired one-off, since an idempotent seed will
+not rewrite what it already wrote.
+
+Verified in both switch positions, on a patient chosen by *asking the
+relationship function* rather than assuming. The first attempt picked somebody
+who turned out to be admitted at the doctor's own facility, so the 200 was
+correct and told me nothing:
+
+    switch OFF   own patient 200   stranger 200
+    switch ON    own patient 200   stranger 403 "...open the record by giving a reason"
+    break glass  stranger 200
+    switch OFF   stranger 200
+
+**Affects.** `apps/common/permissions.py`, `apps/encounters/views.py`.

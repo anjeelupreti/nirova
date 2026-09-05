@@ -156,3 +156,108 @@ def apply_scope_filter(
         return queryset.filter(**{f"{facility_attr}_id__in": facility_ids})
 
     return queryset.none()
+
+#: The namespace and key of the switch that turns clinical access control on.
+#: Off by default -- a single-site clinic gets nothing from a care-relationship
+#: requirement and pays the complexity, the same position §17 already takes on
+#: segregation of duties, which a two-person practice cannot enforce because
+#: there is nobody to segregate.
+PRIVACY_NAMESPACE = "privacy"
+REQUIRE_RELATIONSHIP_KEY = "require_care_relationship"
+
+
+def relationship_required(facility=None) -> bool:
+    """Whether this organization enforces care relationships on clinical reads.
+
+    Read through the configuration hierarchy, so a group can turn it on
+    everywhere and leave it off at the one site still being migrated -- which
+    is the realistic way this gets adopted, rather than a flag day.
+    """
+    from apps.organization.config import config_value
+
+    return bool(
+        config_value(
+            PRIVACY_NAMESPACE, REQUIRE_RELATIONSHIP_KEY,
+            default=False, facility=facility,
+        )
+    )
+
+
+class HasClinicalAccess(BasePermission):
+    """`patient.clinical.read`, plus a care relationship with *this* patient.
+
+    Phase 2 of `docs/ACCESS_DESIGN.md`. Two questions, kept apart on purpose:
+    whether somebody may read clinical data at all, and whether they may read
+    *this* record. Collapsing them is how a permission comes to mean "everyone
+    at this site", which is what the 4 September probe found.
+
+    **The object is what is checked, not the list.** This is an object-level
+    permission; narrowing lists is step 4 and a different mechanism, because a
+    list of patients somebody may not open is not the same failure as opening
+    one of them.
+
+    **The refusal names the way out.** A bare 403 on a clinical record at three
+    in the morning is how somebody decides the system is broken and borrows a
+    colleague's login. The message says the record can be opened by giving a
+    reason, which is true and is the whole point of building break-glass first.
+    """
+
+    message = "You are not currently treating this patient."
+
+    def has_permission(self, request, view):
+        authorization = get_authorization(request)
+        if authorization is None:
+            return False
+        # The permission question, unchanged. Scope.OWN as the floor for the
+        # same reason the break-glass endpoint uses it: a department-scoped
+        # clinician holds clinical access more narrowly than a facility, and
+        # they are still a clinician.
+        return authorization.has("patient.clinical.read", Scope.OWN)
+
+    def has_object_permission(self, request, view, obj):
+        patient = _patient_of(obj)
+        if patient is None:
+            # Nothing patient-shaped to check. Falling open here is deliberate
+            # and narrow: this class is only ever attached to patient-scoped
+            # views, and refusing an object it cannot interpret would produce
+            # a 403 nobody can act on.
+            return True
+
+        facility = getattr(obj, "facility", None)
+        if not relationship_required(facility):
+            return True
+
+        from apps.rbac.relationships import relationship_for_request
+
+        found = relationship_for_request(request, patient)
+        if found is None:
+            self.message = (
+                f"You are not currently treating {patient.full_name}. If this "
+                "is an emergency, open the record by giving a reason -- it "
+                "will be recorded against your name and reviewed."
+            )
+            return False
+
+        # Recorded on the request so the view can say *why* access was granted
+        # and write it onto the access log. A relationship that cannot be
+        # explained afterwards is not reviewable, and reviewability is the
+        # point of the whole phase.
+        request.care_relationship = found
+        return True
+
+
+def _patient_of(obj):
+    """The patient an object concerns, however it happens to be attached."""
+    from apps.patients.models import Patient
+
+    if isinstance(obj, Patient):
+        return obj
+    for attribute in ("patient", "encounter", "admission", "order"):
+        related = getattr(obj, attribute, None)
+        if isinstance(related, Patient):
+            return related
+        if related is not None:
+            nested = getattr(related, "patient", None)
+            if isinstance(nested, Patient):
+                return nested
+    return None

@@ -708,3 +708,154 @@ def test_the_queue_needs_privacy_review(tenant):
         HTTP_X_ORGANIZATION=tenant.slug,
     )
     assert client.get("/api/privacy/grants/").status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# PHASE2_PLAN.md step 2 — enforcement, behind the switch
+# ---------------------------------------------------------------------------
+
+
+def _privacy_switch(value):
+    """Set or clear `privacy.require_care_relationship` for the tenant."""
+    from apps.common.permissions import (
+        PRIVACY_NAMESPACE,
+        REQUIRE_RELATIONSHIP_KEY,
+    )
+    from apps.organization.config import set_config_value
+    from apps.organization.models import ConfigSetting
+
+    ConfigSetting.all_objects.filter(
+        namespace=PRIVACY_NAMESPACE, key=REQUIRE_RELATIONSHIP_KEY,
+    ).delete()
+    if value is not None:
+        set_config_value(PRIVACY_NAMESPACE, REQUIRE_RELATIONSHIP_KEY, value)
+
+
+def test_the_switch_is_off_by_default(tenant):
+    """A single-site clinic gets nothing from this and pays the complexity.
+
+    The same position §17 takes on segregation of duties, which a two-person
+    practice cannot enforce because there is nobody to segregate.
+    """
+    from apps.common.permissions import relationship_required
+
+    _privacy_switch(None)
+    assert relationship_required() is False
+
+
+def test_config_resolves_most_specific_first(tenant):
+    """`ConfigSetting` stored the hierarchy and nothing read it until now.
+
+    A facility row of `False` must beat an organization row of `True`; a
+    *missing* facility row must not. That distinction is the whole reason the
+    table exists.
+    """
+    from apps.common.permissions import (
+        PRIVACY_NAMESPACE,
+        REQUIRE_RELATIONSHIP_KEY,
+        relationship_required,
+    )
+    from apps.organization.config import config_value, set_config_value
+    from apps.organization.models import ConfigScope, ConfigSetting, Facility
+
+    _privacy_switch(True)
+    facility = Facility.objects.first()
+    try:
+        assert relationship_required() is True
+        assert relationship_required(facility) is True, (
+            "a facility with no row of its own should inherit the "
+            "organization's value"
+        )
+
+        set_config_value(
+            PRIVACY_NAMESPACE, REQUIRE_RELATIONSHIP_KEY, False,
+            scope=ConfigScope.FACILITY, facility=facility,
+        )
+        assert relationship_required(facility) is False
+        assert relationship_required() is True, (
+            "one facility opting out must not switch it off everywhere"
+        )
+        assert config_value("privacy", "nothing_here", default="fallback") == "fallback"
+    finally:
+        ConfigSetting.all_objects.filter(
+            namespace=PRIVACY_NAMESPACE, key=REQUIRE_RELATIONSHIP_KEY,
+        ).delete()
+
+
+def test_enforcement_refuses_a_stranger_and_names_the_way_out(tenant):
+    """The only part of Phase 2 that changes what anybody sees.
+
+    Also asserts the refusal *message*, not merely the status. A bare 403 on a
+    clinical record at three in the morning is how somebody decides the system
+    is broken and borrows a colleague's login.
+    """
+    import json
+
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.encounters.models import Encounter
+    from apps.identity.models import Membership, User
+    from apps.rbac.models import BreakGlassGrant
+    from apps.rbac.relationships import has_care_relationship
+    from apps.rbac.services import resolve_authorization
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("no demo doctor")
+
+    authorization = resolve_authorization(
+        doctor, Membership.objects.get(user=doctor, organization=tenant),
+    )
+    facility_ids = authorization.accessible_facility_ids("encounter.read")
+    reachable = Encounter.objects.select_related("patient")
+    if facility_ids:
+        reachable = reachable.filter(facility_id__in=facility_ids)
+
+    stranger = None
+    for encounter in reachable:
+        if has_care_relationship(
+            doctor.uuid, encounter.patient, authorization,
+        ) is None:
+            stranger = encounter
+            break
+    if stranger is None:
+        pytest.skip("this doctor has a relationship with everybody in scope")
+
+    BreakGlassGrant.all_objects.filter(user_id=doctor.uuid).delete()
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    path = f"/api/clinical/encounters/{stranger.uuid}/"
+
+    _privacy_switch(None)
+    try:
+        assert client.get(path).status_code == 200, (
+            "with the switch off, nothing should have changed for anybody"
+        )
+
+        _privacy_switch(True)
+        refused = client.get(path)
+        assert refused.status_code == 403
+        message = json.loads(refused.content.decode())["error"]["message"]
+        assert "emergency" in message.lower(), (
+            "the refusal must name the way out, or people route around it: "
+            f"{message}"
+        )
+
+        taken = client.post(
+            "/api/privacy/break-glass/",
+            data=json.dumps({
+                "patient": str(stranger.patient.uuid),
+                "reason": "On-call team asked me to review this urgently.",
+            }),
+            content_type="application/json",
+        )
+        assert taken.status_code == 201
+        assert client.get(path).status_code == 200, (
+            "break-glass did not open the record it exists to open"
+        )
+    finally:
+        _privacy_switch(None)
+        BreakGlassGrant.all_objects.filter(user_id=doctor.uuid).delete()

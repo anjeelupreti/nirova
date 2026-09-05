@@ -1,7 +1,8 @@
 # Access control, Phase 2 — development plan
 
-**Status:** steps 0, 1, 3 and 5 done. Nothing is enforced yet — steps 2
-and 4 are what turn it on.
+**Status:** steps 0, 1, 2, 3 and 5 done. Enforcement is live on encounters
+behind `privacy.require_care_relationship`, **off by default**. Step 4 —
+narrowing the lists — remains.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the
@@ -132,7 +133,7 @@ configurable per organization.
 *Auditor and organization-scoped clinical roles are exempt*, and the exemption
 is explicit rather than a side effect. Oversight is the job.
 
-### Step 2 — enforce `patient.clinical.read`
+### Step 2 — enforce `patient.clinical.read` *(done for encounters, 6 September 2026)*
 
 Granted in Phase 1, enforced here.
 
