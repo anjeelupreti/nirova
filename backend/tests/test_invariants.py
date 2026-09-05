@@ -516,3 +516,126 @@ def test_admission_relationship_respects_facility_scope(tenant):
             "a clinician scoped to another facility was given a relationship "
             "with an inpatient they cannot reach"
         )
+
+
+# ---------------------------------------------------------------------------
+# PHASE2_PLAN.md step 3 — break-glass
+# ---------------------------------------------------------------------------
+
+
+def _stranger():
+    from apps.inpatient.models import Admission
+    from apps.patients.models import Patient
+
+    return (
+        Patient.objects.exclude(pk__in=Admission.objects.values("patient_id"))
+        .exclude(status="merged")
+        .first()
+    )
+
+
+def test_break_glass_demands_a_reviewable_reason(tenant):
+    """A category is not a reason.
+
+    "Emergency" is true of every override, so it distinguishes nothing and
+    reviews to nothing -- and the review queue is the entire control.
+    """
+    from apps.identity.models import User
+    from apps.rbac.break_glass import BreakGlassError, break_glass
+
+    user = User.objects.filter(email="doctor@manakamana.test").first()
+    patient = _stranger()
+    if user is None or patient is None:
+        pytest.skip("no doctor or unattached patient; run seed_demo")
+
+    with pytest.raises(BreakGlassError):
+        break_glass(user, patient, "emergency")
+
+
+def test_break_glass_grants_a_relationship_and_then_expires(tenant):
+    """It refuses nobody, it ends by time, and it cannot be self-extended."""
+    from apps.identity.models import Membership, User
+    from apps.rbac.break_glass import break_glass, revoke
+    from apps.rbac.models import BreakGlassGrant
+    from apps.rbac.relationships import has_care_relationship
+    from apps.rbac.services import resolve_authorization
+
+    user = User.objects.filter(email="doctor@manakamana.test").first()
+    reviewer = User.objects.filter(email="owner@manakamana.test").first()
+    patient = _stranger()
+    if not (user and reviewer and patient):
+        pytest.skip("demo users missing; run seed_demo")
+
+    BreakGlassGrant.all_objects.filter(
+        user_id=user.uuid, patient_uuid=patient.uuid,
+    ).delete()
+    membership = Membership.objects.get(user=user, organization=tenant)
+    authorization = resolve_authorization(user, membership)
+
+    assert has_care_relationship(user.uuid, patient, authorization) is None
+
+    grant = break_glass(
+        user, patient,
+        "Collapsed in the corridor with no notes, needed the allergy list.",
+    )
+    found = has_care_relationship(user.uuid, patient, authorization)
+    assert found is not None and found.is_break_glass
+
+    # Asking again inside the window must not extend it: otherwise a grant can
+    # be held open indefinitely by re-asking, and "four hours" means nothing.
+    again = break_glass(user, patient, "Still dealing with the same collapse.")
+    assert again.uuid == grant.uuid
+    assert again.expires_at == grant.expires_at
+
+    revoke(grant, reviewer, "Not an emergency; the notes were on the ward.")
+    assert has_care_relationship(user.uuid, patient, authorization) is None
+
+
+def test_nobody_reviews_their_own_break_glass(tenant):
+    """The point of the queue is that somebody else looks."""
+    from apps.identity.models import User
+    from apps.rbac.break_glass import BreakGlassError, break_glass, review
+    from apps.rbac.models import BreakGlassGrant, BreakGlassOutcome
+
+    user = User.objects.filter(email="doctor@manakamana.test").first()
+    patient = _stranger()
+    if user is None or patient is None:
+        pytest.skip("demo data missing")
+
+    BreakGlassGrant.all_objects.filter(
+        user_id=user.uuid, patient_uuid=patient.uuid,
+    ).delete()
+    grant = break_glass(
+        user, patient, "Unconscious on arrival, needed the record now.",
+    )
+    with pytest.raises(BreakGlassError):
+        review(grant, user, BreakGlassOutcome.APPROPRIATE)
+
+
+def test_break_glass_raises_a_critical_notification(tenant):
+    """The notification is how a person finds out today.
+
+    `CRITICAL` specifically, because the notification centre refuses to let
+    anybody switch that category off by preference.
+    """
+    from apps.identity.models import User
+    from apps.notifications.models import Notification, NotificationCategory
+    from apps.rbac.break_glass import break_glass
+    from apps.rbac.models import BreakGlassGrant
+
+    user = User.objects.filter(email="doctor@manakamana.test").first()
+    patient = _stranger()
+    if user is None or patient is None:
+        pytest.skip("demo data missing")
+
+    BreakGlassGrant.all_objects.filter(
+        user_id=user.uuid, patient_uuid=patient.uuid,
+    ).delete()
+    grant = break_glass(
+        user, patient, "Brought in by ambulance, no identification on them.",
+    )
+    raised = Notification.objects.filter(
+        source="privacy", subject_uuid=grant.uuid,
+    ).first()
+    assert raised is not None, "nobody was told about an emergency override"
+    assert raised.category == NotificationCategory.CRITICAL

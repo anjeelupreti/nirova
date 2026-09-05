@@ -342,14 +342,28 @@ def _nursing(user_id, patient, authorization, recency_days):
 def _break_glass(user_id, patient, authorization, recency_days):
     """An emergency override, if one is live.
 
-    Last because it is the rarest and because everything above should be tried
+    Last because it is the rarest, and because everything above must be tried
     first: a clinician who has a real relationship must never be pushed into
     breaking glass, or the review queue fills with noise and stops being read.
 
-    Implemented in step 3. Returning `None` here means the module is complete
-    apart from the escape hatch, and nothing depends on it yet.
+    Counting the use here rather than at the point of granting is deliberate.
+    A grant taken and never used is a different fact from one used forty times
+    -- the first usually means somebody clicked through a warning, the second
+    is worth a conversation -- and only a check at the moment of reading can
+    tell them apart.
     """
-    return None
+    from apps.rbac.break_glass import live_grant, note_use
+
+    grant = live_grant(user_id, patient)
+    if grant is None:
+        return None
+    note_use(grant)
+    return Relationship(
+        "break_glass",
+        f"Emergency access, opened {grant.granted_at:%d %b %Y at %H:%M} and "
+        f"valid until {grant.expires_at:%H:%M}.",
+        reference=str(grant.uuid),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5783,3 +5783,67 @@ constraint reads as absence of a restriction unless something says otherwise.
 Guarded now, and tested.
 
 **Affects.** `apps/rbac/relationships.py`.
+
+---
+
+## 177 - Break glass
+2026-09-06 · Backend · feature
+
+Step 3 of `PHASE2_PLAN.md`, built **before** enforcement so the first clinician
+refused by the relationship check is not also the one discovering there is no
+way through.
+
+`BreakGlassGrant` plus `apps/rbac/break_glass.py`. Four decisions.
+
+**It refuses nobody.** An unconscious patient arrives and nobody has a care
+relationship with them; a doctor is telephoned about a ward they have never
+worked on. Any control that can stop those is a control that will one day kill
+somebody, so this one does not stop anybody -- it records them. The only
+refusals are about the *reason*.
+
+**It demands a sentence, not a category.** "Emergency" is true of every
+override, so it distinguishes nothing and reviews to nothing. A twenty-character
+minimum, which is crude on purpose: it exists to make the useless answer
+inconvenient, not to validate prose.
+
+**It ends by time, not intention.** Four hours, nobody has to remember to close
+it, and the person who took it cannot extend it -- asking again inside the
+window returns the same grant with the same expiry, because otherwise a record
+can be held open indefinitely by re-asking and "four hours" means nothing.
+
+**The review is the control; the grant is only the mechanism.** Every one
+raises a `CRITICAL` notification -- the one category the notification centre
+refuses to let anybody silence by preference -- and stays on a queue until
+somebody else signs it off. Reviewing your own override is refused, because it
+is the same act as not being reviewed. Querying or escalating without saying
+why is refused too: the clinician will be asked about it, and "the system
+flagged it" is not something anybody can answer.
+
+Two smaller things worth the space.
+
+*Uses are counted at the point of reading, not granting.* A grant taken and
+never used is a different fact from one used forty times -- the first usually
+means somebody clicked through a warning, the second is worth a conversation --
+and only a check at the moment of reading tells them apart. The queue reports
+`never_used` for exactly that reason.
+
+*A grant with no reviewer logs a warning.* If nobody holds `privacy.review`,
+the override still works and the notification reaches nobody, which is a
+control with nothing on the other end. Worth a loud line rather than silence.
+
+**Revocation was missing and was added while testing.** A reviewer looking at a
+live override they consider improper could do nothing about it, which is a
+strange position to put a privacy officer in. Four hours is short, but short is
+not the same as "nothing I can do". Ending it moves the expiry to now -- the
+same mechanism as ordinary expiry rather than a second one, so there is no
+`is_revoked` flag to keep in step with `expires_at` and nothing else has to
+learn a new way for a grant to be over. The clinician is told, because access
+that vanishes mid-shift with no explanation reads as a broken system and gets
+worked around.
+
+The check constraint refused my first attempt to test expiry, and was right to:
+I had set the expiry *before* the moment of granting. Revoking to `now` passes
+it, because now is always after then.
+
+**Affects.** `apps/rbac/models.py`, `apps/rbac/break_glass.py`,
+`apps/rbac/relationships.py`, `apps/rbac/migrations/0002_break_glass_grant.py`.

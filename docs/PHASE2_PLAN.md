@@ -1,6 +1,7 @@
 # Access control, Phase 2 — development plan
 
-**Status:** steps 0 and 1 done. Nothing is enforced yet.
+**Status:** steps 0, 1 and 3 done. Nothing is enforced yet — step 2 is
+what turns it on.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the
@@ -146,7 +147,7 @@ The refusal names the way out: *"You are not currently treating this patient.
 Open their record in an emergency by giving a reason."* — not a bare 403. A
 control whose refusal does not say what to do next is one people route around.
 
-### Step 3 — break-glass
+### Step 3 — break-glass *(done, 6 September 2026)*
 
 `BreakGlassGrant` — patient, user, reason, granted at, expires at, reviewed by,
 reviewed at, outcome.

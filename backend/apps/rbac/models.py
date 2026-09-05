@@ -201,3 +201,112 @@ class PermissionOverride(BaseModel):
         if self.valid_from > now:
             return False
         return self.valid_until is None or self.valid_until > now
+
+
+#: How long an override lasts. Long enough to manage an emergency, short
+#: enough that nobody uses one as a way of working. Four hours is roughly a
+#: shift's worth of one crisis; a clinician who needs longer is no longer in an
+#: emergency and should have a real relationship by then.
+BREAK_GLASS_HOURS = 4
+
+#: A reason has to be a sentence somebody can review. "Emergency" is not a
+#: reason -- it is the category, and it is the one thing every override has in
+#: common, so it distinguishes nothing.
+MINIMUM_REASON_LENGTH = 20
+
+
+class BreakGlassOutcome(models.TextChoices):
+    """What a reviewer concluded. Recorded because the queue is the control."""
+
+    PENDING = "pending", "Awaiting review"
+    APPROPRIATE = "appropriate", "Appropriate"
+    QUERIED = "queried", "Queried with the clinician"
+    ESCALATED = "escalated", "Escalated"
+
+
+class BreakGlassGrant(BaseModel):
+    """One person, one patient, one emergency, four hours.
+
+    Rigid access kills people. An unconscious patient arrives and nobody has a
+    care relationship with them; a clinician telephoned about a ward they have
+    never worked on needs the record now, not after a request is approved. So
+    this is granted instantly and refuses nobody.
+
+    **What makes it a control is not the grant, it is the review.** Every one
+    writes an audit event at critical severity, raises a `CRITICAL`
+    notification to whoever holds `privacy.review`, and stays on a queue until
+    a human signs it off. An override nobody reviews is theatre, and this is
+    the part most likely to be quietly dropped later for looking like
+    paperwork.
+
+    Deliberately **not** an approval workflow, and deliberately **not**
+    revocable by the person who used it. Time is what ends it.
+    """
+
+    #: `patients.Patient` by UUID rather than a foreign key, so that a grant
+    #: survives the record being merged into another. The evidence that
+    #: somebody opened a record must outlive tidying up of the record itself.
+    patient_uuid = models.UUIDField(db_index=True)
+    patient_label = models.CharField(
+        max_length=255, blank=True,
+        help_text="Name and MRN as they stood when the record was opened.",
+    )
+
+    user_id = models.UUIDField(db_index=True)
+    user_label = models.CharField(max_length=255, blank=True)
+
+    reason = models.CharField(max_length=512)
+
+    granted_at = models.DateTimeField(default=timezone.now, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    #: How many times the grant was actually used. A grant taken and never used
+    #: is a different fact from one used forty times, and only the second is
+    #: worth a conversation.
+    use_count = models.PositiveIntegerField(default=0)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    outcome = models.CharField(
+        max_length=16, choices=BreakGlassOutcome.choices,
+        default=BreakGlassOutcome.PENDING, db_index=True,
+    )
+    reviewed_by_id = models.UUIDField(null=True, blank=True)
+    reviewed_by_name = models.CharField(max_length=255, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.CharField(max_length=512, blank=True)
+
+    class Meta:
+        db_table = "break_glass_grant"
+        ordering = ["-granted_at"]
+        indexes = [
+            models.Index(fields=["user_id", "patient_uuid", "expires_at"]),
+            models.Index(fields=["outcome", "-granted_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(expires_at__gt=models.F("granted_at")),
+                name="break_glass_expires_after_it_is_granted",
+            ),
+            # A review is a person and a moment together. Half of one recorded
+            # is how a queue comes to look attended-to without anybody having
+            # attended to it.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(outcome=BreakGlassOutcome.PENDING,
+                             reviewed_at__isnull=True)
+                    | models.Q(reviewed_at__isnull=False)
+                ),
+                name="break_glass_decided_means_reviewed",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user_label or self.user_id} → {self.patient_label}"
+
+    @property
+    def is_live(self) -> bool:
+        return self.expires_at > timezone.now()
+
+    @property
+    def is_reviewed(self) -> bool:
+        return self.outcome != BreakGlassOutcome.PENDING
