@@ -5,6 +5,7 @@ the selection rule: this file is not an attempt at coverage, it is a record of
 things that went wrong once and must not go wrong silently again.
 """
 
+import json
 import types
 
 import pytest
@@ -1515,3 +1516,136 @@ def test_clinical_records_carry_a_department(tenant):
         f"only {coverage:.1f}% of encounters record a department "
         f"({attributed} of {total}); department scope depends on this"
     )
+
+
+# ---------------------------------------------------------------------------
+# §122 Documents
+# ---------------------------------------------------------------------------
+
+
+def _pdf(extra: bytes = b"") -> bytes:
+    return b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>" + extra
+
+
+def test_a_document_inherits_its_subject_access(tenant):
+    """The whole authorization model of the documents module.
+
+    A file about a patient is exactly as sensitive as that patient's record, so
+    it is governed by the same care relationship rather than by a second
+    permission model that would drift out of step within a month. A document
+    endpoint with rules of its own would be a way *around* Phase 2 rather than
+    a use of it.
+    """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.documents.models import Document
+    from apps.identity.models import Membership, User
+    from apps.patients.models import Patient
+    from apps.rbac.models import BreakGlassGrant
+    from apps.rbac.relationships import related_patient_ids
+    from apps.rbac.services import resolve_authorization
+
+    owner = User.objects.filter(email="owner@manakamana.test").first()
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if owner is None or doctor is None:
+        pytest.skip("demo users missing")
+
+    authorization = resolve_authorization(
+        doctor, Membership.objects.get(user=doctor, organization=tenant),
+    )
+    mine = related_patient_ids(doctor.uuid, authorization) or set()
+    stranger = (
+        Patient.objects.exclude(pk__in=mine).exclude(status="merged").first()
+    )
+    if stranger is None:
+        pytest.skip("this doctor treats everybody")
+
+    def client_for(user):
+        return Client(
+            HTTP_AUTHORIZATION=(
+                f"Bearer {RefreshToken.for_user(user).access_token}"
+            ),
+            HTTP_X_ORGANIZATION=tenant.slug,
+        )
+
+    Document.all_objects.filter(subject_uuid=stranger.uuid).delete()
+    BreakGlassGrant.all_objects.filter(user_id=doctor.uuid).delete()
+
+    created = client_for(owner).post("/api/documents/", data={
+        "file": SimpleUploadedFile(
+            "summary.pdf", _pdf(b"stranger"), content_type="application/pdf",
+        ),
+        "category": "discharge",
+        "title": "discharge summary",
+        "subject_type": "patients.Patient",
+        "subject_uuid": str(stranger.uuid),
+    })
+    assert created.status_code == 201, created.content.decode()[:200]
+    uuid = json.loads(created.content.decode())["uuid"]
+
+    _privacy_switch(None)
+    try:
+        assert client_for(doctor).get(
+            f"/api/documents/{uuid}/download/",
+        ).status_code == 200
+
+        _privacy_switch(True)
+        assert client_for(doctor).get(
+            f"/api/documents/{uuid}/download/",
+        ).status_code == 403, (
+            "a document about a patient this doctor is not treating was "
+            "handed over"
+        )
+    finally:
+        _privacy_switch(None)
+        Document.all_objects.filter(subject_uuid=stranger.uuid).delete()
+
+
+def test_documents_refuse_what_they_should(tenant):
+    """An allow-list of types, a size limit, and no empty files.
+
+    An allow-list rather than a deny-list of dangerous types, because a
+    deny-list is a list somebody has to keep up to date and will not.
+    """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.documents.models import Document
+    from apps.identity.models import User
+    from apps.patients.models import Patient
+
+    owner = User.objects.filter(email="owner@manakamana.test").first()
+    patient = Patient.objects.exclude(status="merged").first()
+    if owner is None or patient is None:
+        pytest.skip("demo data missing")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(owner).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+
+    def upload(name, ctype, payload):
+        return client.post("/api/documents/", data={
+            "file": SimpleUploadedFile(name, payload, content_type=ctype),
+            "category": "discharge", "title": "t",
+            "subject_type": "patients.Patient",
+            "subject_uuid": str(patient.uuid),
+        }).status_code
+
+    assert upload("x.exe", "application/x-msdownload", b"MZ\x90\x00") == 400
+    assert upload("empty.pdf", "application/pdf", b"") == 400
+
+    # The same bytes twice is one document, not two: somebody uploading twice
+    # has made a mistake, not committed an error.
+    marker = _pdf(b"dedupe-check")
+    first = upload("a.pdf", "application/pdf", marker)
+    second = upload("b.pdf", "application/pdf", marker)
+    assert first == second == 201
+    assert Document.objects.filter(
+        subject_uuid=patient.uuid, checksum__isnull=False,
+    ).filter(original_name__in=["a.pdf", "b.pdf"]).count() == 1
+
+    Document.all_objects.filter(original_name__in=["a.pdf", "b.pdf"]).delete()

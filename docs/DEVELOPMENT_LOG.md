@@ -6615,3 +6615,61 @@ had finished. The control existed and the message did not, which is a control
 that depends on somebody remembering to walk down the corridor.
 
 **Affects.** `apps/procurement/services.py`, `apps/payroll/services.py`.
+
+---
+
+## 195 - Documents
+2026-09-06 · Backend · feature
+
+§122. Nothing in this system has ever stored a file, which blocks discharge
+summaries, scanned insurance cards, radiology images, employee certificates and
+a patient photographing a rash.
+
+**A document inherits the access of the thing it is attached to.** That is the
+whole authorization model, and it is the decision the module turns on: a file
+about a patient is exactly as sensitive as that patient's record, so it is
+governed by the *same* care relationship rather than by a second permission
+model that would drift out of step with the first inside a month. A document
+endpoint with rules of its own would be a way **around** Phase 2 rather than a
+use of it.
+
+Measured: with enforcement off, a doctor downloads a stranger's discharge
+summary; with it on, 403 carrying the same sentence the clinical endpoints
+give. No new access code was written to achieve that.
+
+The rest, briefly.
+
+**Stored by checksum, never by filename.** A filename is attacker-controlled
+input, it collides, and it leaks -- `ram-bahadur-hiv-result.pdf` on disk is a
+disclosure to anybody who can list a directory, quite separately from whether
+they can open it. The original name is kept for display only.
+
+**The same bytes against the same subject is one document**, and the second
+upload returns the first rather than refusing. Somebody who uploads twice has
+made a mistake, not committed an error, and a refusal there reads as a fault in
+the system.
+
+**An allow-list of content types, not a deny-list.** A deny-list of dangerous
+formats is a list somebody has to keep current and will not.
+
+**Archived, never deleted**, with a required reason -- a discharge summary
+somebody took down is a fact worth being able to discover, and an archived
+document with no explanation is indistinguishable from a mistake. Versions
+supersede rather than overwrite, for the same reason prescriptions do.
+
+**Downloads are logged; listings are not.** Opening a scan is the sensitive
+act, knowing one exists is much less so, and logging both produces an audit
+trail too noisy to read -- and the noisy one is the one that gets ignored.
+
+**Nothing scans for malware**, stated rather than assumed. A hospital that lets
+patients upload files needs scanning before staff download them, and this
+module is not that. Recorded on the checklist as the specific blocker for
+patient upload.
+
+One bug worth the line: `parser_classes` listed only multipart, so `archive`
+returned **415 Unsupported Media Type** on a JSON body -- an error about
+content types from an endpoint that has nothing to do with them, which is the
+kind of thing somebody spends an afternoon on.
+
+**Affects.** `apps/documents/` (new), `config/settings/base.py`,
+`config/urls.py`.

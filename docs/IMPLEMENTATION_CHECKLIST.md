@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1136** |
-| **Outstanding** | **100** | **625** |
+| **Done** | **33 of 132** | **1143** |
+| **Outstanding** | **99** | **627** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-625 understates the remaining work: in the later phases some lines group
+627 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2587,9 +2587,28 @@ because three modules were already working around its absence.*
       so an in-app notification reaches nobody. That one waits on §93, not
       §101
 
-## §122 Document management `[ ]`
-- [ ] Upload · versioning · metadata · owner · category
-- [ ] Access control · expiry · approval · archive · retention · search
+## §122 Document management 🔷
+
+*Built. `apps/documents`, mounted at `/api/documents/`.*
+
+- [x] Upload, with an allow-list of content types and a 50 MB limit
+- [x] Stored by **checksum, never by filename** — a filename is
+      attacker-controlled, it collides, and a file called
+      `ram-bahadur-hiv-result.pdf` on disk is a disclosure to anybody who can
+      list a directory
+- [x] The same bytes against the same subject is one document; the second
+      upload returns the first rather than refusing
+- [x] **Access inherited from the subject** — a document about a patient is
+      governed by the same care relationship as their record, not by a second
+      permission model that would drift out of step
+- [x] Versions supersede rather than overwrite
+- [x] Archived with a required reason, never deleted
+- [x] Downloads logged; listings not — opening a scan is the sensitive act
+- [ ] **Malware scanning.** Nothing scans anything. This is the blocker for
+      letting *patients* upload, specifically
+- [ ] Retention rules and legal hold
+- [ ] Full-text search across documents
+- [ ] A screen: the API exists, neither application shows it yet
 
 ## §123 Template management `[ ]`
 - [ ] Invoice · prescription · lab report · discharge · referral

@@ -91,6 +91,7 @@ TENANT_APPS = [
     "apps.referrals",
     "apps.portal",
     "apps.notifications",
+    "apps.documents",
 ]
 
 LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS
