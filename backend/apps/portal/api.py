@@ -46,6 +46,7 @@ from apps.portal.models import (
     ProxyAccess,
     ProxyRelationship,
 )
+from apps.audit.access_reports import who_looked_at
 from apps.portal.services import (
     PortalError,
     access_for,
@@ -401,12 +402,40 @@ class MeView(APIView):
                 account.sessions.order_by("-issued_at")[:20], many=True,
             ).data)
 
+        if section == "access":
+            # Who has opened this record. Phase 3 of ACCESS_DESIGN.md, and the
+            # one report a patient is entitled to without asking anybody.
+            #
+            # Shown as individual lines rather than a summary: somebody asking
+            # this question wants the Tuesday afternoon they remember, not a
+            # count. And staff are named -- a log that says "a member of staff"
+            # answers nothing, and the people reading records know they are
+            # named, which is most of what makes the logging work.
+            #
+            # A proxy may not see it. Who has read somebody's record is about
+            # that person, and a carer arranging appointments has no business
+            # in it.
+            if account.patient_id != row["patient"].id:
+                raise PortalError(
+                    "You can only see who has opened your own record.",
+                    code="not_permitted",
+                )
+            note_access(account, patient, "access_log", ip=ip)
+            return Response({
+                "entries": who_looked_at(patient, days=365),
+                "note": (
+                    "Everyone who opened your record in the last year. Staff "
+                    "treating you will appear here often — that is what "
+                    "treating you looks like."
+                ),
+            })
+
         return Response(
             {"detail": f"Unknown section '{section}'.",
              "available": [
                  "home", "results", "appointments", "invoices",
                  "prescriptions", "referrals", "messages", "sessions",
-                 "profile", "document",
+                 "profile", "document", "access",
              ]},
             status=status.HTTP_400_BAD_REQUEST,
         )

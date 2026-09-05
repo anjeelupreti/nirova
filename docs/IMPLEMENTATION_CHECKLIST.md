@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1125** |
+| **Done** | **32 of 132** | **1129** |
 | **Outstanding** | **100** | **628** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
@@ -2230,9 +2230,18 @@ September; findings measured, not assumed.*
       dispensed at this counter, the question that had no answer
 
 **Phase 3 — making it visible**
-- [ ] "Who looked at my record" in the patient portal
-- [ ] Access-pattern reporting: reads without a relationship, overrides never
-      reviewed, read-volume outliers
+- [x] "Who looked at my record" at `/api/me/?section=access`, unaggregated and
+      naming staff. A proxy cannot see it
+- [x] Reads with no care relationship, hedged in its own text because the
+      relationship is recomputed now — a report that overstates its case is
+      dismissed wholesale after the first false positive
+- [x] Read volume against the median for the *same role*, with a floor so that
+      five reads against a median of one is not an "outlier"
+- [x] `actor_role` is recorded, which it never was — the report compared
+      everybody to everybody until 6 September 2026
+- [ ] A screen for the access-pattern reports; the API exists, the staff
+      console does not show it yet
+- [ ] Patient-facing screen for the access log in the patient application
 - [ ] Sensitive clinical data controls
 - [ ] Consent enforcement
 - [ ] Data retention

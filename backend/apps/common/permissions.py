@@ -30,6 +30,33 @@ def get_authorization(request):
 
     authorization = resolve_authorization(request.user, membership)
     request._authorization = authorization
+
+    # Fill the audit context's `actor_role` here, which is the first moment in
+    # a request that anybody knows what it is. The middleware builds the
+    # context before authorization is resolved, so the field had always been
+    # written empty -- and the access-pattern report compares a person's read
+    # volume against "the median for the same role", which with every role
+    # blank was comparing a consultant to a counter assistant. Exactly what
+    # its own docstring says it must not do.
+    #
+    # No extra query: the roles are already in the authorization that was just
+    # resolved and cached.
+    try:
+        from apps.audit.services import get_audit_context
+
+        context = get_audit_context()
+        if context is not None and not context.actor_role:
+            context.actor_role = ",".join(
+                sorted({
+                    source.split("@")[0].removeprefix("role:")
+                    for granted in authorization.permissions.values()
+                    for source in granted.sources
+                    if source.startswith("role:")
+                })
+            )[:128]
+    except Exception:  # noqa: BLE001 - never break a request to label a log
+        pass
+
     return authorization
 
 

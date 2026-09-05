@@ -1286,3 +1286,105 @@ def test_a_doctor_can_open_their_own_worklist(tenant):
         HTTP_X_ORGANIZATION=tenant.slug,
     )
     assert client.get("/api/clinical/worklist/").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — making access visible
+# ---------------------------------------------------------------------------
+
+
+def test_audit_events_record_the_actor_role(tenant):
+    """The access-pattern report compares somebody's read volume against "the
+    median for the same role", and every role was blank.
+
+    The middleware builds the audit context before authorization is resolved,
+    so `actor_role` had always been written empty — which meant the report was
+    comparing a consultant to a counter assistant, exactly what its own
+    docstring says it must not do. Filled now at the first moment in a request
+    that anybody knows the answer.
+    """
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.audit.models import AuditAction, AuditEvent
+    from apps.identity.models import User
+    from apps.patients.models import Patient
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    patient = Patient.objects.exclude(status="merged").first()
+    if doctor is None or patient is None:
+        pytest.skip("demo data missing")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    assert client.get(f"/api/clinical/patients/{patient.uuid}/").status_code == 200
+
+    latest = (
+        AuditEvent.objects.filter(
+            actor_id=doctor.uuid, action=AuditAction.VIEW_SENSITIVE,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    assert latest is not None, "the read was not logged at all"
+    assert latest.actor_role, (
+        "actor_role is empty, so any report grouping by role is comparing "
+        "everybody to everybody"
+    )
+
+
+def test_a_patient_can_see_who_looked_at_their_record(tenant):
+    """The one report a patient is entitled to without asking anybody.
+
+    Staff are named. A log that says "a member of staff" answers nothing, and
+    the people reading records knowing they are named is most of what makes
+    the logging work.
+    """
+    from apps.audit.access_reports import who_looked_at
+    from apps.audit.models import AuditAction, AuditEvent
+    from apps.patients.models import Patient
+
+    read = (
+        AuditEvent.objects.filter(
+            action=AuditAction.VIEW_SENSITIVE, entity_type="patients.Patient",
+        )
+        .exclude(entity_id="")
+        .order_by("-occurred_at")
+        .first()
+    )
+    if read is None:
+        pytest.skip("no patient reads logged yet")
+
+    patient = Patient.objects.filter(uuid=read.entity_id).first()
+    if patient is None:
+        pytest.skip("the read names a patient that no longer exists")
+
+    entries = who_looked_at(patient)
+    assert entries, "a logged read did not appear in the patient's own view"
+    assert entries[0]["who"], "an entry that names nobody answers nothing"
+
+
+def test_access_patterns_need_privacy_review(tenant):
+    """A report of who has been reading whose records is itself sensitive."""
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    owner = User.objects.filter(email="owner@manakamana.test").first()
+    if doctor is None or owner is None:
+        pytest.skip("demo users missing")
+
+    def get(user):
+        return Client(
+            HTTP_AUTHORIZATION=(
+                f"Bearer {RefreshToken.for_user(user).access_token}"
+            ),
+            HTTP_X_ORGANIZATION=tenant.slug,
+        ).get("/api/privacy/access-patterns/").status_code
+
+    assert get(doctor) == 403
+    assert get(owner) == 200

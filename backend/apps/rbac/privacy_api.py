@@ -175,3 +175,33 @@ class BreakGlassReviewViewSet(viewsets.ReadOnlyModelViewSet):
             grant, request.user, serializer.validated_data["reason"],
         )
         return Response(GrantSerializer(updated).data)
+
+class AccessPatternView(APIView):
+    """Reads worth a second look, and who reads far more than their peers.
+
+    Behind `privacy.review`, like the break-glass queue and for the same
+    reason: a report of who has been reading whose records is itself one of the
+    more sensitive things in the system.
+
+    Both reports hedge deliberately in their own text. The relationship is
+    recomputed at report time, so a clinician who legitimately saw somebody in
+    March appears in July; and volume is the crudest signal there is. Stating
+    that inside the response rather than in documentation matters, because the
+    person reading it on a Monday morning is the one who has to decide what it
+    means — and a report that overstates its case gets dismissed wholesale
+    after the first false positive.
+    """
+
+    permission_classes = [IsAuthenticated, HasPermission.of("privacy.review")]
+
+    def get(self, request):
+        from apps.audit.access_reports import (
+            read_volume_by_person,
+            reads_without_a_relationship,
+        )
+
+        days = int(request.query_params.get("days", 30))
+        return Response({
+            "unrelated_reads": reads_without_a_relationship(days=days),
+            "read_volume": read_volume_by_person(days=days),
+        })

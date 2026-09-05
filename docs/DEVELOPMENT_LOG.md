@@ -6362,3 +6362,54 @@ can crash.**
 
 **Affects.** `apps/encounters/views.py`, `apps/emergency/api.py`,
 `apps/hr/ess_api.py`, `apps/hr/models.py`, `tests/test_invariants.py`.
+
+---
+
+## 189 - Making access visible
+2026-09-06 · Backend · feature
+
+Phase 3 of `docs/ACCESS_DESIGN.md`. Phases 1 and 2 made access loggable and
+narrowable; this makes it **visible**. A log nobody reads is a log that only
+matters after somebody complains, and by then the question is always the same:
+who looked at this record, and why.
+
+Checked the foundation first, because the audit log was silently dropping every
+facility-scoped request until this morning (entry 186). Reads with and without
+`X-Facility` both land now, so there is something to report on.
+
+**`who_looked_at(patient)`** -- every recorded read of one record, newest
+first, **unaggregated**. A summary would be easier to read and is the wrong
+shape: somebody asking this wants the Tuesday afternoon they remember, not a
+count. Exposed to the patient at `/api/me/?section=access`, where **staff are
+named**. A log saying "a member of staff" answers nothing, and the people
+reading records knowing they are named is most of what makes the logging work.
+A proxy cannot see it -- who has read somebody's record is about that person,
+and a carer arranging appointments has no business in it.
+
+**`reads_without_a_relationship()`** -- the interesting report, and the one
+that has to hedge. The relationship is recomputed *now*, so a clinician who
+legitimately saw somebody in March appears in July. The response says so in its
+own text rather than in documentation, because the person reading it on a
+Monday has to decide what it means, and **a report that overstates its case
+gets dismissed wholesale after the first false positive**. Break-glass reads
+are excluded: they have their own queue and are already reviewed one by one.
+
+**`read_volume_by_person()`** -- the crudest signal, against the median for the
+same role. A ward clerk and a consultant have no business being compared.
+Outliers need 2.5x the median *and* at least twenty reads; without the floor,
+somebody reading five against a median of one is an "outlier" and the report
+becomes noise.
+
+**And the report was comparing everybody to everybody.** `actor_role` was
+always empty: the audit middleware builds its context before authorization is
+resolved, so nothing ever knew the role at the moment the row was written. It
+is now filled in `get_authorization`, the first point in a request where the
+answer exists, at no extra query -- the roles are already in the authorization
+that was just resolved.
+
+Historical events keep their blank role, because an audit log is append-only.
+That resolves as they age out of the window, and pretending otherwise would
+mean rewriting audit rows, which is worse than a transitional gap.
+
+**Affects.** `apps/audit/access_reports.py`, `apps/common/permissions.py`,
+`apps/rbac/privacy_api.py`, `apps/rbac/urls.py`, `apps/portal/api.py`.
