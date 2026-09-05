@@ -60,6 +60,38 @@ Nothing new has to be recorded; it only has to be read.
 
 ---
 
+## Step 0 — measure the sources *(done, 6 September 2026)*
+
+The plan called for measuring `provider_uuid` coverage before enforcing
+anything. It was the most useful hour of the phase, and it found worse than
+sparseness.
+
+| field | before | after |
+|---|---|---|
+| `Encounter.provider_uuid` | **20.5%** | 97.6% |
+| `Appointment.provider_uuid` | 100%, **every id a placeholder** | 100%, all real |
+| `DiagnosticOrder.ordered_by_id` | 100% | 100% |
+| `Prescription.prescriber_id` | 98.3% | 98.4% |
+| `NurseAssignment.nurse_id` | 100% | 100% |
+
+Encounters at 20.5% is bad; appointments at 100% was worse. Every one of those
+ids was `00000000-0000-4000-8000-…` — a provider who was not a user, not an
+employee and not a member. Every appointment-based relationship would have
+resolved to nobody, silently. **A sparse column announces itself; a full column
+of ids that match nothing does not.**
+
+Fixed at source — emergency arrivals and inpatient admissions now attribute a
+provider, and the seed hires its doctors instead of inventing them — plus a
+one-off repair of existing rows, since idempotent seeds will not rewrite what
+they already wrote. Details in development log 173.
+
+A test now asserts both halves as a floor: coverage, and that no id fails to
+name somebody who can sign in.
+
+**Step 4 is now safe to reach.**
+
+---
+
 ## Steps
 
 ### Step 1 — `has_care_relationship`
@@ -233,11 +265,9 @@ ambulance has no relationship with anyone. Triage may need to create one on
 arrival rather than making every ED read a break-glass — otherwise the queue
 fills with the one case everybody agrees is fine.
 
-**`provider_uuid` may be sparsely populated** on older encounters, which would
-make the relationship check silently miss real ones. To be measured *before*
-step 4, the same way employee-login coverage was measured — a count, not an
-assumption. That measurement is cheap and it is the single most likely cause of
-a bad first day.
+~~**`provider_uuid` may be sparsely populated**~~ — *measured and fixed, see
+Step 0. It was worse than predicted: not merely sparse but, for appointments,
+fully populated with ids that named nobody.*
 
 ---
 

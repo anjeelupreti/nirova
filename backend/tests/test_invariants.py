@@ -352,3 +352,67 @@ def test_prescriptions_are_deliberately_not_facility_filtered(tenant):
         "the prescription list has been facility-filtered; see "
         "ACCESS_DESIGN.md for why that breaks group dispensing"
     )
+
+
+# ---------------------------------------------------------------------------
+# PHASE2_PLAN.md step 0 — the relationship sources must resolve to real people
+# ---------------------------------------------------------------------------
+
+
+def test_relationship_sources_point_at_real_members(tenant):
+    """Every id Phase 2 will compare against must name somebody who can sign in.
+
+    Measured before building the relationship check rather than discovered
+    after enforcing it. The first measurement found `Encounter.provider_uuid`
+    22% populated, and every appointment pointing at a provider who was not a
+    user, not an employee and not a member -- a column that looked full and was
+    only wrong the moment something compared it to something else.
+
+    Asserted as a floor rather than a fixed number, because seeds add rows.
+    """
+    from apps.diagnostics.models import DiagnosticOrder
+    from apps.encounters.models import Encounter
+    from apps.identity.models import Membership, MembershipStatus
+    from apps.inpatient.nursing_models import NurseAssignment
+    from apps.prescriptions.models import Prescription
+    from apps.scheduling.models import Appointment
+
+    members = set(
+        Membership.objects.filter(
+            organization=tenant, status=MembershipStatus.ACTIVE,
+        ).values_list("user__uuid", flat=True)
+    )
+    assert members, "no active members; run seed_demo"
+
+    sources = [
+        ("Encounter.provider_uuid", Encounter, "provider_uuid", 90),
+        ("Appointment.provider_uuid", Appointment, "provider_uuid", 90),
+        ("DiagnosticOrder.ordered_by_id", DiagnosticOrder, "ordered_by_id", 90),
+        ("Prescription.prescriber_id", Prescription, "prescriber_id", 90),
+        ("NurseAssignment.nurse_id", NurseAssignment, "nurse_id", 90),
+    ]
+
+    problems = []
+    for label, model, field, floor in sources:
+        total = model.objects.count()
+        if total == 0:
+            continue
+        filled = model.objects.filter(**{f"{field}__isnull": False}).count()
+        coverage = filled / total * 100
+        if coverage < floor:
+            problems.append(f"{label}: only {coverage:.1f}% populated")
+
+        # A populated column pointing at nobody is the same failure wearing a
+        # better disguise, so this half matters more than the coverage.
+        orphans = {
+            value
+            for value in model.objects.filter(
+                **{f"{field}__isnull": False}
+            ).values_list(field, flat=True)
+        } - members
+        if orphans:
+            problems.append(
+                f"{label}: {len(orphans)} id(s) are not an active member"
+            )
+
+    assert not problems, "; ".join(problems)

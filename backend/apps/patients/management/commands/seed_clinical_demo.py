@@ -23,7 +23,7 @@ from apps.patients.models import (
     PatientCondition,
 )
 from apps.patients.services import register_patient
-from apps.scheduling.models import Appointment, AppointmentSource, ProviderSchedule
+from apps.scheduling.models import QueueToken, Appointment, AppointmentSource, ProviderSchedule
 from apps.scheduling.services import (
     book_appointment,
     call_next,
@@ -118,7 +118,7 @@ class Command(BaseCommand):
 
             patients = self._patients(organization, facility, actor)
             self._clinical_history(patients)
-            schedules = self._schedules(facility)
+            schedules = self._schedules(facility, organization)
             appointments = self._appointments(
                 organization, patients, facility, schedules, actor
             )
@@ -191,7 +191,7 @@ class Command(BaseCommand):
         )
         self.stdout.write("  clinical history recorded")
 
-    def _schedules(self, facility):
+    def _schedules(self, facility, organization):
         department = Department.objects.filter(facility=facility, code="OPD").first()
         schedules = []
         for index, (name, speciality, start, end, minutes, capacity, reserve) in enumerate(
@@ -200,7 +200,7 @@ class Command(BaseCommand):
             # One schedule per weekday, Sunday to Friday — the Nepali week.
             for weekday in range(0, 6):
                 schedule, _ = ProviderSchedule.objects.get_or_create(
-                    provider_uuid=_stable_uuid(index),
+                    provider_uuid=_provider_uuid(index, facility, organization),
                     facility=facility,
                     weekday=weekday,
                     start_time=start,
@@ -297,6 +297,14 @@ class Command(BaseCommand):
         department = Department.objects.filter(facility=facility, code="OPD").first()
 
         for appointment in appointments[:3]:
+            # One token per appointment, enforced by a unique constraint. The
+            # booking step above now reuses an existing appointment rather than
+            # consuming slot capacity on every run, so on a second run these
+            # appointments already have their tokens and issuing again trips
+            # `queue_token_appointment_id_key`. Making the seed re-runnable in
+            # one place moved the problem to the next one.
+            if QueueToken.objects.filter(appointment=appointment).exists():
+                continue
             issue_token(
                 organization=organization,
                 patient=appointment.patient,
@@ -341,10 +349,50 @@ class Command(BaseCommand):
             self.stdout.write(f"  {key.replace('_', ' '):<22} {stats[key]}")
 
 
-def _stable_uuid(index: int) -> str:
-    """A repeatable provider UUID, so re-running the seed does not duplicate.
+def _provider_uuid(index: int, facility, organization) -> str:
+    """The user id of a doctor who really exists, hiring one if necessary.
 
-    Providers will become HRMS employees with real UUIDs; until then a fixed
-    value keeps the seed idempotent.
+    Three versions of this, and the first two are the instructive part.
+
+    It began returning `00000000-0000-4000-8000-...` unconditionally, with a
+    note saying providers would become real employees later. Later arrived:
+    Phase 2 of ACCESS_DESIGN.md decides clinical access by comparing this field
+    to the caller's user id, and measuring beforehand found every appointment
+    pointing at somebody who was not a user, not an employee and not a member
+    of the organization. Every appointment-based care relationship would have
+    resolved to nobody, silently. That is a worse failure than a sparse column,
+    because the column looks full -- it is only wrong the moment something
+    finally compares it to something else.
+
+    The second version matched doctors to employees by first name. It matched
+    "Dr. Prakash Rana" to an employee called Prakash Adhikari -- a different
+    person -- and created a duplicate schedule under his id. A fuzzy match that
+    quietly attributes one clinician's patients to another is worse than the
+    placeholder it replaced.
+
+    So this version does not guess. The doctor is hired and given a login,
+    which is what a provider *is*; the seed stops pretending otherwise. Both
+    calls are idempotent, so re-running finds the same person rather than
+    making a second one.
     """
-    return f"00000000-0000-4000-8000-{index:012d}"
+    from apps.hr.models import Employee, EmployeeStatus
+    from apps.hr.services import give_login, hire
+
+    full_name = DOCTORS[index][0].removeprefix("Dr. ").strip()
+    first, _, last = full_name.partition(" ")
+    email = f"{first}.{last}@manakamana.test".lower()
+
+    employee = Employee.objects.filter(
+        first_name=first, last_name=last, status=EmployeeStatus.ACTIVE,
+    ).first()
+    if employee is None:
+        employee = hire(
+            facility=facility,
+            first_name=first,
+            last_name=last,
+            work_email=email,
+        )
+    if not employee.user_id:
+        give_login(employee, organization, email=email)
+        employee.refresh_from_db()
+    return str(employee.user_id)

@@ -206,6 +206,13 @@ def arrive(
             detail={"arrival": open_arrival.reference},
         )
 
+    # Attributed to whoever received the arrival. Until now this encounter
+    # recorded a creator and no provider, which is a distinction without a
+    # difference in an emergency department -- the clinician who takes the
+    # patient in is treating them. It matters because Phase 2 of
+    # ACCESS_DESIGN.md decides clinical access from exactly this field, and
+    # measuring it beforehand found emergency encounters attributed to nobody,
+    # 31 of 31.
     encounter = Encounter.objects.create(
         reference=f"ENC-{_next_reference()}",
         patient=patient,
@@ -214,6 +221,8 @@ def arrive(
         facility=facility,
         department=department,
         chief_complaint=presenting_complaint,
+        provider_uuid=getattr(actor, "uuid", None),
+        provider_name=getattr(actor, "full_name", "") or "",
         created_by_id=getattr(actor, "uuid", None),
     )
 

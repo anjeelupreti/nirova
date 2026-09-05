@@ -333,8 +333,19 @@ class Command(BaseCommand):
                 "that ran twice must not double everybody's holiday"
             )
 
-        # More than the balance, refused.
+        # A five-day span that actually contains working days. `far` used to be
+        # a flat thirty days out, which passed until the calendar moved it onto
+        # the Dashain block and `apply_for_leave` correctly refused a request
+        # made entirely of holidays. Second instance of the same fault in this
+        # file: a seed whose dates are relative to today and which assumes
+        # today's arithmetic lands on a working day.
         far = timezone.localdate() + timedelta(days=30)
+        for _ in range(40):
+            if working_days_between(
+                far, far + timedelta(days=4), employee.facility
+            ) > 0:
+                break
+            far += timedelta(days=1)
         try:
             apply_for_leave(
                 employee, annual, far, far + timedelta(days=40),

@@ -270,7 +270,15 @@ def admit(
         status=EncounterStatus.IN_PROGRESS,
         facility=facility,
         department=department,
-        provider_uuid=getattr(consultant, "uuid", None),
+        # Falls back to the admitting clinician. The field was here already
+        # but only populated when a consultant *object* was passed, and every
+        # caller passes a name -- so live admissions carried no attributable
+        # clinician at all, 4 of 4 when this was measured. Naming a consultant
+        # is not the same fact as somebody being responsible for the admission
+        # right now, and the second is the one access control needs.
+        provider_uuid=(
+            getattr(consultant, "uuid", None) or getattr(actor, "uuid", None)
+        ),
         provider_name=consultant_name or getattr(consultant, "full_name", ""),
         chief_complaint=admitting_diagnosis,
         created_by_id=getattr(actor, "uuid", None),

@@ -5602,3 +5602,106 @@ Phase 2.
 
 **Affects.** `apps/billing/views.py`, `apps/pos/views.py`,
 `apps/pharmacy/views.py`, `apps/prescriptions/views.py`, `tests/`.
+
+---
+
+## 173 - The column that looked full
+2026-09-06 · Backend · finding, bug
+
+Phase 2 of `ACCESS_DESIGN.md` decides clinical access by comparing a record's
+provider id against the caller's user id. The plan called for measuring those
+columns **before** enforcing anything, rather than discovering the state of
+them on the first morning. That measurement was the most useful hour of this
+phase.
+
+    field                             rows      set  coverage
+    Encounter.provider_uuid            117       24     20.5%
+    Appointment.provider_uuid           12       12    100.0%
+    DiagnosticOrder.ordered_by_id       76       76    100.0%
+    Prescription.prescriber_id          60       59     98.3%
+    NurseAssignment.nurse_id            69       69    100.0%
+
+**Encounters at 20.5% is bad. Appointments at 100% is worse.**
+
+Every one of those twelve appointments pointed at
+`00000000-0000-4000-8000-...` -- a provider who was not a user, not an
+employee, and not a member of the organization. Every appointment-based care
+relationship would have resolved to nobody, **silently**. A sparse column
+announces itself; a full column of ids that match nothing does not. It is only
+wrong the moment something finally compares it to something else, and that
+moment would have been the day access control started depending on it.
+
+The source was a seed helper whose own docstring admitted it: *"Providers will
+become HRMS employees with real UUIDs; until then a fixed value keeps the seed
+idempotent."* Later had arrived and nobody had gone back.
+
+**The second attempt was worse than the first.** Matching doctors to employees
+by first name matched "Dr. Prakash Rana" to an employee called Prakash
+Adhikari -- a different person -- and created a duplicate schedule under his
+id. A fuzzy match that quietly attributes one clinician's patients to another
+is worse than the placeholder it replaced, because the placeholder was at least
+obviously wrong.
+
+The third version does not guess: the seed **hires the doctors and gives them
+logins**, which is what a provider is. Both calls are idempotent.
+
+Three code fixes behind it.
+
+*Emergency arrivals were attributed to nobody*, 31 of 31. The encounter
+recorded a creator and no provider, which in an emergency department is a
+distinction without a difference -- the clinician who takes the patient in is
+treating them.
+
+*Inpatient admissions had the field but never populated it*, 4 of 4 live
+admissions. `provider_uuid` was set only when a consultant **object** was
+passed, and every caller passes a name. Naming a consultant is not the same
+fact as somebody being responsible for the admission right now, and access
+control needs the second.
+
+*Existing rows needed repair.* Idempotent seeds will not rewrite what they
+already wrote -- that is the point of them -- so 93 encounters were backfilled
+from their creator, and the appointments repointed.
+
+**A subtlety worth recording.** The first repair pass reported "repointed 0
+appointments" and looked successful. The placeholder schedules had been
+*soft-deleted*, so `ProviderSchedule.objects` no longer returned them while the
+appointments' foreign keys still resolved to them -- the repair was comparing
+each appointment against its own dead schedule and finding them in agreement.
+Same shape as log 161, in a different place: **a soft-deleted row is invisible
+to the manager and entirely visible to a foreign key.**
+
+Afterwards:
+
+    Encounter.provider_uuid            123      120     97.6%
+    ...and every source: 0 ids that are not an active member
+
+A test now asserts both halves as a floor -- coverage, and that no id fails to
+name somebody who can sign in.
+
+**Affects.** `apps/emergency/services.py`, `apps/inpatient/services.py`,
+`apps/patients/management/commands/seed_clinical_demo.py`, `tests/`.
+
+---
+
+## 174 - Dashain, and the same fault twice in one file
+2026-09-06 · Tooling · bug
+
+`seed_attendance_demo` failed again, on a different scenario and for the same
+reason as entry 163: dates computed relative to today, on the assumption that
+the arithmetic lands on working days.
+
+Entry 163 fixed a request dated `today`, which failed every Saturday. This one
+asks for five days starting thirty days out -- and today's date put that span
+inside the Dashain holidays, so `apply_for_leave` correctly refused a request
+made entirely of holidays.
+
+Both now search forward for a span that contains working days.
+
+Worth stating as a rule, since it has now cost two fixes in one file: **a seed
+that computes a date from `today` must ask whether that date is a working day,
+because the answer changes without anybody touching the code.** These seeds are
+run on whatever day somebody happens to run them, and a test that fails one day
+in seven -- or one week in fifty-two -- is a test that gets ignored rather than
+read.
+
+**Affects.** `apps/hr/management/commands/seed_attendance_demo.py`.
