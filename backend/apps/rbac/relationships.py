@@ -399,3 +399,121 @@ def relationship_for_request(request, patient) -> Relationship | None:
     )
     cache[key] = found
     return found
+
+
+# ---------------------------------------------------------------------------
+# The list case: which patients, rather than whether this one
+# ---------------------------------------------------------------------------
+
+
+def related_patient_ids(user_id, authorization=None,
+                        recency_days: int = DEFAULT_RECENCY_DAYS) -> set | None:
+    """Every patient this user has a care relationship with.
+
+    The list-shaped counterpart to `has_care_relationship`, and deliberately a
+    separate function rather than the same one in a loop. Calling the
+    object-level check once per row would be six queries per patient on a page
+    of fifty; this is six queries for the whole page, because it asks each
+    source "which patients" instead of asking "is it this one" repeatedly.
+
+    Returns `None` for "no restriction" -- an owner, an auditor, an
+    organization-scoped clinical role -- which mirrors
+    `accessible_facility_ids` so that callers handle the two the same way. An
+    empty set means the honest answer of nobody, and is not the same value.
+
+    The two functions must agree, and the risk that they drift is real: a
+    patient that appears in a list but cannot be opened, or the reverse, is a
+    confusing bug rather than an obvious one. A test asserts they agree.
+    """
+    if user_id is None:
+        return set()
+
+    if authorization is not None and _exemption(authorization) is not None:
+        return None
+
+    from apps.diagnostics.models import DiagnosticOrder
+    from apps.encounters.models import OPEN_ENCOUNTER_STATUSES, Encounter
+    from apps.inpatient.models import CLOSED_STATUSES, Admission
+    from apps.inpatient.nursing_models import NurseAssignment
+    from apps.prescriptions.models import Prescription
+    from apps.rbac.models import BreakGlassGrant
+    from apps.scheduling.models import AppointmentStatus, Appointment
+
+    cutoff = _cutoff(recency_days)
+    now = timezone.now()
+    ids: set = set()
+
+    ids.update(
+        Encounter.objects.filter(provider_uuid=user_id)
+        .filter(
+            Q(status__in=OPEN_ENCOUNTER_STATUSES) | Q(started_at__gte=cutoff)
+        )
+        .values_list("patient_id", flat=True)
+    )
+
+    if authorization is not None:
+        facility_ids = authorization.accessible_facility_ids(
+            "patient.clinical.read"
+        )
+        if facility_ids != set():
+            admissions = Admission.objects.exclude(status__in=CLOSED_STATUSES)
+            if facility_ids is not None:
+                admissions = admissions.filter(facility_id__in=facility_ids)
+            ids.update(admissions.values_list("patient_id", flat=True))
+
+    ids.update(
+        Prescription.objects.filter(
+            prescriber_id=user_id, prescribed_at__gte=cutoff,
+        ).values_list("patient_id", flat=True)
+    )
+    ids.update(
+        DiagnosticOrder.objects.filter(
+            ordered_by_id=user_id, ordered_at__gte=cutoff,
+        ).values_list("patient_id", flat=True)
+    )
+    ids.update(
+        Appointment.objects.filter(
+            provider_uuid=user_id,
+            scheduled_for__gte=now - timedelta(days=APPOINTMENT_LOOKBACK_DAYS),
+            scheduled_for__lte=now + timedelta(days=APPOINTMENT_LOOKAHEAD_DAYS),
+        )
+        .exclude(status=AppointmentStatus.CANCELLED)
+        .values_list("patient_id", flat=True)
+    )
+    ids.update(
+        NurseAssignment.objects.filter(nurse_id=user_id, is_active=True)
+        .exclude(admission__isnull=True)
+        .values_list("admission__patient_id", flat=True)
+    )
+
+    # Break-glass is deliberately *not* counted towards uses here. A list is
+    # not a read of a record: counting it would make one page view look like
+    # forty accesses and drown the number that tells a reviewer whether the
+    # override was actually needed.
+    live_glass = BreakGlassGrant.objects.filter(
+        user_id=user_id, expires_at__gt=now,
+    ).values_list("patient_uuid", flat=True)
+    if live_glass:
+        from apps.patients.models import Patient
+
+        ids.update(
+            Patient.objects.filter(uuid__in=list(live_glass))
+            .values_list("id", flat=True)
+        )
+
+    return ids
+
+
+def related_patient_ids_for_request(request) -> set | None:
+    """`related_patient_ids`, resolved once per request."""
+    from apps.common.permissions import get_authorization
+
+    cached = getattr(request, "_related_patient_ids", "unset")
+    if cached != "unset":
+        return cached
+
+    found = related_patient_ids(
+        getattr(request.user, "uuid", None), get_authorization(request),
+    )
+    request._related_patient_ids = found
+    return found

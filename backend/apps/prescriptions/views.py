@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from apps.patients.services import record_patient_access
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import narrow_to_relationship, HasPermission, get_authorization
 from apps.encounters.models import Encounter
 from apps.organization.models import Facility
 from apps.patients.models import Patient
@@ -79,6 +79,13 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
         if params.get("include_superseded") != "true":
             queryset = queryset.exclude(status="superseded")
 
+        # Browsing narrows to the relationship; retrieving by reference
+        # does not. A patient presenting a prescription number has supplied
+        # both the relationship and the consent, and a pharmacy that cannot
+        # enumerate the group's prescriptions can still open the one in front
+        # of them. Inert until the organization turns the switch on.
+        if self.action == "list":
+            queryset = narrow_to_relationship(queryset, self.request)
         return queryset.order_by("-prescribed_at")
 
     @action(detail=False, methods=["post"], url_path="preview")

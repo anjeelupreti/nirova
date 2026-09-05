@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import (
+    narrow_to_relationship,
     HasClinicalAccess,
     HasPermission,
     get_authorization,
@@ -115,6 +116,11 @@ class EncounterViewSet(viewsets.ModelViewSet):
             if allowed is not None:
                 queryset = queryset.filter(facility_id__in=allowed)
 
+        # Browsing narrows to the relationship; opening one by reference
+        # does not -- the object-level `HasClinicalAccess` handles that, and
+        # the two answer the same question from different directions.
+        if self.action == "list":
+            queryset = narrow_to_relationship(queryset, self.request)
         return queryset.order_by("-started_at")
 
     def retrieve(self, request, *args, **kwargs):

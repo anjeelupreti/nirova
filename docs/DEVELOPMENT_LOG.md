@@ -6049,3 +6049,55 @@ rather than left to be rediscovered.
 **Affects.** `apps/patients/views.py`, `apps/prescriptions/views.py`,
 `apps/diagnostics/views.py`, `apps/scheduling/views.py`,
 `apps/inpatient/api.py`.
+
+---
+
+## 182 - Browsing and looking up
+2026-09-06 · Backend · feature
+
+Step 4 of `PHASE2_PLAN.md`, and the distinction that replaces facility
+filtering. Browsing is asking the system who exists; looking something up is
+naming a record somebody has handed you. The second carries its own
+justification -- **a patient presenting a prescription reference is the care
+relationship and is the consent** -- so a pharmacy that cannot enumerate the
+group's prescriptions can still open the one in front of them.
+
+Applied to `list` actions only, behind the same switch as step 2.
+
+**`related_patient_ids` is a separate function, not the object-level check in a
+loop.** Asking "is it this one?" once per row would be six queries per patient
+on a page of fifty; asking each source "which patients?" is six queries for the
+whole page. It mirrors `accessible_facility_ids` exactly, including returning
+`None` for *no restriction* as distinct from an empty set meaning *nobody* --
+conflating those two is how a list either leaks everything or silently shows
+nothing.
+
+Two separate code paths answering the same question can drift, and a patient
+who appears in a list but cannot be opened is a confusing bug rather than an
+obvious one. Checked across every active member against every patient: **zero
+disagreements**, and a test now asserts it.
+
+Measured with the switch on and off:
+
+    switch OFF   doctor 63   owner 63   counter 63
+    switch ON    doctor 22   owner 63   counter  0
+    by reference doctor 200  counter 200
+
+The last line is the whole point. A counter assistant can enumerate **nothing**
+and can still open the exact prescription handed to them.
+
+**A gap this exposed, and it is a real one.** `ACCESS_DESIGN.md` lists "the
+patient has an active prescription or order presented at the user's facility"
+as a relationship source. It is not implemented, because there is no *presented
+at* concept -- Phase 1 established that `Prescription.facility` records where a
+prescription was **written**. So a pharmacist has no relationship with anybody
+and browses an empty list.
+
+For dispensing against a presented reference that is correct and sufficient.
+For a pharmacist who wants "prescriptions waiting to be dispensed here" it is
+not, and that is a real workflow. It needs a model change -- an event when a
+pharmacy pulls a prescription up -- rather than a filter, so it is recorded
+rather than bodged.
+
+**Affects.** `apps/common/permissions.py`, `apps/rbac/relationships.py`,
+`apps/prescriptions/views.py`, `apps/encounters/views.py`.

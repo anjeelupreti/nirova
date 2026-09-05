@@ -1,8 +1,8 @@
 # Access control, Phase 2 — development plan
 
-**Status:** steps 0, 1, 2, 3 and 5 done. Enforcement is live on encounters
-behind `privacy.require_care_relationship`, **off by default**. Step 4 —
-narrowing the lists — remains.
+**Status:** all six steps done. Enforcement is live on encounters and
+prescriptions behind `privacy.require_care_relationship`, **off by default**.
+Extending it to results, ICU and the inpatient record remains.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the
@@ -168,7 +168,7 @@ reviewed at, outcome.
 > break-glass nobody reviews is theatre, and this is the step most likely to be
 > quietly dropped for looking like paperwork.
 
-### Step 4 — browse narrows, lookup stays open
+### Step 4 — browse narrows, lookup stays open *(done, 6 September 2026)*
 
 | Endpoint | List | Lookup by reference |
 |---|---|---|

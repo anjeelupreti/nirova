@@ -939,3 +939,117 @@ def test_lowering_the_floor_did_not_widen_anybody(tenant):
             f"{path}: a department-scoped doctor sees {mine} rows where an "
             f"organization-scoped owner sees {theirs}"
         )
+
+
+# ---------------------------------------------------------------------------
+# PHASE2_PLAN.md step 4 — browse narrows, lookup by reference does not
+# ---------------------------------------------------------------------------
+
+
+def test_the_two_relationship_functions_agree(tenant):
+    """`has_care_relationship` and `related_patient_ids` are separate code
+    paths answering the same question, and they could drift.
+
+    A patient who appears in a list but cannot be opened -- or the reverse --
+    is a confusing bug rather than an obvious one.
+    """
+    from apps.identity.models import Membership, MembershipStatus
+    from apps.patients.models import Patient
+    from apps.rbac.relationships import (
+        has_care_relationship,
+        related_patient_ids,
+    )
+    from apps.rbac.services import resolve_authorization
+
+    patients = list(Patient.objects.exclude(status="merged"))
+    disagreements = []
+    for membership in Membership.objects.filter(
+        organization=tenant, status=MembershipStatus.ACTIVE,
+    ).select_related("user"):
+        authorization = resolve_authorization(membership.user, membership)
+        listed = related_patient_ids(membership.user.uuid, authorization)
+        if listed is None:
+            continue
+        for patient in patients:
+            one = has_care_relationship(
+                membership.user.uuid, patient, authorization,
+            ) is not None
+            if one != (patient.id in listed):
+                disagreements.append(
+                    f"{membership.user.email} / {patient.full_name}: "
+                    f"object={one} list={patient.id in listed}"
+                )
+    assert not disagreements, "; ".join(disagreements[:5])
+
+
+def test_browsing_narrows_but_a_reference_still_opens(tenant):
+    """The asymmetry that replaces facility filtering.
+
+    A pharmacy counter assistant must not be able to enumerate the group's
+    prescriptions, and must be able to open the one a patient hands them --
+    presenting the reference *is* the care relationship and *is* the consent.
+    Tidying this away would break group dispensing.
+    """
+    import json
+
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import Membership, User
+    from apps.prescriptions.models import Prescription
+    from apps.rbac.relationships import related_patient_ids
+    from apps.rbac.services import resolve_authorization
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    counter = User.objects.filter(email="counter@manakamana.test").first()
+    if doctor is None or counter is None:
+        pytest.skip("demo users missing")
+
+    authorization = resolve_authorization(
+        doctor, Membership.objects.get(user=doctor, organization=tenant),
+    )
+    mine = related_patient_ids(doctor.uuid, authorization) or set()
+    unrelated = (
+        Prescription.objects.exclude(status="superseded")
+        .exclude(patient_id__in=mine)
+        .first()
+    )
+    if unrelated is None:
+        pytest.skip("no prescription outside this doctor's relationships")
+
+    def client_for(user):
+        return Client(
+            HTTP_AUTHORIZATION=(
+                f"Bearer {RefreshToken.for_user(user).access_token}"
+            ),
+            HTTP_X_ORGANIZATION=tenant.slug,
+        )
+
+    def browse(user):
+        response = client_for(user).get("/api/clinical/prescriptions/")
+        return json.loads(response.content.decode()).get("count")
+
+    _privacy_switch(None)
+    try:
+        wide_open = browse(doctor)
+
+        _privacy_switch(True)
+        narrowed = browse(doctor)
+        assert narrowed < wide_open, (
+            f"browsing did not narrow: {narrowed} of {wide_open}"
+        )
+        assert browse(counter) == 0, (
+            "a pharmacy counter assistant can enumerate prescriptions they "
+            "have no relationship with"
+        )
+
+        # The other half, and the one that matters for dispensing.
+        opened = client_for(counter).get(
+            f"/api/clinical/prescriptions/{unrelated.uuid}/"
+        )
+        assert opened.status_code == 200, (
+            "a presented prescription could not be opened, which breaks "
+            "group dispensing -- see ACCESS_DESIGN.md"
+        )
+    finally:
+        _privacy_switch(None)

@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1118** |
+| **Done** | **32 of 132** | **1119** |
 | **Outstanding** | **100** | **629** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
@@ -2206,9 +2206,13 @@ September; findings measured, not assumed.*
       every override, and no bulk sign-off anywhere
 - [x] Switchable per organization through the configuration hierarchy
 - [ ] Enforcement extended to results, ICU and the inpatient record
-- [ ] Lists narrow to the relationship; **lookup by reference stays open** to
-      the dispensing role and is logged — the patient handing over the
-      reference is the care relationship and is the consent
+- [x] Lists narrow to the relationship; **lookup by reference stays open** to
+      the dispensing role — the patient handing over the reference is the care
+      relationship and is the consent. Measured: a counter assistant
+      enumerates 0 prescriptions and still opens the one presented
+- [ ] A *presented at this facility* relationship source, so a pharmacist can
+      see prescriptions waiting to be dispensed here. `Prescription.facility`
+      is where it was **written**, so this needs an event rather than a filter
 
 **Phase 3 — making it visible**
 - [ ] "Who looked at my record" in the patient portal

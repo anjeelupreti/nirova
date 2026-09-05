@@ -261,3 +261,35 @@ def _patient_of(obj):
             if isinstance(nested, Patient):
                 return nested
     return None
+
+
+def narrow_to_relationship(queryset, request, patient_field="patient_id"):
+    """Restrict a *list* to patients the caller has a care relationship with.
+
+    Step 4 of `PHASE2_PLAN.md`, and the distinction that replaces facility
+    filtering: browsing is asking the system who exists, while looking
+    something up is naming a record somebody has handed you.
+
+    **List actions only.** `retrieve` is deliberately left alone. A patient who
+    presents a prescription reference has supplied both the relationship and
+    the consent, so a pharmacy that cannot enumerate the group's prescriptions
+    can still open the one in front of them. That asymmetry is the point;
+    tidying it away would break group dispensing, which is why Phase 1 left a
+    test asserting the prescription list is not facility-filtered.
+
+    `None` from `related_patient_ids_for_request` means *no restriction* -- an
+    owner, an auditor, an organization-scoped clinical role -- and is not the
+    same answer as an empty set, which means nobody. Conflating the two is how
+    a list either leaks everything or silently shows nothing; the same
+    distinction `accessible_facility_ids` draws, deliberately mirrored so that
+    callers handle both the same way.
+    """
+    from apps.rbac.relationships import related_patient_ids_for_request
+
+    if not relationship_required():
+        return queryset
+
+    allowed = related_patient_ids_for_request(request)
+    if allowed is None:
+        return queryset
+    return queryset.filter(**{f"{patient_field}__in": allowed})
