@@ -2,6 +2,7 @@
 
 **Shipped 5 September 2026.** Commits `4ef5178`, `6516569`.
 **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md) · **Log:** entries 169–172.
+**Next:** [PHASE2.md](PHASE2.md).
 
 The first of three phases narrowing who may see a patient's record. This one
 lays the vocabulary, fixes a clinical safety gap that had to close before

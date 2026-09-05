@@ -1,5 +1,9 @@
 # Access control, Phase 2 — development plan
 
+> **This is the plan as written before the work.** What was actually built,
+> including the five things found along the way, is in
+> [PHASE2.md](PHASE2.md).
+
 **Status:** all six steps done. Enforcement is live on encounters and
 prescriptions behind `privacy.require_care_relationship`, **off by default**.
 Extended to diagnostic orders, patient results, ICU stays and admissions.
