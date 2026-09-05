@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1135** |
+| **Done** | **32 of 132** | **1136** |
 | **Outstanding** | **100** | **625** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
@@ -2575,7 +2575,11 @@ because three modules were already working around its absence.*
 - [x] The sweep report distinguishes newly raised from already standing, and
       prints per tenant rather than summed
 - [ ] Backfill for alerts already open when the wiring is deployed
-- [ ] Approvals: purchase orders, payroll, facility change requests
+- [x] Approvals: purchase requisitions and payroll runs, each telling whoever
+      holds the approving permission and resolving on the decision. Payroll is
+      the one that mattered — the highest-value approval in the system, and
+      until now the second person had no way of knowing the first had finished
+- [ ] Facility change requests, the one approval still without a notification
 - [ ] Expiry sweeps for contracts, supplier agreements and stock
 - [ ] Digest and quiet hours
 - [ ] Delivery beyond in-app (§93). **Note:** patient invitation codes cannot

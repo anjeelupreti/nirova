@@ -29,6 +29,11 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+# notify / holders_of: an approval nobody is told about is an approval
+# that waits. See development log 164.
+from apps.notifications.models import NotificationCategory
+from apps.notifications.services import notify, resolve_by_key
+from apps.rbac.services import holders_of
 from apps.audit.models import AuditAction
 # record: payroll is the most disputed data in any organization, and every
 # run, approval and hold needs to be attributable.
@@ -654,6 +659,28 @@ def submit_for_approval(run: PayrollRun, actor=None) -> PayrollRun:
 
     run.status = RunStatus.PENDING_APPROVAL
     run.save(update_fields=["status", "updated_at"])
+
+    # The single highest-value approval in the system: whoever computed the
+    # numbers is not the person who authorises the money leaving, and the
+    # second person has to be told the first has finished.
+    notify(
+        source="payroll",
+        event="payroll_awaiting_approval",
+        category=NotificationCategory.APPROVAL,
+        title=f"Payroll {run.reference} is ready to approve",
+        body=f"{run.payslips.count()} payslip(s) for {run.period_label}."
+             if hasattr(run, "period_label") else
+             f"{run.payslips.count()} payslip(s).",
+        link="/payroll",
+        recipients=holders_of(
+            "payroll.approve",
+            exclude_user_id=getattr(actor, "uuid", None),
+        ),
+        subject_type="payroll.PayrollRun",
+        subject_uuid=run.uuid,
+        actor_name=getattr(actor, "full_name", "") or "",
+        dedupe_key=f"payroll_approval:{run.uuid}",
+    )
     return run
 
 
@@ -701,6 +728,11 @@ def approve(run: PayrollRun, actor, notes: str = "") -> PayrollRun:
         run.reference, run.employee_count, run.net_total,
         getattr(actor, "email", "?"),
     )
+    # The approval is no longer waiting on anybody. The copies stay
+    # readable, marked resolved -- who approved it and when is worth
+    # being able to look up.
+    resolve_by_key(f"payroll_approval:{run.uuid}", reason="Approved")
+
     return run
 
 

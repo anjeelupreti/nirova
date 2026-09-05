@@ -6,6 +6,11 @@ from decimal import Decimal
 from django.db import models
 from django.utils import timezone
 
+# notify / holders_of: an approval nobody is told about is an approval
+# that waits. See development log 164.
+from apps.notifications.models import NotificationCategory
+from apps.notifications.services import notify, resolve_by_key
+from apps.rbac.services import holders_of
 from apps.audit.models import AuditAction
 from apps.audit.services import record
 from apps.catalog.keys import ModuleCode
@@ -224,6 +229,29 @@ def submit_requisition(requisition: PurchaseRequisition, actor=None) -> Purchase
     requisition.status = RequisitionStatus.SUBMITTED
     requisition.submitted_at = timezone.now()
     requisition.save(update_fields=["status", "submitted_at", "updated_at"])
+
+    # Tell whoever can approve it. Raised inside this transaction: if the
+    # submission is refused there is nothing to approve, and a notification
+    # pointing at a rolled-back row is worse than silence.
+    notify(
+        source="procurement",
+        event="requisition_awaiting_approval",
+        category=NotificationCategory.APPROVAL,
+        title=f"{requisition.reference} needs approval",
+        body=f"{requisition.lines.count()} line(s) from "
+             f"{requisition.department.name if requisition.department_id else 'the store'}.",
+        link="/procurement",
+        recipients=holders_of(
+            "purchase.approve",
+            facility=requisition.facility,
+            exclude_user_id=getattr(actor, "uuid", None),
+        ),
+        subject_type="procurement.PurchaseRequisition",
+        subject_uuid=requisition.uuid,
+        facility=requisition.facility,
+        actor_name=getattr(actor, "full_name", "") or "",
+        dedupe_key=f"requisition_approval:{requisition.uuid}",
+    )
     return requisition
 
 
@@ -275,6 +303,11 @@ def decide_requisition(
         reason=notes,
         metadata={"estimated_value": str(requisition.estimated_value)},
     )
+    # The approval is no longer waiting on anybody. The copies stay
+    # readable, marked resolved -- who approved it and when is worth
+    # being able to look up.
+    resolve_by_key(f"requisition_approval:{requisition.uuid}", reason="Decided")
+
     return requisition
 
 

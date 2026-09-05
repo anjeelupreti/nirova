@@ -6585,3 +6585,33 @@ nurse out of every clinical list, silently.
 
 **Affects.** `apps/encounters/services.py`, `apps/emergency/services.py`,
 `apps/inpatient/services.py`, `apps/common/permissions.py`, `tests/`.
+
+---
+
+## 194 - The rest of the approval notifications
+2026-09-06 · Backend · feature
+
+Purchase requisitions and payroll runs now tell whoever can approve them, and
+resolve when the decision is made. Same shape as leave in log 166, which is the
+point: `holders_of` made each of these about ten lines, where before the
+notification centre existed each would have needed its own way of working out
+who to tell.
+
+The five producers now running:
+
+    requisition_awaiting_approval   -> purchase.approve at that facility
+    payroll_awaiting_approval       -> payroll.approve
+    leave_awaiting_approval         -> leave.approve at that facility
+    critical_value                  -> the clinician who ordered the test
+    credential_expiring             -> the holder, and whoever verifies
+
+Each excludes the person who raised the thing. Segregation of duties refuses
+them at the point of approval anyway; asking them to try is just rude.
+
+Payroll is the one worth singling out. It is the highest-value approval in the
+system -- whoever computed the numbers is not the person who authorises the
+money leaving -- and until now the second person had no way of knowing the first
+had finished. The control existed and the message did not, which is a control
+that depends on somebody remembering to walk down the corridor.
+
+**Affects.** `apps/procurement/services.py`, `apps/payroll/services.py`.
