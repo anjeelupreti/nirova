@@ -213,6 +213,11 @@ def arrive(
     # ACCESS_DESIGN.md decides clinical access from exactly this field, and
     # measuring it beforehand found emergency encounters attributed to nobody,
     # 31 of 31.
+    # See `default_department`: the field existed and nobody filled it.
+    from apps.encounters.services import default_department
+
+    department = department or default_department(facility, 'emergency')
+
     encounter = Encounter.objects.create(
         reference=f"ENC-{_next_reference()}",
         patient=patient,

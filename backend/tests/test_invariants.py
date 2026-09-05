@@ -1437,48 +1437,81 @@ def test_a_doctor_can_write_what_their_job_requires(tenant):
     )
 
 
-def test_department_scope_does_not_empty_clinical_lists(tenant):
-    """`Scope.DEPARTMENT` is bounded to the facility, not the department, and
-    that is deliberate until clinical records carry a department.
+def test_department_scope_narrows_to_the_department(tenant):
+    """`Scope.DEPARTMENT` narrows to the department, not the facility.
 
-    Narrowing properly was written and reverted: scheduling records a
-    department (100%), clinical records do not (Encounter 0 of 123, Admission
-    0 of 31, Arrival 0 of 33). A department-scoped doctor would have seen zero
-    encounters — worse than the looseness it fixes, and silent, because an
-    empty list looks like an empty list.
+    Written, reverted and restored on 6 September. The revert was right at the
+    time — clinical records carried no department at all (Encounter 0 of 123),
+    so narrowing would have shown a department-scoped doctor zero encounters:
+    worse than the looseness it fixes, and silent with it. The attribution came
+    first, this second, and that order is the whole lesson.
 
-    This test fails if somebody restores the narrowing before the attribution
-    exists, which is the order the two have to happen in.
+    A row whose department is null is *included* rather than hidden. An
+    encounter nobody attributed is not evidence that it belongs to somebody
+    else, and excluding it would quietly lose work.
     """
     import types
 
     from apps.common.permissions import apply_scope_filter
     from apps.encounters.models import Encounter
-    from apps.organization.models import Department
+    from apps.organization.models import Department, Facility
     from apps.rbac.permissions import Scope
     from apps.rbac.services import UserAuthorization, _merge
 
-    department = Department.objects.first()
-    if department is None or Encounter.objects.count() == 0:
-        pytest.skip("need a department and some encounters")
+    # A facility with more than one department in use, or the narrowing cannot
+    # be told apart from the facility bound.
+    target = None
+    for facility in Facility.objects.all():
+        used = [
+            department
+            for department in Department.objects.filter(facility=facility)
+            if Encounter.objects.filter(department=department).exists()
+        ]
+        if len(used) >= 2:
+            target = (facility, used)
+            break
+    if target is None:
+        pytest.skip("no facility has encounters in two departments")
+
+    facility, departments = target
 
     def visible(scope, department_ids):
         authorization = UserAuthorization(user_id="t", organization_id=tenant.id)
         _merge(authorization, "encounter.read", scope, "t",
-               facility_ids={department.facility_id},
-               department_ids=department_ids)
+               facility_ids={facility.id}, department_ids=department_ids)
         request = types.SimpleNamespace(_authorization=authorization, user=None)
         return apply_scope_filter(
             Encounter.objects.all(), request, "encounter.read",
         ).count()
 
-    at_facility = visible(Scope.FACILITY, None)
-    at_department = visible(Scope.DEPARTMENT, {department.id})
+    whole_facility = visible(Scope.FACILITY, None)
+    assert whole_facility > 0
 
-    assert at_facility > 0, "the facility bound itself is broken"
-    assert at_department == at_facility, (
-        f"department scope sees {at_department} encounters against "
-        f"{at_facility} at facility scope. If clinical records now carry a "
-        "department this is the right change — record the coverage and update "
-        "this test. If they do not, this locks every doctor out."
+    for department in departments:
+        narrowed = visible(Scope.DEPARTMENT, {department.id})
+        assert 0 < narrowed < whole_facility, (
+            f"{department.name}: {narrowed} of {whole_facility}. Zero means "
+            "the attribution has regressed and every clinician in that "
+            "department is locked out; equal means the narrowing is not "
+            "happening at all."
+        )
+
+
+def test_clinical_records_carry_a_department(tenant):
+    """The prerequisite the narrowing above stands on.
+
+    The field existed and every caller passed `None`, so 123 of 123 encounters
+    recorded no department. Asserted as a floor, because a regression here is
+    invisible until somebody's list is mysteriously empty.
+    """
+    from apps.encounters.models import Encounter
+
+    total = Encounter.objects.count()
+    if total == 0:
+        pytest.skip("no encounters")
+    attributed = Encounter.objects.filter(department__isnull=False).count()
+    coverage = attributed / total * 100
+    assert coverage >= 90, (
+        f"only {coverage:.1f}% of encounters record a department "
+        f"({attributed} of {total}); department scope depends on this"
     )

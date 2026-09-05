@@ -1,5 +1,6 @@
 """DRF permission classes backed by the tenant RBAC resolver."""
 
+from django.db.models import Q
 from rest_framework.permissions import BasePermission
 
 from apps.identity.models import Membership, MembershipStatus
@@ -180,31 +181,30 @@ def apply_scope_filter(
         facility_ids = authorization.accessible_facility_ids(permission_code)
         if not facility_ids:
             return queryset.none()
-        return queryset.filter(**{f"{facility_attr}_id__in": facility_ids})
+        queryset = queryset.filter(**{f"{facility_attr}_id__in": facility_ids})
 
-        # -- why department narrowing is NOT here ---------------------------
+        # Narrow to the department where the grant is that specific *and* the
+        # model records one.
         #
-        # `Scope.DEPARTMENT` and `Scope.UNIT` are bounded to the parent
-        # facility, which is looser than the scope ladder claims. Narrowing
-        # them properly was written, tested, and **reverted**, because
-        # measuring the column first showed it would empty every clinical list
-        # for exactly the roles that hold those scopes:
+        # This was written, reverted, and restored on the same day. The revert
+        # was right at the time: clinical records carried no department at all
+        # -- Encounter 0 of 123, Admission 0 of 31 -- so narrowing would have
+        # shown a department-scoped doctor zero encounters, which is worse than
+        # the looseness it fixes and silent with it. The attribution came
+        # first; this came second. That order is the whole lesson.
         #
-        #     Appointment       12 rows   100% have a department
-        #     QueueToken        13 rows   100%
-        #     Encounter        123 rows     0%
-        #     Admission         31 rows     0%
-        #     Arrival           33 rows     0%
-        #
-        # Scheduling records a department; clinical records do not. A
-        # department-scoped doctor would have seen zero encounters -- worse
-        # than the looseness it was meant to fix, and silent, because an empty
-        # list looks like an empty list.
-        #
-        # This is an attribution problem, not a filter problem. The filter is
-        # four lines and can be restored the day encounters carry a
-        # department. `accessible_department_ids` exists and is correct;
-        # nothing calls it yet, deliberately.
+        # A model with no department column keeps the facility bound, and a row
+        # whose department is null is *included* rather than hidden: an
+        # encounter nobody attributed is not evidence that it belongs to
+        # somebody else, and excluding it would quietly lose work.
+        department_ids = authorization.accessible_department_ids(permission_code)
+        if department_ids and any(
+            field.name == "department" for field in queryset.model._meta.get_fields()
+        ):
+            queryset = queryset.filter(
+                Q(department_id__in=department_ids) | Q(department_id__isnull=True)
+            )
+        return queryset
 
     return queryset.none()
 

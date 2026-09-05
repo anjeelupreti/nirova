@@ -6540,3 +6540,48 @@ prevented shipping something harmful: log 173 (provider ids naming nobody), log
 cheap and the failure it prevents is always silent.**
 
 **Affects.** `apps/rbac/services.py`, `apps/common/permissions.py`, `tests/`.
+
+---
+
+## 193 - The attribution, and then the narrowing
+2026-09-06 · Backend · feature
+
+Entry 192 reverted department narrowing because clinical records carried no
+department -- 123 of 123 encounters, 31 of 31 admissions, 33 of 33 arrivals.
+This is the missing half, and then the narrowing put back on top of it.
+
+**The field existed and every caller passed `None`.** Exactly the shape of log
+173's provider attribution, one column over: a declared field, threaded through
+three service signatures, and never once filled.
+
+`default_department(facility, encounter_type)` resolves it -- outpatient to
+OPD, inpatient to IPD, emergency to EMR -- matching on the department **code**
+first and the **kind** second, so a customer who renames "Outpatient
+Department" keeps working. Returning `None` stays a legitimate answer: a
+facility with no departments configured should record an encounter rather than
+refuse one.
+
+Backfilled 123 encounters, 31 admissions and 33 arrivals, since idempotent
+seeds do not rewrite what they already wrote. Coverage 0% to 100%.
+
+**Then the narrowing, and it is real:**
+
+    MKH-BKT, facility scope                61 encounters
+    DEPARTMENT scope: Inpatient            28
+    DEPARTMENT scope: Emergency            33
+
+One decision inside it worth stating. **A row whose department is null is
+included, not hidden.** An encounter nobody attributed is not evidence that it
+belongs to somebody else, and excluding it would quietly lose work -- the same
+reasoning as everywhere else in this project that a missing value is treated as
+absence of information rather than as a negative answer. Log 176 was the
+opposite mistake in the opposite direction, and both come from the same place:
+deciding what `NULL` means.
+
+Written, reverted and restored inside one day. The revert was right at the time
+and the restore is right now, and **the order is the entire lesson**: attribute
+first, narrow second. Reversing those two would have locked every doctor and
+nurse out of every clinical list, silently.
+
+**Affects.** `apps/encounters/services.py`, `apps/emergency/services.py`,
+`apps/inpatient/services.py`, `apps/common/permissions.py`, `tests/`.

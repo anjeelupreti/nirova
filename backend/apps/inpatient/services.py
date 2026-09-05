@@ -263,6 +263,11 @@ def admit(
             detail={"admission": open_stay.reference},
         )
 
+    # See `default_department`: the field existed and nobody filled it.
+    from apps.encounters.services import default_department
+
+    department = department or default_department(facility, 'inpatient')
+
     encounter = Encounter.objects.create(
         reference=f"ENC-{_next_reference()}",
         patient=patient,

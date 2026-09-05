@@ -92,6 +92,11 @@ def start_encounter(
         department = department or appointment.department
         chief_complaint = chief_complaint or appointment.reason
 
+    # An encounter happens somewhere. The field has always existed and every
+    # caller passed None, so no encounter in the system recorded a department
+    # -- which is what blocked narrowing `Scope.DEPARTMENT` to anything real.
+    department = department or default_department(facility, encounter_type)
+
     encounter = Encounter.objects.create(
         reference=generate_encounter_reference(),
         patient=patient,
@@ -506,3 +511,41 @@ def patient_clinical_summary(patient) -> dict:
             for encounter in recent
         ],
     }
+
+#: Which department an encounter belongs to when nobody says. Keyed by
+#: encounter type, matched against the department *code* first and the kind
+#: second, so a customer who renames "Outpatient Department" keeps working.
+_DEFAULT_DEPARTMENT_CODES = {
+    "outpatient": ("OPD",),
+    "inpatient": ("IPD", "OPD"),
+    "emergency": ("EMR", "OPD"),
+    "day_case": ("OPD",),
+    "teleconsultation": ("OPD",),
+}
+
+
+def default_department(facility, encounter_type):
+    """The department an encounter of this type happens in at this facility.
+
+    Every caller passed `None` and the field was declared, so **123 of 123
+    encounters carried no department at all** -- measured on 6 September while
+    trying to narrow `Scope.DEPARTMENT` to something real. The narrowing had
+    to be reverted because it would have shown a department-scoped doctor zero
+    encounters, and this is the missing half it was waiting on.
+
+    Falls back through code, then kind, then nothing. Returning `None` is a
+    legitimate answer: a facility with no departments configured should record
+    an encounter rather than refuse one, and an encounter with no department is
+    exactly what this has been producing anyway.
+    """
+    from apps.organization.models import Department, DepartmentKind
+
+    if facility is None:
+        return None
+    for code in _DEFAULT_DEPARTMENT_CODES.get(encounter_type, ("OPD",)):
+        found = Department.objects.filter(facility=facility, code=code).first()
+        if found is not None:
+            return found
+    return Department.objects.filter(
+        facility=facility, kind=DepartmentKind.CLINICAL,
+    ).first()
