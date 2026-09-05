@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1132** |
-| **Outstanding** | **100** | **625** |
+| **Done** | **32 of 132** | **1133** |
+| **Outstanding** | **100** | **626** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-625 understates the remaining work: in the later phases some lines group
+626 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -295,9 +295,17 @@ rather than redesigning around it.
       nothing — but the assignment should never have been storable.
       Queued rather than done because it would invalidate assignments
       that already exist
-- [ ] `Scope.UNIT` and `Scope.DEPARTMENT` narrow to the unit or
-      department rather than to the parent facility. Currently bounded to
-      the facility, which is looser than the ladder implies
+- [ ] `Scope.UNIT` and `Scope.DEPARTMENT` narrow to the unit or department
+      rather than the parent facility. **Blocked on attribution, not on the
+      filter.** Written and reverted 6 September: scheduling records a
+      department (100%), clinical records do not (Encounter 0 of 123,
+      Admission 0 of 31), so narrowing would have shown a department-scoped
+      doctor zero encounters. Record the department on clinical records
+      first; the filter is then four lines
+- [x] `accessible_department_ids` exists and is correct, called by nothing
+      until the attribution does
+- [ ] Clinical records carry the department they happened in — the
+      prerequisite above
 - [x] **Clinical reads no longer demand facility scope.** `doctor`, `nurse`
       and `lab_technician` all carry `max_scope = department`, so they could
       never satisfy the `Scope.FACILITY` default — a doctor was refused seven

@@ -6497,3 +6497,46 @@ general to the codebase.
 **Affects.** `apps/encounters/views.py`, `apps/prescriptions/views.py`,
 `apps/patients/views.py`, `apps/diagnostics/views.py`,
 `apps/scheduling/views.py`, `apps/inpatient/api.py`, `apps/theatre/api.py`.
+
+---
+
+## 192 - Department narrowing, written and reverted
+2026-09-06 · Backend · finding
+
+`Scope.DEPARTMENT` and `Scope.UNIT` have always been bounded to the parent
+facility rather than the department, which is looser than the scope ladder
+claims and has been on the checklist as outstanding since 4 September.
+
+Fixing it is four lines: `department_ids` is already tracked on every grant, so
+the filter only had to read it. Written, tested, and **reverted** -- because
+measuring the column first showed what it would do.
+
+    Appointment       12 rows   100% carry a department
+    QueueToken        13 rows   100%
+    ProviderSchedule  18 rows   100%
+    Encounter        123 rows     0%
+    Admission         31 rows     0%
+    Arrival           33 rows     0%
+
+**Scheduling records a department. Clinical records do not.** So a
+department-scoped grant -- which is what `doctor`, `nurse` and `lab_technician`
+all are, by `max_scope` -- would have narrowed every clinical list to zero.
+Worse than the looseness it was meant to fix, and silent with it: an empty list
+looks like an empty list, and the people affected would have been every
+clinician in the system.
+
+This is an **attribution problem, not a filter problem**, and the order matters:
+record the department on clinical records first, then narrow. The filter can be
+restored in four lines the day that is true. `accessible_department_ids` is
+implemented and correct and nothing calls it, deliberately.
+
+The measurement is left as a comment where the next person will look -- in the
+branch they would edit -- rather than only in this log, and a test fails if the
+narrowing is restored while the attribution is still missing.
+
+Third time this session that measuring a column before enforcing on it
+prevented shipping something harmful: log 173 (provider ids naming nobody), log
+181 (a doctor refused seven of nine endpoints), and this. **The measurement is
+cheap and the failure it prevents is always silent.**
+
+**Affects.** `apps/rbac/services.py`, `apps/common/permissions.py`, `tests/`.

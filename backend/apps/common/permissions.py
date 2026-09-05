@@ -182,6 +182,30 @@ def apply_scope_filter(
             return queryset.none()
         return queryset.filter(**{f"{facility_attr}_id__in": facility_ids})
 
+        # -- why department narrowing is NOT here ---------------------------
+        #
+        # `Scope.DEPARTMENT` and `Scope.UNIT` are bounded to the parent
+        # facility, which is looser than the scope ladder claims. Narrowing
+        # them properly was written, tested, and **reverted**, because
+        # measuring the column first showed it would empty every clinical list
+        # for exactly the roles that hold those scopes:
+        #
+        #     Appointment       12 rows   100% have a department
+        #     QueueToken        13 rows   100%
+        #     Encounter        123 rows     0%
+        #     Admission         31 rows     0%
+        #     Arrival           33 rows     0%
+        #
+        # Scheduling records a department; clinical records do not. A
+        # department-scoped doctor would have seen zero encounters -- worse
+        # than the looseness it was meant to fix, and silent, because an empty
+        # list looks like an empty list.
+        #
+        # This is an attribution problem, not a filter problem. The filter is
+        # four lines and can be restored the day encounters carry a
+        # department. `accessible_department_ids` exists and is correct;
+        # nothing calls it yet, deliberately.
+
     return queryset.none()
 
 #: The namespace and key of the switch that turns clinical access control on.

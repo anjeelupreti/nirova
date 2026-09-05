@@ -1435,3 +1435,50 @@ def test_a_doctor_can_write_what_their_job_requires(tenant):
     assert not refused, (
         f"a doctor cannot write what their job requires: {refused}"
     )
+
+
+def test_department_scope_does_not_empty_clinical_lists(tenant):
+    """`Scope.DEPARTMENT` is bounded to the facility, not the department, and
+    that is deliberate until clinical records carry a department.
+
+    Narrowing properly was written and reverted: scheduling records a
+    department (100%), clinical records do not (Encounter 0 of 123, Admission
+    0 of 31, Arrival 0 of 33). A department-scoped doctor would have seen zero
+    encounters — worse than the looseness it fixes, and silent, because an
+    empty list looks like an empty list.
+
+    This test fails if somebody restores the narrowing before the attribution
+    exists, which is the order the two have to happen in.
+    """
+    import types
+
+    from apps.common.permissions import apply_scope_filter
+    from apps.encounters.models import Encounter
+    from apps.organization.models import Department
+    from apps.rbac.permissions import Scope
+    from apps.rbac.services import UserAuthorization, _merge
+
+    department = Department.objects.first()
+    if department is None or Encounter.objects.count() == 0:
+        pytest.skip("need a department and some encounters")
+
+    def visible(scope, department_ids):
+        authorization = UserAuthorization(user_id="t", organization_id=tenant.id)
+        _merge(authorization, "encounter.read", scope, "t",
+               facility_ids={department.facility_id},
+               department_ids=department_ids)
+        request = types.SimpleNamespace(_authorization=authorization, user=None)
+        return apply_scope_filter(
+            Encounter.objects.all(), request, "encounter.read",
+        ).count()
+
+    at_facility = visible(Scope.FACILITY, None)
+    at_department = visible(Scope.DEPARTMENT, {department.id})
+
+    assert at_facility > 0, "the facility bound itself is broken"
+    assert at_department == at_facility, (
+        f"department scope sees {at_department} encounters against "
+        f"{at_facility} at facility scope. If clinical records now carry a "
+        "department this is the right change — record the coverage and update "
+        "this test. If they do not, this locks every doctor out."
+    )

@@ -111,6 +111,25 @@ class UserAuthorization:
             return None
         return granted.facility_ids
 
+    def accessible_department_ids(self, code: str) -> set | None:
+        """Departments a permission reaches. `None` means "not narrowed here".
+
+        Mirrors `accessible_facility_ids`, and the `None` means something
+        subtly different on purpose: there, `None` is "every facility". Here it
+        is "this grant is not department-scoped, so do not narrow by
+        department" -- a facility-scoped grant reaches every department in its
+        facilities, and answering "all departments" would be true but useless
+        to a caller trying to decide whether to add a filter.
+        """
+        if self.is_organization_owner:
+            return None
+        granted = self.permissions.get(code)
+        if granted is None:
+            return set()
+        if granted.scope not in (Scope.DEPARTMENT, Scope.UNIT):
+            return None
+        return granted.department_ids
+
     def is_own_scope(self, code: str) -> bool:
         """True if the permission is held strictly at Scope.OWN (not broader)."""
         if self.is_organization_owner:
