@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import HasClinicalAccess, HasPermission, get_authorization
 from apps.diagnostics.models import (
     AlertStatus,
     CriticalValueAlert,
@@ -82,7 +82,12 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
     second pair of eyes. Neither is safe as a PATCH.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("encounter.read",
+        scope=Scope.OWN),
+        HasClinicalAccess,
+    ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         DiagnosticOrder, relations=['facility'], fields=['status', 'modality', 'priority']
@@ -304,10 +309,20 @@ class CriticalAlertViewSet(viewsets.ReadOnlyModelViewSet):
 class PatientResultsView(APIView):
     """A patient's released results, newest first."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.read", scope=Scope.OWN),
+        HasClinicalAccess,
+    ]
 
     def get(self, request, uuid):
         patient = get_object_or_404(Patient, uuid=uuid)
+        # Called explicitly. DRF runs object-level permissions from
+        # `get_object()`, which a plain `APIView` never calls -- so attaching
+        # `HasClinicalAccess` here without this line would leave the class
+        # listed, looking enforced, and doing nothing. The most dangerous kind
+        # of control is one that appears in the code and not in the request.
+        self.check_object_permissions(request, patient)
         record_patient_access(patient, reason="Diagnostic results")
         return Response(
             {

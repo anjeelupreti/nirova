@@ -33,7 +33,7 @@ from rest_framework.views import APIView
 # customer's database.
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import HasClinicalAccess, HasPermission, get_authorization
 from apps.icu.models import (
     FASTHUG_ITEMS,
     Alert,
@@ -518,7 +518,11 @@ class IcuStayViewSet(viewsets.ReadOnlyModelViewSet):
     `discharge`, both of which do far more than write a row.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("encounter.read"),
+        HasClinicalAccess,
+    ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         IcuStay, relations=["facility", "ward", "patient"],

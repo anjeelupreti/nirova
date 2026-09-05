@@ -1053,3 +1053,54 @@ def test_browsing_narrows_but_a_reference_still_opens(tenant):
         )
     finally:
         _privacy_switch(None)
+
+
+def test_patient_results_actually_runs_its_object_check(tenant):
+    """A permission class listed but never invoked is the worst kind.
+
+    `PatientResultsView` is a plain `APIView`, and DRF runs object-level
+    permissions only from `get_object()` -- which such a view never calls. So
+    `HasClinicalAccess` sat in `permission_classes`, looked enforced, and did
+    nothing until `check_object_permissions` was called explicitly. It appears
+    in the code and not in the request, which is precisely the kind of control
+    that is never noticed until it is needed.
+    """
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import Membership, User
+    from apps.patients.models import Patient
+    from apps.rbac.models import BreakGlassGrant
+    from apps.rbac.relationships import related_patient_ids
+    from apps.rbac.services import resolve_authorization
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("demo users missing")
+
+    authorization = resolve_authorization(
+        doctor, Membership.objects.get(user=doctor, organization=tenant),
+    )
+    mine = related_patient_ids(doctor.uuid, authorization) or set()
+    stranger = (
+        Patient.objects.exclude(pk__in=mine).exclude(status="merged").first()
+    )
+    if stranger is None:
+        pytest.skip("this doctor is treating everybody")
+
+    BreakGlassGrant.all_objects.filter(user_id=doctor.uuid).delete()
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    path = f"/api/diagnostics/patients/{stranger.uuid}/results/"
+
+    _privacy_switch(None)
+    try:
+        assert client.get(path).status_code == 200
+        _privacy_switch(True)
+        assert client.get(path).status_code == 403, (
+            "the object-level check on a plain APIView did not run"
+        )
+    finally:
+        _privacy_switch(None)

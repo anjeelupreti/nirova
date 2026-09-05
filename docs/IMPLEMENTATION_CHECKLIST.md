@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1119** |
+| **Done** | **32 of 132** | **1121** |
 | **Outstanding** | **100** | **629** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
@@ -2205,7 +2205,14 @@ September; findings measured, not assumed.*
 - [x] `privacy.review` queue, screen at `/privacy`, `CRITICAL` notification on
       every override, and no bulk sign-off anywhere
 - [x] Switchable per organization through the configuration hierarchy
-- [ ] Enforcement extended to results, ICU and the inpatient record
+- [x] Enforcement extended to diagnostic orders, patient results, ICU stays
+      and admissions
+- [x] `PatientResultsView` calls `check_object_permissions` explicitly — a
+      plain `APIView` never calls `get_object()`, so the class was listed and
+      never ran
+- [ ] The check on admissions cannot refuse anybody: for inpatients, facility
+      scope *is* the relationship. Harmless and honest to leave, and it starts
+      mattering the day `_admission` narrows to a ward or a team
 - [x] Lists narrow to the relationship; **lookup by reference stays open** to
       the dispensing role — the patient handing over the reference is the care
       relationship and is the consent. Measured: a counter assistant

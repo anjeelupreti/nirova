@@ -2,7 +2,7 @@
 
 **Status:** all six steps done. Enforcement is live on encounters and
 prescriptions behind `privacy.require_care_relationship`, **off by default**.
-Extending it to results, ICU and the inpatient record remains.
+Extended to diagnostic orders, patient results, ICU stays and admissions.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the

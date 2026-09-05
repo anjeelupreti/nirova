@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import HasClinicalAccess, HasPermission, get_authorization
 from apps.inpatient.models import (
     Admission,
     Bed,
@@ -394,7 +394,12 @@ class BedViewSet(viewsets.ModelViewSet):
 
 
 class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("encounter.read",
+        scope=Scope.OWN),
+        HasClinicalAccess,
+    ]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Admission, relations=["facility", "patient", "department"],

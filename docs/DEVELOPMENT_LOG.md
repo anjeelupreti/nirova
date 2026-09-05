@@ -6101,3 +6101,42 @@ rather than bodged.
 
 **Affects.** `apps/common/permissions.py`, `apps/rbac/relationships.py`,
 `apps/prescriptions/views.py`, `apps/encounters/views.py`.
+
+---
+
+## 183 - A permission class that was listed and never ran
+2026-09-06 · Backend · bug
+
+Extending the relationship check to results, ICU and the inpatient record --
+the last of Phase 2. Adding `HasClinicalAccess` to four more viewsets took a
+minute; verifying it took the rest, and was worth it.
+
+**`PatientResultsView` is a plain `APIView`.** DRF runs object-level
+permissions from `get_object()`, which such a view never calls. So the class
+sat in `permission_classes`, read exactly like enforcement, and did nothing.
+The probe showed 200 with the switch on and 200 with it off, which is the
+signature: **a control that appears in the code and not in the request.**
+
+Fixed by calling `self.check_object_permissions(request, patient)` explicitly,
+and tested -- because the failure mode here is not an exception, it is silence.
+
+    switch OFF   order 200   results 200
+    switch ON    order 403   results 403   "You are not currently treating Sita Tamang..."
+    switch OFF   order 200
+
+**And a second observation, which is a design finding rather than a bug.** The
+check on `AdmissionViewSet` cannot refuse anybody. `_admission` grants a
+relationship for any live admission the caller's facility scope reaches, and
+the queryset shows only those -- so every admission somebody can see is one
+they have a relationship with. Measured: five live admissions, two within the
+doctor's scope, **zero without a relationship.**
+
+For inpatients, **facility scope is the relationship**, and it should be: a
+live inpatient is cared for by whoever is on that site, including the on-call
+doctor who has just been bleeped and has written nothing. The check is
+harmless and honest to leave in place -- it will start mattering the day
+`_admission` narrows to a ward or a team -- but it is not doing work today, and
+recording that is better than counting it as coverage.
+
+**Affects.** `apps/diagnostics/views.py`, `apps/icu/api.py`,
+`apps/inpatient/api.py`.
