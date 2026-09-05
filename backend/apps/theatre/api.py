@@ -430,7 +430,7 @@ class SurgicalCaseViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="schedule")
     def schedule(self, request, reference=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
         serializer = ScheduleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data

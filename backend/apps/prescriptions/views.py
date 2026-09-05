@@ -154,7 +154,7 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("prescription.create", Scope.FACILITY)
+        authorization.require("prescription.create", Scope.OWN)
 
         serializer = PrescriptionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -192,7 +192,7 @@ class PrescriptionViewSet(viewsets.ModelViewSet):
     def revise(self, request, uuid=None):
         """Supersede this prescription with a corrected version."""
         authorization = get_authorization(request)
-        authorization.require("prescription.create", Scope.FACILITY)
+        authorization.require("prescription.create", Scope.OWN)
 
         serializer = PrescriptionReviseSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

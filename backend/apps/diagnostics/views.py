@@ -138,7 +138,7 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = PlaceOrderSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

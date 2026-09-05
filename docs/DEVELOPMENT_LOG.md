@@ -6452,3 +6452,48 @@ is the thing that tells you whether an outlier is really an outlier.
 
 **Affects.** `patient/src/App.tsx`, `frontend/src/pages/Privacy.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 191 - A doctor could read but not write
+2026-09-06 · Backend · bug
+
+Entry 181 fixed the reads and recorded the write endpoints as unswept. Sweeping
+them found the other half of the same fault, and it is worse than the reads
+were.
+
+POSTing an empty body to each endpoint a role owns -- a 400 means the permission
+passed and validation refused, which is the answer; a 403 means the role cannot
+reach it at all:
+
+    doctor    403  /api/clinical/encounters/
+              403  /api/clinical/prescriptions/
+              403  /api/diagnostics/orders/
+              403  /api/clinical/appointments/
+
+**A doctor could not record a consultation, prescribe, order a test, or book an
+appointment.** After yesterday they could read everything their job needs and
+write none of it, which is arguably a stranger state than being locked out
+entirely.
+
+Same root cause: `authorization.require(code, Scope.FACILITY)` in the create
+paths, and `doctor` holds at department scope, which is a ceiling.
+
+Thirty call sites lowered, across clinical writes only -- `encounter.create`,
+`prescription.create`, `patient.create`, `patient.update`, `patient.merge`. The
+reasoning is the same as for reads but worth stating separately, because writes
+feel like they should be stricter: **a doctor writes a consultation for the
+patient in front of them, and the facility is on the record being created. It
+is not a floor the writer has to clear.**
+
+Left alone deliberately: `stock.adjust`, `purchase.approve`, `till.reconcile`,
+`theatre.override` and the rest. Those genuinely are facility-wide acts, and a
+department-scoped holder clearing a till would be the wrong outcome.
+
+Pharmacy and HR roles were already fine, which is the useful negative result --
+the fault is specific to the roles whose `max_scope` sits below facility, not
+general to the codebase.
+
+**Affects.** `apps/encounters/views.py`, `apps/prescriptions/views.py`,
+`apps/patients/views.py`, `apps/diagnostics/views.py`,
+`apps/scheduling/views.py`, `apps/inpatient/api.py`, `apps/theatre/api.py`.

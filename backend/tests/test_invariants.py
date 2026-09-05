@@ -1388,3 +1388,50 @@ def test_access_patterns_need_privacy_review(tenant):
 
     assert get(doctor) == 403
     assert get(owner) == 200
+
+
+def test_a_doctor_can_write_what_their_job_requires(tenant):
+    """Reading was fixed on 6 September; writing was still refused.
+
+    A doctor could not record a consultation, prescribe, order a test or book
+    an appointment — all four returned 403, because the create paths called
+    `require(code, Scope.FACILITY)` and a doctor holds at department scope.
+
+    A doctor writes a consultation for the patient in front of them. The
+    facility is on the record being created; it is not a floor the writer has
+    to clear. Stock adjustments and till reconciliation keep their facility
+    floor, because those genuinely are facility-wide acts.
+
+    Asserted as "not 403": an empty body should fail validation, and a 400 is
+    the proof that the permission check passed.
+    """
+    import json
+
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("no demo doctor")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    refused = [
+        path
+        for path in (
+            "/api/clinical/encounters/",
+            "/api/clinical/prescriptions/",
+            "/api/diagnostics/orders/",
+            "/api/clinical/appointments/",
+        )
+        if client.post(
+            path, data=json.dumps({}), content_type="application/json",
+        ).status_code == 403
+    ]
+    assert not refused, (
+        f"a doctor cannot write what their job requires: {refused}"
+    )

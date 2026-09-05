@@ -573,7 +573,7 @@ class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
         data = serializer.validated_data
 
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
         if data.get("override_reason", "").strip():
             # Forcing past a blocked discharge is its own authority, so that
             # it can be given to few people and audited on all of them.

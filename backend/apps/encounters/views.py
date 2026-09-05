@@ -133,7 +133,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = StartEncounterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -175,7 +175,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="vitals")
     def add_vitals(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = VitalSignsInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -190,7 +190,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="notes")
     def add_note(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = ClinicalNoteInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -205,7 +205,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="diagnoses")
     def add_diagnosis_action(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = DiagnosisInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -220,7 +220,7 @@ class EncounterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="close")
     def close(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = CloseEncounterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

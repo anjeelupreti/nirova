@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **32 of 132** | **1131** |
-| **Outstanding** | **100** | **626** |
+| **Done** | **32 of 132** | **1132** |
+| **Outstanding** | **100** | **625** |
 
 *Recounted from the file on 5 September 2026, after the notification centre
 (§101) and its first producers landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-626 understates the remaining work: in the later phases some lines group
+625 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -310,9 +310,10 @@ rather than redesigning around it.
 - [x] A test fails on any 5xx from any endpoint for any role. A 403 is an
       answer; a 500 is a bug, and an endpoint only the right role can reach is
       an endpoint only the right role can crash
-- [ ] The remaining `HasPermission.of` call sites on write and administrative
-      endpoints, where a facility floor is often right. Reads are now swept;
-      writes are not
+- [x] **Writes swept too.** A doctor could read everything their job needs and
+      write none of it — no consultation, prescription, order or appointment.
+      Thirty clinical write sites lowered; stock, purchase, till and theatre
+      overrides keep their facility floor, being genuinely facility-wide acts
 - [x] Per-user permission grants
 - [x] Per-user denials that beat role grants
 - [x] Time-bounded role assignments

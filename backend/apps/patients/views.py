@@ -136,7 +136,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("patient.create", Scope.FACILITY)
+        authorization.require("patient.create", Scope.OWN)
 
         serializer = PatientRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -169,7 +169,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("patient.update", Scope.FACILITY)
+        authorization.require("patient.update", Scope.OWN)
         return super().partial_update(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"], url_path="merge")

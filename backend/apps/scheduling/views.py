@@ -154,7 +154,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = AppointmentBookingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -190,7 +190,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="cancel")
     def cancel(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = AppointmentCancelSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -202,7 +202,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="no-show")
     def no_show(self, request, uuid=None):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
         appointment = mark_no_show(self.get_object(), request.user)
         return Response(AppointmentSerializer(appointment).data)
 
@@ -243,7 +243,7 @@ class QueueViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["post"], url_path="issue")
     def issue(self, request):
         authorization = get_authorization(request)
-        authorization.require("encounter.create", Scope.FACILITY)
+        authorization.require("encounter.create", Scope.OWN)
 
         serializer = IssueTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
