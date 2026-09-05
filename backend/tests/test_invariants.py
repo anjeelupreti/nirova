@@ -639,3 +639,72 @@ def test_break_glass_raises_a_critical_notification(tenant):
     ).first()
     assert raised is not None, "nobody was told about an emergency override"
     assert raised.category == NotificationCategory.CRITICAL
+
+
+def test_break_glass_is_reachable_by_the_narrowest_clinician(tenant):
+    """A department-scoped doctor must be able to take emergency access.
+
+    The endpoint first required `patient.clinical.read` at the default
+    `Scope.FACILITY`, which refused the demo's own doctor -- their role is
+    granted at department scope, which is *narrower*. Breaking glass is not a
+    privilege that scales with seniority; it is what somebody does at three in
+    the morning when the model does not fit, and the narrowest clinician has to
+    be able to reach it.
+    """
+    import json
+
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+    from apps.inpatient.models import Admission
+    from apps.patients.models import Patient
+    from apps.rbac.models import BreakGlassGrant
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    patient = (
+        Patient.objects.exclude(pk__in=Admission.objects.values("patient_id"))
+        .exclude(status="merged")
+        .first()
+    )
+    if doctor is None or patient is None:
+        pytest.skip("demo data missing; run seed_demo")
+
+    BreakGlassGrant.all_objects.filter(
+        user_id=doctor.uuid, patient_uuid=patient.uuid,
+    ).delete()
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    response = client.post(
+        "/api/privacy/break-glass/",
+        data=json.dumps({
+            "patient": str(patient.uuid),
+            "reason": "Brought in unconscious with no identification on them.",
+        }),
+        content_type="application/json",
+    )
+    assert response.status_code == 201, (
+        "a department-scoped doctor was refused emergency access: "
+        f"{response.status_code} {response.content.decode()[:200]}"
+    )
+
+
+def test_the_queue_needs_privacy_review(tenant):
+    """Who opened whose record, and why, is itself sensitive."""
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    doctor = User.objects.filter(email="doctor@manakamana.test").first()
+    if doctor is None:
+        pytest.skip("demo data missing")
+
+    client = Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(doctor).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+    assert client.get("/api/privacy/grants/").status_code == 403

@@ -1,7 +1,7 @@
 # Access control, Phase 2 — development plan
 
-**Status:** steps 0, 1 and 3 done. Nothing is enforced yet — step 2 is
-what turns it on.
+**Status:** steps 0, 1, 3 and 5 done. Nothing is enforced yet — steps 2
+and 4 are what turn it on.
 **Depends on:** [PHASE1.md](PHASE1.md) · **Design:** [ACCESS_DESIGN.md](ACCESS_DESIGN.md)
 
 Phase 1 laid the vocabulary and closed a clinical safety gap. Phase 2 is the
@@ -180,7 +180,7 @@ The prescription row is the whole point, and the reason Phase 1 deliberately
 left that list unfiltered with a test saying so. A pharmacy cannot enumerate
 every prescription in the group; when a patient presents one, it opens.
 
-### Step 5 — the review surface
+### Step 5 — the review surface *(done, 6 September 2026)*
 
 - A queue on the staff console for `privacy.review`: who broke glass, for whom,
   why, whether it has been signed off.

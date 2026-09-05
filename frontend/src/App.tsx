@@ -45,6 +45,7 @@ import FacilitiesPage from "@/pages/Facilities";
 import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
 import NotificationsPage from "@/pages/Notifications";
+import PrivacyPage from "@/pages/Privacy";
 import NurseWorkspacePage from "@/pages/NurseWorkspace";
 import SelfServicePage from "@/pages/SelfService";
 import BillingPage from "@/pages/Billing";
@@ -360,6 +361,7 @@ export default function App() {
           <Route path="/procurement" element={<ProcurementPage />} />
           <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />

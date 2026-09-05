@@ -4670,3 +4670,50 @@ export interface NotificationPreference {
   /** False for critical, which no stored value may switch off. */
   can_change: boolean;
 }
+
+/* -------------------------------------------------------------------------
+ * Emergency access (ACCESS_DESIGN.md Phase 2, step 3)
+ *
+ * A grant is one person, one patient, four hours. The review is the control;
+ * the grant is only the mechanism, which is why `outcome` and `use_count`
+ * matter as much as the reason.
+ * ---------------------------------------------------------------------- */
+
+export type BreakGlassOutcome =
+  | "pending"
+  | "appropriate"
+  | "queried"
+  | "escalated";
+
+export interface BreakGlassGrant {
+  uuid: string;
+  patient_uuid: string;
+  /** Name and MRN as they stood when the record was opened. */
+  patient_label: string;
+  user_id: string;
+  user_label: string;
+  reason: string;
+  granted_at: string;
+  expires_at: string;
+  /** Reads made under this grant. Zero usually means a warning clicked through. */
+  use_count: number;
+  last_used_at: string | null;
+  outcome: BreakGlassOutcome;
+  reviewed_by_name: string;
+  reviewed_at: string | null;
+  review_notes: string;
+  /** Still inside its window — the only rows anybody can still act on. */
+  is_live: boolean;
+  is_reviewed: boolean;
+}
+
+export interface BreakGlassQueue {
+  window_days: number;
+  total: number;
+  /** The headline. Read against `total`, never on its own. */
+  pending: number;
+  live: number;
+  never_used: number;
+  by_outcome: Record<string, number>;
+  grants: Array<Record<string, unknown>>;
+}

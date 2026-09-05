@@ -5847,3 +5847,44 @@ it, because now is always after then.
 
 **Affects.** `apps/rbac/models.py`, `apps/rbac/break_glass.py`,
 `apps/rbac/relationships.py`, `apps/rbac/migrations/0002_break_glass_grant.py`.
+
+---
+
+## 178 - The review surface
+2026-09-06 · Backend, Frontend · feature
+
+Step 5 of `PHASE2_PLAN.md`. `/api/privacy/` and a screen at `/privacy`.
+
+Two audiences on one prefix, deliberately not the same people. A **clinician**
+posts to `break-glass/` when they need a record they have no relationship with.
+A **reviewer** holds `privacy.review` and reads the queue -- including the list
+itself, because "who opened whose record and why" is sensitive in its own right.
+
+**There is no endpoint that hides a grant.** No delete, no dismiss, no bulk
+sign-off, and the screen says so out loud: *a queue that can be emptied in one
+click is not a control.* The natural way to clear a backlog must not be the
+wrong way.
+
+The screen puts the unreviewed count first and the total underneath it, because
+the ratio is the thing to read -- "eleven waiting" means one thing against
+twelve and another against four hundred. Live overrides are red and at the top,
+since they are the only rows anybody can still act on; everything else is
+history. Grants nobody read are called out rather than hidden, because a grant
+taken and never used usually says something about the warning rather than about
+the person.
+
+**A refusal found while probing, and it was the right kind to find.** The take
+endpoint gated on `patient.clinical.read` at the default `Scope.FACILITY`, and
+refused the demo's own doctor -- whose role is granted at *department* scope,
+which is narrower. So the one route out of a refusal was itself refused, for
+exactly the clinician most likely to need it.
+
+Lowered to `Scope.OWN`. **Breaking glass is not a privilege that scales with
+seniority.** It is what somebody does at three in the morning when the model
+does not fit, and if the narrowest clinician cannot reach it then the control
+above it is not a control, it is a wall. A pharmacy counter assistant is still
+refused, because they hold no clinical permission at any scope at all -- which
+is the distinction that matters and the one the default was obscuring.
+
+**Affects.** `apps/rbac/privacy_api.py`, `apps/rbac/urls.py`, `config/urls.py`,
+`frontend/src/pages/Privacy.tsx`, `frontend/src/types/index.ts`.
