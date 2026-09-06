@@ -2488,3 +2488,139 @@ def test_every_console_route_has_a_way_to_reach_it():
     # always 404s, which teaches people to distrust the menu.
     dangling = sorted(linked - routes)
     assert not dangling, "navigation points at unrouted paths: " + ", ".join(dangling)
+
+
+# ---------------------------------------------------------------------------
+# Log 204 - the reminder engine, and the sweep that reaches nobody
+# ---------------------------------------------------------------------------
+
+
+def test_a_reminder_that_reaches_nobody_is_counted_not_shrugged_at(tenant):
+    """The rule this module exists around.
+
+    `notify` correctly treats "no recipients" as a real answer rather than an
+    error. But a *sweep* that finds forty expiring batches, tells nobody, and
+    reports success is the most dangerous kind of quiet: it looks exactly like
+    a system that is watching. So `undeliverable` is counted separately, and it
+    is a number somebody is meant to act on by fixing a role assignment.
+    """
+    from dataclasses import replace
+
+    from apps.notifications import reminders
+
+    original = reminders._REMINDERS["batch_expiring"]
+    assert original.subjects().exists(), "no batches to remind about"
+
+    # A permission nobody holds. Everything else about the sweep is unchanged,
+    # so the only difference is that there is no one to tell.
+    orphaned = replace(original, permission="nobody.holds.this")
+    report = reminders.run(orphaned)
+
+    assert report["considered"] > 0, "the sweep found nothing to consider"
+    assert report["undeliverable"] == report["considered"], (
+        "batches were considered and not reported as undeliverable"
+    )
+    assert report["raised"] == 0
+
+    # And the honest version reaches somebody, so the test above is measuring
+    # the permission and not a broken sweep.
+    healthy = reminders.run(original)
+    assert healthy["undeliverable"] == 0
+    assert healthy["considered"] > 0
+
+
+def test_a_reminder_resolves_when_its_cause_goes_away(tenant):
+    """Not when somebody swipes it off a screen.
+
+    A reminder that outlives its cause is how people learn to ignore
+    reminders. Quarantine a batch and its reminder should close itself; put it
+    back and it should return.
+    """
+    from apps.notifications import reminders
+    from apps.notifications.models import Notification
+    from apps.pharmacy.models import Batch
+
+    reminder = reminders._REMINDERS["batch_expiring"]
+    reminders.run(reminder)
+
+    def still_open():
+        return Notification.objects.filter(
+            source="reminders", event="batch_expiring",
+            resolved_at__isnull=True,
+        ).count()
+
+    before = still_open()
+    assert before > 0, "nothing was raised, so nothing can be resolved"
+
+    batch = Batch.objects.filter(
+        status="active", expires_on__isnull=False,
+    ).first()
+    was = batch.status
+    batch.status = "quarantined"
+    batch.save(update_fields=["status"])
+    try:
+        report = reminders.run(reminder)
+        assert report["resolved"] == 1, report
+        assert still_open() == before - 1
+    finally:
+        batch.status = was
+        batch.save(update_fields=["status"])
+        again = reminders.run(reminder)
+    # Raised afresh rather than un-resolved: a notification is a statement
+    # about a moment, and reopening one would rewrite history.
+    assert again["raised"] == 1
+    assert still_open() == before
+
+
+def test_running_a_reminder_twice_does_not_raise_it_twice(tenant):
+    """The dedupe key carries the subject and the band.
+
+    An hourly cron must produce one notification per expiring thing per band,
+    not twenty-four. This is the whole reason `dedupe_key` exists, and it is
+    cheap to assert and expensive to discover broken.
+    """
+    from apps.notifications import reminders
+
+    reminder = reminders._REMINDERS["blood_expiring"]
+    first = reminders.run(reminder)
+    second = reminders.run(reminder)
+
+    assert first["considered"] > 0, "no blood units near expiry to test with"
+    assert second["raised"] == 0, second
+    assert second["standing"] == second["considered"]
+
+
+def test_every_reminder_considers_rows_or_says_why_not(tenant):
+    """A reminder that silently considers zero rows looks like good news.
+
+    It is usually a filter that matches nothing -- which is exactly what
+    happened: `preauth_expiring` filtered on `status="approved"` while every
+    pre-authorisation in the tenant is `partially_approved`, a state that is
+    still a live promise with an expiry date on it.
+
+    Two reminders legitimately consider nothing here, and both are recorded
+    with the reason rather than left to look like passing tests:
+    `EmploymentContract.ends_on` and `Invoice.due_date` are declared on the
+    models and **never written by any code**, so no contract can end and no
+    invoice can fall due. Those are gaps in billing and HR, on the checklist.
+    """
+    from apps.notifications import reminders
+
+    known_empty = {
+        # `ends_on` is null on every contract; nothing sets it.
+        "contract_ending",
+        # `due_date` is null on every invoice; nothing sets it, so an invoice
+        # can never be overdue and credit terms are unenforceable.
+        "invoice_overdue",
+    }
+
+    silent = []
+    for reminder in reminders.all_reminders():
+        report = reminders.run(reminder)
+        if report["considered"] == 0 and reminder.code not in known_empty:
+            silent.append(reminder.code)
+
+    assert not silent, (
+        "these reminders considered no rows at all, which is usually a filter "
+        "that matches nothing rather than good news: " + ", ".join(silent)
+    )

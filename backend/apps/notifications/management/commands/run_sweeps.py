@@ -9,6 +9,7 @@ produce one notification per situation rather than one per run.
 
 from django.core.management.base import BaseCommand
 
+from apps.notifications.reminders import run_all
 from apps.notifications.sweeps import sweep_expiring_credentials
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -45,3 +46,31 @@ class Command(BaseCommand):
                 f"already standing {report['standing']}, "
                 f"resolved {report['resolved']}"
             )
+
+            with tenant_context(context_for_organization(organization)):
+                reminders = run_all()
+            for entry in reminders["reminders"]:
+                self.stdout.write(
+                    f"  {organization.slug:20s} {entry['reminder']:22s} "
+                    f"considered {entry['considered']:4d}, "
+                    f"raised {entry['raised']:3d}, "
+                    f"standing {entry['standing']:3d}, "
+                    f"resolved {entry['resolved']:3d}"
+                    + (f"  UNDELIVERABLE {entry['undeliverable']}"
+                       if entry["undeliverable"] else "")
+                )
+            # Said last and said loudly. A reminder running against forty
+            # expiring batches and reaching nobody is a role assignment
+            # somebody has to fix, and it looks exactly like success unless
+            # this line exists.
+            if reminders["undeliverable"]:
+                self.stderr.write(
+                    f"  {organization.slug:20s} "
+                    f"{reminders['undeliverable']} reminder(s) had nobody to "
+                    f"tell -- check who holds the permissions involved."
+                )
+            if reminders["broken"]:
+                self.stderr.write(
+                    f"  {organization.slug:20s} reminders that failed: "
+                    + ", ".join(reminders["broken"])
+                )

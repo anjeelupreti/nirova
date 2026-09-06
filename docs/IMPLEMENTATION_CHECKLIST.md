@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1172** |
-| **Outstanding** | **99** | **628** |
+| **Done** | **33 of 132** | **1175** |
+| **Outstanding** | **99** | **629** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-628 understates the remaining work: in the later phases some lines group
+629 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2517,10 +2517,28 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
 - [ ] Follow-up due → notify the patient
 - [ ] Critical result approved → notify the physician and escalate
 
-## §99 Universal reminder engine `[ ]`
-- [ ] Appointment · follow-up · expiry · stock count · low stock
-- [ ] Contract · licence · probation · payroll · payment · claim
-- [ ] Maintenance · calibration · accreditation · subscription · tax filing · document expiry
+## §99 Universal reminder engine `[~]`
+
+*`apps/notifications/reminders.py`, run by `manage.py run_sweeps`.*
+
+- [x] The engine: per-subject escalation bands, dedupe by subject **and** band
+      so an hourly cron raises one notification rather than twenty-four, and
+      resolution when the situation stops being true rather than when somebody
+      swipes it away
+- [x] **A reminder that reaches nobody is counted and reported**, not shrugged
+      at. A sweep that finds forty expiring batches, tells nobody and reports
+      success looks exactly like a system that is watching
+- [x] Licence · probation · contract · batch expiry · blood unit expiry ·
+      supplier invoice due · pre-authorisation expiry
+- [ ] **`Invoice.due_date` is never written by any code**, so no invoice can be
+      overdue and credit terms are unenforceable. Needs a credit-terms policy
+      (per payer? per patient category?) — a decision, not a refactor
+- [ ] **`EmploymentContract.ends_on` is never written either**, so no
+      fixed-term contract can end
+- [ ] Appointment reminders and clinical follow-up — these go to *patients*,
+      so they need §93's channels first
+- [ ] Stock count due · low stock · maintenance · calibration · accreditation
+      · subscription · tax filing: no model carries these dates yet
 
 ## §100 Task management `[ ]`
 - [ ] Owner · department · facility · priority · deadline · SLA · status

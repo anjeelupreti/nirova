@@ -248,7 +248,14 @@ class Command(BaseCommand):
                  f" | needs action {counts['needs_action']}")
         for row in rows:
             self.say(f"     [{row.notification.category}] {row.notification.title}")
-        self.expect("outstanding count matches the list", counts["outstanding"], len(rows))
+        # Compared against the page, not against the total. `inbox` returns at
+        # most `limit` rows and `summary` counts them all, so this expectation
+        # held only while the tenant had fewer than fifty outstanding -- and
+        # stopped holding the moment the reminder engine started raising real
+        # ones. The two functions agree; the assertion was the thing that was
+        # wrong, and it is worth more stated this way round.
+        self.expect("the list is the summary, up to a page",
+                    len(rows), min(counts["outstanding"], 50))
         self.say("   Counted from the receipts every time. A stored unread count is")
         self.say("   wrong the first time two requests race, and a badge showing 3")
         self.say("   when the answer is 4 looks exactly like a badge.")

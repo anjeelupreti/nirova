@@ -136,15 +136,27 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     def list(self, request, *args, **kwargs):
+        outstanding_only = request.query_params.get("outstanding") == "true"
+        limit = int(request.query_params.get("limit", 50))
         rows = inbox(
             request.user.uuid,
             unread_only=request.query_params.get("unread") == "true",
-            outstanding_only=request.query_params.get("outstanding") == "true",
+            outstanding_only=outstanding_only,
             category=request.query_params.get("category", ""),
-            limit=int(request.query_params.get("limit", 50)),
+            limit=limit,
         )
+        # `count` is what was sent and `total` is how many there are, and
+        # both are needed. Before this the response carried only `len(rows)`,
+        # so a client asking for the default fifty was told "50" when the true
+        # answer was eighty-seven -- and the badge, which counts properly,
+        # disagreed with the list underneath it with nothing to explain why.
+        # This project keeps saying the count must describe what it claims to
+        # describe; a page length labelled `count` does not.
+        totals = summary(request.user.uuid)
         return Response({
             "count": len(rows),
+            "total": totals["outstanding"] if outstanding_only else None,
+            "has_more": len(rows) >= limit,
             "results": NotificationSerializer(rows, many=True).data,
         })
 

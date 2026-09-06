@@ -7156,3 +7156,70 @@ and the test names `/reports`. A guard that has never been shown to fail is not
 a guard.
 
 **Affects.** `backend/tests/test_invariants.py`.
+
+---
+
+## 204 - The reminder engine, and the sweep that reaches nobody
+2026-09-06 · Backend · feature, fix
+
+§99. `sweeps.py` already had the shape — one sweep, for professional
+registrations, written with the note that "the next three are the same shape
+against different tables". This is that generalisation, keeping every argument
+the original made: dedupe by subject *and band*, resolve when the situation
+stops being true, escalate by raising a new notification rather than editing
+one somebody has already read.
+
+Seven reminders: contracts ending, probation ending, batches expiring, blood
+units expiring, invoices overdue, supplier invoices due, pre-authorisations
+expiring.
+
+**Bands are per subject.** A blood unit expiring in three days is urgent, an
+employment contract ending in three days is a catastrophe, and a quotation
+expiring in three days is a Tuesday. One set of thresholds is fine with one
+sweep and wrong with seven.
+
+**And the rule the module is built around: a reminder that reaches nobody is
+counted, not shrugged at.** `notify` is right to treat "no recipients" as a
+real answer rather than an error. But a *sweep* that finds forty expiring
+batches, tells nobody, and reports success is the most dangerous kind of quiet
+— it looks exactly like a system that is watching. `undeliverable` is counted
+separately, printed to stderr, and is a number somebody fixes by correcting a
+role assignment.
+
+**What running it found.**
+
+**My own bug first.** `preauth_expiring` filtered on `status="approved"` and
+matched nothing, while every pre-authorisation in the tenant is
+`partially_approved` — a state that is still a live promise with an expiry date
+on it. Two of them expire in three days. **A reminder that silently considers
+zero rows looks exactly like good news**, so "considered nothing" is now a test
+with an explicit list of the reminders allowed to be empty and why.
+
+**Two gaps in other modules, reported rather than papered over.**
+`EmploymentContract.ends_on` and `Invoice.due_date` are declared on the models
+and **never written by any code**. So no contract can end and no invoice can
+ever be overdue — 64 issued invoices, not one of them with a due date, which
+means credit terms are unenforceable and receivables ageing is measuring from
+something else. Setting them needs a credit-terms policy and a fixed-term
+contract policy, which are decisions rather than refactors, so they are on the
+checklist and named in the test.
+
+**And a real disagreement the reminders exposed by accident.** The
+notifications seed asserts that the summary count matches the inbox list. It
+started failing at 50 versus 87 — because `inbox` caps at `limit` and `summary`
+counts them all. Neither is wrong; the assertion only ever held while the
+tenant had fewer than fifty. But the API underneath had the same flaw for
+real: it returned `count: len(rows)`, so a client was told "50" when the answer
+was 87, and the badge — which counts properly — disagreed with the list beneath
+it with nothing to explain why. **A page length labelled `count` is not a
+count.** It now returns `count`, `total` and `has_more`.
+
+**Verified.** Reminders raised on a second run report `standing`, not raised;
+quarantine a batch and its reminder resolves; put it back and it returns
+raised, not un-resolved, because a notification is a statement about a moment.
+111 tests.
+
+**Affects.** `apps/notifications/reminders.py` (new), `apps/notifications/apps.py`,
+`apps/notifications/api.py`, `apps/notifications/management/commands/run_sweeps.py`,
+`apps/notifications/management/commands/seed_notifications_demo.py`,
+`tests/test_invariants.py`.
