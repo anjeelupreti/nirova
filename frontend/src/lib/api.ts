@@ -109,10 +109,61 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return payload as T;
 }
 
+/**
+ * Fetch a file rather than a payload, and hand the browser the download.
+ *
+ * `request()` cannot do this: it reads the body as text and parses it as JSON,
+ * which turns a CSV export into a syntax error. The headers still come from
+ * the same two stores, so a download is authenticated and tenant-scoped
+ * exactly like every other call -- which is the reason this lives here rather
+ * than as a bare `fetch` inside a screen.
+ *
+ * The object URL is revoked immediately. The browser has already taken its own
+ * reference by the time the click returns, and not revoking leaks the whole
+ * file into memory for the life of the tab.
+ */
+export async function download(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = tokenStore.get();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const organization = organizationStore.get();
+  if (organization) headers["X-Organization"] = organization;
+
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    // The failure path still speaks JSON: an export refused for a missing
+    // permission is the ordinary error envelope, and swallowing it here would
+    // turn a 403 into a silently absent file.
+    const text = await response.text();
+    let envelope: ApiErrorBody | undefined;
+    try {
+      envelope = (JSON.parse(text)?.error as ApiErrorBody) ?? undefined;
+    } catch {
+      envelope = undefined;
+    }
+    throw new ApiError(
+      response.status,
+      envelope ?? {
+        code: "export_failed",
+        message: `Export failed with status ${response.status}.`,
+        detail: {},
+      },
+    );
+  }
+
+  const url = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>(path, { ...opts }),
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "POST", body }),
+  download,
 };
 
 export default api;

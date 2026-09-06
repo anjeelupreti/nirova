@@ -1988,3 +1988,43 @@ def test_one_search_writes_one_audit_event(tenant):
     # catalogue, and the severity has to say so or the log cannot be filtered.
     if hits:
         assert event.action == AuditAction.VIEW_SENSITIVE
+
+
+def test_a_multi_table_report_refuses_to_export_one_of_them(tenant):
+    """Log 199. A CSV called `finance.balance_sheet` holding only the assets
+    looks complete and is not.
+
+    The first version of the exporter took whichever table it found first,
+    which on a balance sheet is `assets` — so the liabilities would have been
+    silently absent from a file named after the whole report. Half a balance
+    sheet is worse than no balance sheet.
+    """
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    run = json.loads(
+        client.get("/api/reports/finance.balance_sheet/").content.decode()
+    )
+    assert len(run["sections"]) > 1, (
+        "the balance sheet stopped having several tables, so this guards nothing"
+    )
+
+    refused = client.get("/api/reports/finance.balance_sheet/?export=csv")
+    assert refused.status_code == 400
+    body = json.loads(refused.content.decode())
+    # It must say which parts exist, or the refusal is a dead end.
+    assert sorted(body["sections"]) == sorted(run["sections"])
+
+    one = client.get(
+        "/api/reports/finance.balance_sheet/?export=csv&section=liabilities",
+    )
+    assert one.status_code == 200
+    assert one["Content-Type"].startswith("text/csv")
+    # The section is in the filename: three files in a downloads folder must be
+    # tellable apart without opening them.
+    assert "liabilities" in one["Content-Disposition"]
+
+    assert client.get(
+        "/api/reports/finance.balance_sheet/?export=csv&section=nonsense",
+    ).status_code == 400

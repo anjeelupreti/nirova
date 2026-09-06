@@ -36,6 +36,8 @@ import {
   Users,
   UserCheck,
   ClipboardCheck,
+  BarChart3,
+  ShieldAlert,
 } from "lucide-react";
 
 import GlobalSearch from "@/components/GlobalSearch";
@@ -47,6 +49,7 @@ import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
 import NotificationsPage from "@/pages/Notifications";
 import PrivacyPage from "@/pages/Privacy";
+import ReportsPage from "@/pages/Reports";
 import NurseWorkspacePage from "@/pages/NurseWorkspace";
 import SelfServicePage from "@/pages/SelfService";
 import BillingPage from "@/pages/Billing";
@@ -136,6 +139,13 @@ const NAV_GROUPS: {
       { to: "/self-service", label: "Self Service", icon: UserCheck },
       { to: "/people", label: "Directory", icon: UserCog },
       { to: "/time", label: "Time", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Oversight",
+    items: [
+      { to: "/reports", label: "Reports", icon: BarChart3 },
+      { to: "/privacy", label: "Privacy", icon: ShieldAlert },
     ],
   },
   {
@@ -370,6 +380,7 @@ export default function App() {
           <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />

@@ -6858,3 +6858,61 @@ TypeScript interfaces — `by_reference`, `needs` and
 **Affects.** `frontend/src/components/GlobalSearch.tsx` (new),
 `frontend/src/App.tsx`, `frontend/src/pages/Patients.tsx`,
 `frontend/src/types/index.ts`.
+
+---
+
+## 199 - The reports screen, and half a balance sheet
+2026-09-06 · Frontend, Backend · feature, fix
+
+The second half of "the console does not show it yet": `/reports`, the front of
+the register from entry 196.
+
+**Each report is listed by the question it answers, and the name is the small
+print.** "Trial balance" means nothing to somebody who needs to know whether the
+books balance. That is the opposite of how report menus are usually built.
+Reports the caller cannot run are shown greyed with the permission named, the
+same position the API takes and one the UI would quietly undo by filtering them
+out. Heavy reports say so *before* the button.
+
+**And then the shape check found a real defect, in code I had shipped three
+hours earlier.** The screen decides table-or-structure by looking for a list of
+objects in the result. Run against all thirteen reports, that heuristic picks
+`assets` out of a balance sheet — so the screen would have rendered the assets
+alone under the heading "Balance sheet", and `?export=csv` would have produced
+a file called `finance.balance_sheet.csv` containing the assets and no
+liabilities. **Half a balance sheet is worse than none, because it looks
+complete.**
+
+The backend had the same bug in `_csv`, written in entry 196 and verified then
+only against reports that happen to have one table. Profit and loss looks safe
+on demo data purely because the income list is empty — with real books it is
+the same failure. **Measuring one report would have missed it; measuring all
+thirteen found it**, which is the same lesson as running every report and
+formatting every search source, met for the third time in two days.
+
+So: the run response now names its `sections`, a result holding more than one
+table **refuses to export** and says which parts exist, `?section=` picks one,
+and the section goes in the filename — three files in a downloads folder should
+be tellable apart without opening them. The screen renders *every* section as
+its own table with its own export, and the scalars beside them rather than
+instead of them: a census is wards *and* "41 of 60 occupied", and showing only
+the grid loses the headline somebody came for.
+
+**Found on the way: the privacy screen had no way in.** `/privacy` was routed
+and had no navigation entry — reachable only by typing the URL, which for the
+break-glass review queue means in practice nobody reviews anything. It now sits
+under a new "Oversight" group beside Reports.
+
+**Also added:** `api.download`, because `request()` reads every body as JSON and
+turns a CSV into a syntax error. It keeps the same auth and tenant headers, so a
+download is scoped like every other call, and it revokes the object URL rather
+than leaking the file into the tab for its lifetime. Its failure path still
+parses the error envelope — an export refused for a missing permission must not
+become a silently absent file.
+
+**Verified.** All thirteen reports run and their shapes checked one by one; the
+ambiguous export refuses and names its sections; 100 tests.
+
+**Affects.** `frontend/src/pages/Reports.tsx` (new), `frontend/src/App.tsx`,
+`frontend/src/lib/api.ts`, `frontend/src/types/index.ts`,
+`backend/apps/reporting/api.py`, `backend/tests/test_invariants.py`.

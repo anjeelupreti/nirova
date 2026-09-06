@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1154** |
-| **Outstanding** | **99** | **628** |
+| **Done** | **33 of 132** | **1157** |
+| **Outstanding** | **99** | **627** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-628 understates the remaining work: in the later phases some lines group
+627 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2642,6 +2642,8 @@ because three modules were already working around its absence.*
 - [ ] Doctors as a source in their own right — today they are found through
       `employee`, which is right for staff lookup and wrong for "who can I
       refer this patient to?"
+- [x] A screen: the omnibox in the header, Ctrl-K, with stale responses
+      dropped and hits found by reference labelled as such
 - [ ] Ranking across sources. Each source ranks exact before partial; the
       groups themselves are returned in a fixed order rather than by relevance
 - [ ] Trigram or full-text indexes. `icontains` across eleven sources is 27
@@ -2666,9 +2668,13 @@ because three modules were already working around its absence.*
       a mouse and at worst a way to produce a number nobody can reproduce and
       everybody quotes. Revisit only if a real need appears that a curated
       report cannot meet
+- [x] A screen at `/reports`, listing each report by the question it answers
+      with the name as the small print, and per-section CSV
+- [x] A result holding more than one table **refuses to export** under the
+      report's name and says which sections exist. A CSV called
+      `finance.balance_sheet` holding only the assets looks complete and is not
 - [ ] PDF and Excel export
 - [ ] Scheduled reports — delivery to an inbox on a calendar
-- [ ] A screen: the API exists, the console does not show it yet
 
 ## §106 Business intelligence `[ ]`
 - [ ] Platform, organization, facility, department, unit, role, individual and transaction levels

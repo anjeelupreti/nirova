@@ -4812,3 +4812,41 @@ export interface SearchSource {
   narrowed_to_your_patients: boolean;
   you_may_search_it: boolean;
 }
+
+/** The report library (§105). */
+export interface ReportParameter {
+  name: string;
+  description: string;
+  required: boolean;
+}
+
+export interface ReportEntry {
+  code: string;
+  name: string;
+  /** The question it answers, in the words somebody would ask it. */
+  answers: string;
+  group: string;
+  parameters: ReportParameter[];
+  is_heavy: boolean;
+  permission: string;
+  you_may_run_it: boolean;
+}
+
+export interface ReportLibrary {
+  parameters: Record<string, string>;
+  reports: ReportEntry[];
+}
+
+export interface ReportRun {
+  report: string;
+  name: string;
+  answers: string;
+  parameters: Record<string, string>;
+  /**
+   * Which parts of `result` are tables, decided by the backend rather than
+   * guessed here. A balance sheet has three, and rendering the first one under
+   * the report's name would look like the whole thing.
+   */
+  sections: string[];
+  result: unknown;
+}

@@ -113,12 +113,19 @@ class RunReportView(APIView):
         # not-found error for a resource that plainly exists, which is a
         # miserable thing to debug.
         if request.query_params.get("export") == "csv":
-            return self._csv(report, result)
+            return self._csv(
+                report, result, request.query_params.get("section", ""),
+            )
         return Response({
             "report": report.code,
             "name": report.name,
             "answers": report.answers,
             "parameters": {key: str(value) for key, value in given.items()},
+            # Which parts of this result are tables, computed here rather than
+            # guessed by every reader. The screen needs it to render each
+            # section as its own table instead of picking the first one, and
+            # the export needs it to know whether `?section=` is required.
+            "sections": sorted(self._tables_in(result)),
             "result": result,
         })
 
@@ -148,29 +155,69 @@ class RunReportView(APIView):
         missing = [name for name in report.requires if name not in given]
         return given, missing
 
-    def _csv(self, report, result):
-        """Flatten a report to CSV, or say plainly that it does not flatten.
+    def _tables_in(self, result):
+        """Every part of a result that is genuinely a table.
+
+        A list of dictionaries is one. A dictionary may hold several -- a
+        balance sheet holds assets, liabilities and equity -- and that is the
+        case this method exists for.
+        """
+        if isinstance(result, list) and result and isinstance(result[0], dict):
+            return {"": result}
+        if not isinstance(result, dict):
+            return {}
+        return {
+            key: value
+            for key, value in result.items()
+            if isinstance(value, list) and value and isinstance(value[0], dict)
+        }
+
+    def _csv(self, report, result, section=""):
+        """Flatten a report to CSV, or say plainly which part to ask for.
 
         A dict of dicts is not a table, and inventing a shape for one produces
         a spreadsheet whose columns mean different things further down the
-        page. Reports that are genuinely tabular export; the rest say so rather
-        than producing something misleading.
+        page.
+
+        **The first draft took the first table it found and exported that.** On
+        a balance sheet that is `assets` -- so `finance.balance_sheet.csv`
+        would have contained the assets alone, under a filename that says
+        balance sheet, with the liabilities silently absent. A spreadsheet that
+        is half a balance sheet is worse than no spreadsheet, because it looks
+        complete. So a result holding more than one table now refuses and names
+        them, and `?section=` picks one.
         """
-        rows = result if isinstance(result, list) else None
-        if rows is None and isinstance(result, dict):
-            for value in result.values():
-                if (
-                    isinstance(value, list)
-                    and value
-                    and isinstance(value[0], dict)
-                ):
-                    rows = value
-                    break
-        if not rows:
+        tables = self._tables_in(result)
+        if not tables:
             return Response(
                 {
                     "detail": f"{report.name} is not a table, so it has no "
                               "CSV form. Ask for it as JSON.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if section:
+            if section not in tables:
+                return Response(
+                    {
+                        "detail": f"{report.name} has no section called "
+                                  f"'{section}'.",
+                        "sections": sorted(tables),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            rows = tables[section]
+        elif len(tables) == 1:
+            rows = next(iter(tables.values()))
+            section = next(iter(tables))
+        else:
+            return Response(
+                {
+                    "detail": f"{report.name} has {len(tables)} tables in it, "
+                              "and exporting one of them under this report's "
+                              "name would look like the whole thing. Ask for "
+                              "one with ?section=.",
+                    "sections": sorted(tables),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -184,7 +231,9 @@ class RunReportView(APIView):
             writer.writerow(row)
 
         response = HttpResponse(buffer.getvalue(), content_type="text/csv")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{report.code}.csv"'
-        )
+        # The section is in the filename. Somebody with three files in a
+        # downloads folder should be able to tell the liabilities from the
+        # assets without opening them.
+        name = f"{report.code}.{section}" if section else report.code
+        response["Content-Disposition"] = f'attachment; filename="{name}.csv"'
         return response
