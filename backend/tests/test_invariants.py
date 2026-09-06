@@ -1649,3 +1649,106 @@ def test_documents_refuse_what_they_should(tenant):
     ).filter(original_name__in=["a.pdf", "b.pdf"]).count() == 1
 
     Document.all_objects.filter(original_name__in=["a.pdf", "b.pdf"]).delete()
+
+
+# ---------------------------------------------------------------------------
+# §105 The report library
+# ---------------------------------------------------------------------------
+
+
+def _report_client(email, tenant):
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    user = User.objects.filter(email=email).first()
+    if user is None:
+        return None
+    return Client(
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}",
+        HTTP_X_ORGANIZATION=tenant.slug,
+    )
+
+
+def test_every_registered_report_runs(tenant):
+    """A report that has never been run through the registry is a report
+    nobody knows is broken.
+
+    Four of the thirteen entries named functions that did not exist when this
+    was first written — `turnaround`, `summary`, `claim_summary`,
+    `stock_summary` — because the names were guessed rather than read. This is
+    what catches that.
+    """
+    from apps.organization.models import Facility
+    from apps.reporting.registry import all_reports
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    facility = Facility.objects.filter(facility_type="hospital").first()
+    library = json.loads(client.get("/api/reports/").content.decode())
+    assert library["reports"], "the registry loaded nothing"
+    assert len(library["reports"]) == len(all_reports())
+
+    broken = []
+    for entry in library["reports"]:
+        query = ""
+        if any(p["name"] == "facility" for p in entry["parameters"]) and facility:
+            query = f"?facility={facility.uuid}"
+        response = client.get(f"/api/reports/{entry['code']}/{query}")
+        if response.status_code != 200:
+            broken.append(
+                f"{entry['code']}: {response.status_code} "
+                f"{response.content.decode()[:120]}"
+            )
+    assert not broken, "\n".join(broken)
+
+
+def test_a_report_enforces_the_permission_it_declares(tenant):
+    """A reporting layer is exactly where somebody would look for a way around
+    the access controls — a report is a bulk read wearing a respectable hat."""
+    client = _report_client("doctor@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no demo doctor")
+
+    # `privacy.review` is held by the owner and the auditor, never a clinician.
+    assert client.get(
+        "/api/reports/privacy.unrelated_reads/",
+    ).status_code == 403
+
+    library = json.loads(client.get("/api/reports/").content.decode())
+    privacy = [
+        entry for entry in library["reports"]
+        if entry["code"].startswith("privacy.")
+    ]
+    assert privacy, "privacy reports vanished from the library"
+    assert all(not entry["you_may_run_it"] for entry in privacy), (
+        "a clinician is told they may run the privacy reports"
+    )
+    # Listed, not hidden: somebody who cannot see a report they have heard of
+    # asks whether the system has it; somebody who sees it greyed out asks for
+    # the permission, which is the conversation that should happen.
+    assert len(library["reports"]) > len(privacy)
+
+
+def test_csv_export_uses_export_not_format(tenant):
+    """`format` is DRF's reserved content-negotiation parameter.
+
+    `?format=csv` with no CSV renderer registered is a 404 from the router
+    before the view is reached — a not-found error for a resource that plainly
+    exists, which is a miserable thing to debug.
+    """
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    exported = client.get("/api/reports/privacy.read_volume/?export=csv&days=365")
+    assert exported.status_code == 200
+    assert exported["Content-Type"].startswith("text/csv")
+    assert exported.content.decode().splitlines()[0].startswith("who,")
+
+    # And a report that is not a table says so rather than inventing a shape.
+    not_a_table = client.get("/api/reports/inpatient.census/?export=csv")
+    assert not_a_table.status_code in (200, 400)

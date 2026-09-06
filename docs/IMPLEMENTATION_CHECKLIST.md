@@ -21,11 +21,11 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 10 | — |
 | Partial `[~]` | 45 | — |
 | Not started `[ ]` | 46 | — |
-| **Done** | **33 of 132** | **1143** |
+| **Done** | **33 of 132** | **1147** |
 | **Outstanding** | **99** | **627** |
 
-*Recounted from the file on 5 September 2026, after the notification centre
-(§101) and its first producers landed.*
+*Recounted from the file on 6 September 2026, after documents (§122) and
+the report library (§105) landed.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
@@ -2623,11 +2623,28 @@ because three modules were already working around its absence.*
 - [ ] Patient, employee, doctor, medicine, supplier, invoice, appointment, prescription, admission, lab, radiology, document
 - [ ] Permission filtering applied before results are returned
 
-## §105 Reporting engine `[ ]`
-- [ ] Standard report library
-- [ ] Custom builder: dataset → fields → filters → grouping → measures → sorting → visualisation
-- [ ] PDF, Excel, CSV and print export
-- [ ] Scheduled reports
+## §105 Reporting engine `[~]`
+
+*`apps/reporting`, mounted at `/api/reports/`.*
+
+- [x] Standard report library: thirteen reports that already existed beside the
+      modules that understand them, made discoverable and uniform. Each declares
+      the **question it answers**, not only its name — "Trial balance" means
+      nothing to somebody who needs to know whether the books balance
+- [x] Each report names the permission it needs and the registry enforces it. A
+      reporting layer is exactly where somebody would look for a way around the
+      access controls
+- [x] Reports the caller cannot run are **listed and marked, not hidden**
+- [x] CSV export, at `?export=csv` — `format` is DRF's reserved parameter and
+      collides. Reports that are not tables say so rather than inventing a shape
+      whose columns mean different things down the page
+- [ ] **No custom builder, deliberately.** A builder is at best a worse SQL with
+      a mouse and at worst a way to produce a number nobody can reproduce and
+      everybody quotes. Revisit only if a real need appears that a curated
+      report cannot meet
+- [ ] PDF and Excel export
+- [ ] Scheduled reports — delivery to an inbox on a calendar
+- [ ] A screen: the API exists, the console does not show it yet
 
 ## §106 Business intelligence `[ ]`
 - [ ] Platform, organization, facility, department, unit, role, individual and transaction levels

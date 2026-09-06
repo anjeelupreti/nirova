@@ -6673,3 +6673,64 @@ kind of thing somebody spends an afternoon on.
 
 **Affects.** `apps/documents/` (new), `config/settings/base.py`,
 `config/urls.py`.
+
+---
+
+## 196 - The report library, and what it deliberately is not
+2026-09-06 · Backend · feature
+
+§105 asks for a reporting engine: a standard library, a custom builder, export,
+and scheduling. This is the first and third, and the decision worth recording is
+the second one — **there is no query builder, and there should not be.**
+
+A builder that lets somebody assemble dataset → fields → filters → grouping →
+measures is at best a worse SQL with a mouse, and at worst a way to produce a
+number nobody can reproduce and everybody quotes. Hospitals run on a fixed set
+of reports somebody has checked. **Thirteen of those already existed in this
+codebase**, written beside the modules that understand them, each with its
+arithmetic argued over in its own docstring — and every one of them was
+unreachable unless you knew the URL.
+
+So the registry makes them discoverable and uniform rather than replacing them,
+and adds no arithmetic of its own. A reporting engine that recomputes what a
+module already knows is a second answer waiting to disagree with the first.
+
+Three rules it keeps. **Every report names the permission it needs and the
+registry enforces it** — a reporting layer is exactly where somebody would look
+for a way around the access controls, because a report is a bulk read wearing a
+respectable hat. **Parameters are declared, not inspected** — reading a
+signature is clever and breaks the day somebody adds a keyword argument.
+**Reports the caller cannot run are listed and marked, not hidden** — somebody
+who cannot see a report they have heard of asks whether the system has it;
+somebody who sees it greyed out asks for the permission, which is the
+conversation that should happen.
+
+**Four of the thirteen entries named functions that did not exist.** I wrote
+`turnaround`, `summary`, `claim_summary` and `stock_summary` from memory; the
+real names are `turnaround_report`, `department_summary`, `payer_performance`
+and `stock`. Caught by running every entry, which is now a test — **a report
+that has never been run through the registry is a report nobody knows is
+broken.**
+
+And the signatures do not agree with each other: one takes `until`, another
+`on_date`, a third `within_days`, and `expiring_stock` takes a *location* where
+everything else takes a facility. These were written months apart against no
+shared vocabulary. Renaming sixteen arguments across nine modules to please a
+registry would be the tail wagging the dog, so each entry carries an
+`argument_map` and the registry adapts.
+
+**One real bug: `?format=csv` returned 404.** `format` is DRF's reserved
+content-negotiation parameter, so with no CSV renderer registered the router
+refuses before the view is reached — a not-found error for a resource that
+plainly exists. Renamed to `?export=csv`.
+
+**And one I raised and was wrong about.** A doctor running a report needing
+`report.read` returned 200, and `has("report.read")` had just told me `False`,
+which looked like `Scope.OWN` disabling the check — and would have meant every
+floor lowered this session was checking nothing. It is not: the doctor holds
+`report.read` at *department* scope, `has()` defaults to *facility*, and the
+misleading answer came from the same default this session has been unpicking
+all along. Permissions genuinely absent still return `False` at every scope.
+
+**Affects.** `apps/reporting/` (new), `config/settings/base.py`,
+`config/urls.py`, `tests/test_invariants.py`.
