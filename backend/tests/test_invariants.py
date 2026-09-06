@@ -2134,3 +2134,138 @@ def test_the_payslip_printable_renders_and_escapes(tenant):
     finally:
         slip.employee_name = was
         slip.save(update_fields=["employee_name"])
+
+
+# ---------------------------------------------------------------------------
+# Log 201 - every route gets called at least once
+# ---------------------------------------------------------------------------
+
+
+def _get_routes():
+    """Every GET route this application exposes, with parameters marked.
+
+    Two parameter spellings, and missing the second is not academic: DRF's
+    routers emit a regex named group, a hand-written `path()` emits an angle
+    bracket converter, and the first version of this treated the second as a
+    literal. That called every hand-routed detail endpoint with the brackets
+    still in the URL, got a 404, and tested nothing -- while reporting
+    twenty-nine "unreachable" endpoints that were nothing of the kind.
+    """
+    import re
+
+    from django.urls import get_resolver
+    from django.urls.resolvers import URLPattern, URLResolver
+
+    def walk(resolver, prefix=""):
+        for entry in resolver.url_patterns:
+            if isinstance(entry, URLResolver):
+                yield from walk(entry, prefix + str(entry.pattern))
+            elif isinstance(entry, URLPattern):
+                yield prefix + str(entry.pattern), entry
+
+    found = set()
+    for pattern, entry in walk(get_resolver()):
+        path = "/" + pattern.lstrip("^").replace(r"\.", ".")
+        path = re.sub(r"\(\?P<([^>]+)>[^)]*\)", r"{\1}", path)
+        path = re.sub(r"<[^:>]+:([^>]+)>", r"{\1}", path)
+        path = re.sub(r"<([^:>]+)>", r"{\1}", path)
+        path = path.rstrip("$").replace("^", "")
+        if not path.startswith("/api/") or "{format}" in path:
+            continue
+        actions = getattr(entry.callback, "actions", None)
+        if actions is not None and "get" not in actions:
+            continue
+        found.add(path)
+    return sorted(found)
+
+
+def test_no_route_returns_a_server_error_for_any_role(tenant):
+    """An endpoint nobody has ever called is an endpoint nobody knows is broken.
+
+    The payslip printable proved it: eight field names that do not exist and an
+    unreachable `?format=` branch, sitting behind a button in the console, for
+    as long as the endpoint had existed. Nothing called it, so nothing said so.
+
+    This calls every GET route as several roles and looks for one thing only. A
+    4xx is not a finding -- a role that may not read payroll *should* be
+    refused, and this has no way to know which refusals are right. A 5xx is
+    never right.
+    """
+    import re
+
+    routes = _get_routes()
+    lists = [path for path in routes if "{" not in path]
+    details = [path for path in routes if "{" in path]
+    assert len(lists) > 100, f"only {len(lists)} routes found; the walk broke"
+
+    # Two roles, not six. The owner reaches the most code and harvests the
+    # identifiers the detail sweep needs; the doctor walks the refusal paths,
+    # which are the ones with the interesting branches in them. Adding a third
+    # cost thirty seconds and found nothing the first two had not -- and a
+    # guard slow enough that somebody starts skipping it guards nothing.
+    roles = ["owner@manakamana.test", "doctor@manakamana.test"]
+    # Logging out would invalidate the token the rest of the sweep is using.
+    skip = {"/api/auth/logout/"}
+
+    failures = []
+    identifiers = {}
+    for email in roles:
+        client = _report_client(email, tenant)
+        if client is None:
+            continue
+        for path in lists:
+            if path in skip:
+                continue
+            response = client.get(path)
+            if response.status_code >= 500:
+                failures.append(f"{path} as {email}: {response.status_code}")
+            if response.status_code == 200 and path not in identifiers:
+                try:
+                    body = json.loads(response.content.decode())
+                except ValueError:
+                    continue
+                rows = body.get("results") if isinstance(body, dict) else body
+                if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                    # Every candidate, not the first one found. The route says
+                    # which field it looks up by, and a list that returns both
+                    # `uuid` and `reference` must be able to answer either --
+                    # the first version kept only `uuid`, substituted it into a
+                    # `{reference}` route, got a 404 and tested nothing. Proved
+                    # by reintroducing the payslip defect: the sweep passed.
+                    identifiers[path] = {
+                        key: str(rows[0][key])
+                        for key in ("uuid", "reference", "id", "code", "slug",
+                                    "pk", "number")
+                        if rows[0].get(key)
+                    }
+
+        # Detail routes called with something real. A made-up UUID 404s and
+        # proves nothing, which is how a broken detail endpoint stays hidden.
+        for path in details:
+            parent = re.sub(r"\{[^}]+\}/.*$", "", path)
+            if parent not in identifiers:
+                continue
+            available = identifiers[parent]
+            wanted = re.search(r"\{([^}]+)\}", path).group(1)
+            # Matched by name first: a `{reference}` route wants the reference,
+            # not whichever identifier happened to be listed first.
+            value = available.get(wanted)
+            if value is None:
+                for fallback in ("uuid", "reference", "id", "pk"):
+                    if fallback in available:
+                        value = available[fallback]
+                        break
+            if value is None:
+                continue
+            concrete = re.sub(r"\{[^}]+\}", value, path, count=1)
+            if "{" in concrete:
+                continue
+            response = client.get(concrete)
+            if response.status_code >= 500:
+                failures.append(f"{concrete} as {email}: {response.status_code}")
+
+    assert not failures, "\n".join(failures)
+    assert len(identifiers) > 30, (
+        f"only {len(identifiers)} list routes returned rows, so the detail "
+        "sweep tested almost nothing"
+    )

@@ -6988,3 +6988,56 @@ change verified against clean data has been verified against nothing.
 `apps/reporting/api.py`, `apps/documents/api.py`, `apps/payroll/api.py`,
 `apps/portal/api.py`, `frontend/src/lib/api.ts`,
 `frontend/src/pages/SelfService.tsx`, `tests/test_invariants.py`.
+
+---
+
+## 201 - Calling every endpoint once, and proving the guard
+2026-09-06 · Backend · test
+
+Entry 200 found the payslip printable had never worked: eight wrong field names
+and an unreachable branch, behind a button in the console, for as long as it had
+existed. Nothing called it, so nothing said so. That is a class, not an
+incident — **an endpoint nobody has ever called is an endpoint nobody knows is
+broken** — and it now has a guard: every GET route this application exposes,
+called as two roles, looking for one thing.
+
+**A 4xx is not a finding.** A role that may not read payroll *should* be
+refused, and this sweep has no way to know which refusals are correct. A 500 is
+never correct. Saying so plainly is what keeps the test from drowning in
+judgement calls it cannot make.
+
+**Detail routes are called with something real**, harvested from the matching
+list response. A made-up UUID returns 404 and proves nothing, which is exactly
+how a broken detail endpoint stays hidden.
+
+Two things it got wrong first, both worth recording because both made it look
+like it was working.
+
+**It reported twenty-nine unreachable endpoints that were nothing of the kind.**
+DRF's routers emit one parameter spelling and a hand-written `path()` emits
+another; treating the second as a literal meant every hand-routed detail
+endpoint was requested with the angle brackets still in the URL. They 404ed,
+and I nearly wrote them up as findings. Handling both spellings took the list
+from 225 parameterless routes to 193, and the unexplained 404s from 229 to 55.
+
+**And then it did not catch the bug it was built for.** I tested that directly
+rather than assuming: reintroduce the exact `present_days` defect, run the
+sweep, and it **passed**. The harvester kept the first identifier it found —
+usually `uuid` — and substituted it into a route that looks up by `reference`,
+so the request 404ed and tested nothing. It now keeps every candidate and
+matches by the route's own parameter name. Reintroducing the defect a second
+time fails the test and names the route and the exception.
+
+**That is the entry.** A guard that has never been shown to fail is not a guard,
+it is a test that passes; and the first version of this one would have sat green
+over the very defect that prompted it.
+
+**Cost.** Two roles rather than six: the owner reaches the most code and
+harvests the identifiers, the doctor walks the refusal paths. A third cost
+thirty seconds and found nothing the first two had not — and a guard slow
+enough that somebody starts skipping it guards nothing. 373 routes, ~1,100
+calls, and the suite runs in about 88 seconds.
+
+**Result.** Zero 5xx across every GET route, for every role tried. 103 tests.
+
+**Affects.** `backend/tests/test_invariants.py`.

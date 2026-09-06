@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1160** |
-| **Outstanding** | **99** | **626** |
+| **Done** | **33 of 132** | **1165** |
+| **Outstanding** | **99** | **627** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-626 understates the remaining work: in the later phases some lines group
+627 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -377,6 +377,22 @@ rather than redesigning around it.
 - [x] Patient merges versioned
 - [ ] Version comparison UI
 - [ ] Configuration and compensation versioning
+
+## Standing guards
+
+*Not a specification section. The general checks that have each caught something
+nothing else would have, kept here so they are not quietly dropped.*
+
+- [x] Every seed runs twice — six seeds only ever worked once
+- [x] Every registered report runs — four named functions that did not exist
+- [x] Every search source formats a real row — `scheduled_start` does not exist
+- [x] Every GET route returns no 5xx, as two roles, detail routes called with
+      real identifiers — and the guard itself proved by reintroducing the
+      defect that prompted it, because a guard that has never been shown to
+      fail is not a guard
+- [x] Every clinical search hit belongs to a patient the searcher relates to
+- [ ] The same sweep for POST and PATCH. Harder: a write needs a valid body,
+      and a sweep that posts nonsense tests the serializer rather than the view
 
 ## §128 Security `[~]`
 
