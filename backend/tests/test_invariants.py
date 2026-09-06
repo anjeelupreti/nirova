@@ -2428,3 +2428,63 @@ def test_every_workspace_source_can_format_a_real_row(tenant):
             back.save(update_fields=[field])
 
     assert len(proved) >= 6, f"only {len(proved)} sources formatted a row"
+
+
+# ---------------------------------------------------------------------------
+# Log 203 - a screen with no way in
+# ---------------------------------------------------------------------------
+
+
+def test_every_console_route_has_a_way_to_reach_it():
+    """`/privacy` and `/notifications` were routed and not in the navigation.
+
+    Reachable only by typing the URL, which for a break-glass review queue
+    means in practice that nobody reviews anything. Two in one session is a
+    class, not a coincidence: adding a `<Route>` and adding a nav entry are
+    separate edits, and nothing connected them.
+
+    **This is a frontend check living in the backend suite, deliberately.** The
+    console has no test runner, and adding vitest and jsdom to catch a
+    twenty-line text check is a larger change than the problem justifies. It
+    reads the file rather than the rendered app, so it can only see routes
+    written literally -- which is what they all are, and this test fails loudly
+    if that stops being true.
+    """
+    import pathlib
+    import re
+
+    app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.tsx"
+    if not app.exists():
+        pytest.skip("no console in this checkout")
+
+    source = app.read_text(encoding="utf-8")
+    routes = set(re.findall(r'<Route path="(/[^"*]*)"', source))
+    linked = set(re.findall(r'to: "(/[^"]+)"', source))
+
+    assert len(routes) > 10, (
+        f"only {len(routes)} routes parsed out of App.tsx; the pattern has "
+        "stopped matching and this test is no longer checking anything"
+    )
+    assert len(linked) > 10, f"only {len(linked)} navigation entries parsed"
+
+    # Deliberately unlinked: reached from inside another screen rather than
+    # from the sidebar. Listed by name so that adding one is a decision
+    # somebody writes down, which is the whole point.
+    reached_from_elsewhere = {
+        "/",          # redirects to the home screen
+        "/login",     # shown instead of the shell, never navigated to
+        # Opened from the queue with an encounter in hand. A sidebar link to
+        # "the consultation" would have to invent which one.
+        "/consultation/:uuid",
+    }
+
+    orphans = sorted(routes - linked - reached_from_elsewhere)
+    assert not orphans, (
+        "routed with no way in: " + ", ".join(orphans)
+        + " -- add a navigation entry, or list it as deliberately unlinked"
+    )
+
+    # And the reverse: a nav entry pointing at nothing is a menu item that
+    # always 404s, which teaches people to distrust the menu.
+    dangling = sorted(linked - routes)
+    assert not dangling, "navigation points at unrouted paths: " + ", ".join(dangling)

@@ -7119,3 +7119,40 @@ is reported rather than swallowed; a doctor sees no tills and no requisitions.
 `config/urls.py`, `frontend/src/pages/Workspace.tsx` (new),
 `frontend/src/App.tsx`, `frontend/src/types/index.ts`,
 `tests/test_invariants.py`.
+
+---
+
+## 203 - A screen with no way in
+2026-09-06 · Frontend · test
+
+Two screens this session turned out to be routed and absent from the
+navigation: `/privacy` and `/notifications`. Reachable only by typing the URL —
+which, for a break-glass review queue, means in practice that nobody reviews
+anything, and the control is theatre.
+
+Two in one session is a class rather than a coincidence. Adding a `<Route>` and
+adding a navigation entry are separate edits and nothing connected them, so
+every screen added in a hurry is one distraction away from being invisible.
+
+The check reads `App.tsx` and compares the routes against the links, both ways.
+A route with no link is a screen nobody can find; **a link with no route is a
+menu item that always 404s, which teaches people to distrust the menu** — worth
+catching for the same reason and cheaper to catch together.
+
+**Deliberately unlinked routes are listed by name, with the reason.**
+`/consultation/:uuid` is opened from the queue with an encounter in hand; a
+sidebar link to "the consultation" would have to invent which one. Keeping the
+list explicit means adding to it is a decision somebody writes down.
+
+**This is a frontend check living in the backend suite, on purpose.** The
+console has no test runner, and adding vitest and jsdom to carry a twenty-line
+text check is a larger change than the problem justifies. It reads the file
+rather than the rendered app, so it can only see routes written literally — and
+it asserts it parsed a plausible number of each, so it fails loudly rather than
+passing vacuously if that stops being true.
+
+**Proved by breaking it**, like entry 201: remove the Reports navigation entry
+and the test names `/reports`. A guard that has never been shown to fail is not
+a guard.
+
+**Affects.** `backend/tests/test_invariants.py`.

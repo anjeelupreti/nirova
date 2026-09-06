@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1170** |
+| **Done** | **33 of 132** | **1172** |
 | **Outstanding** | **99** | **628** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -391,6 +391,9 @@ nothing else would have, kept here so they are not quietly dropped.*
       defect that prompted it, because a guard that has never been shown to
       fail is not a guard
 - [x] Every clinical search hit belongs to a patient the searcher relates to
+- [x] Every console route has a way in, and every menu item has a route —
+      `/privacy` and `/notifications` were both routed and unreachable
+- [x] Every workspace source formats a real row, and a broken one is named
 - [ ] The same sweep for POST and PATCH. Harder: a write needs a valid body,
       and a sweep that posts nonsense tests the serializer rather than the view
 
