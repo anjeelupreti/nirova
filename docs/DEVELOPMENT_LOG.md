@@ -6916,3 +6916,75 @@ ambiguous export refuses and names its sections; 100 tests.
 **Affects.** `frontend/src/pages/Reports.tsx` (new), `frontend/src/App.tsx`,
 `frontend/src/lib/api.ts`, `frontend/src/types/index.ts`,
 `backend/apps/reporting/api.py`, `backend/tests/test_invariants.py`.
+
+---
+
+## 200 - Three audit actions that had never been recorded
+2026-09-06 · Backend, Frontend · fix, feature
+
+§102's last outstanding line was "export and print logging", and the gap had a
+particular shape: `EXPORT`, `PRINT` and `DOWNLOAD` have been in `AuditAction`
+since the audit log was written, two of them with severities already assigned —
+and **nothing had ever recorded one**. Three actions defined and never used is
+worse than three actions absent, because the log looks like it covers exports.
+
+**An export is not a read.** A read shows one record to one person on one
+screen, inside a system that can still refuse them tomorrow. An export makes a
+copy that leaves, and after that no permission here governs it. The question
+after a leak is not "who looked?" but "who took a copy?", and those must be
+different queries against different rows. So `apps/audit/exports.py` records
+*what was in it* — the report, its parameters, the row count, the section —
+enough to answer that a year later without keeping the file.
+
+Wired to report CSV, document downloads (**every** document, not only a
+patient's — `record_patient_access` says nothing about an employee's
+certificate or a supplier contract, so those left no trace anywhere), and the
+payslip printable. `PRINT` sat at the default `info` while its two siblings
+were `sensitive`, purely because nothing had ever written one.
+
+**And it is recorded as "a printable was produced", not "printed".** Whether
+somebody pressed print, saved a PDF, or closed the tab is invisible over HTTP,
+and an append-only log that says "printed" when it means "asked for something
+printable" will be quoted back as fact in an investigation.
+
+**Then wiring the payslip found that it had never worked.** Not once.
+
+1. **Eight field names that do not exist** — `present_days` for `days_present`,
+   `gross_pay` for `gross`, `net_pay` for `net`, `tax_deducted` for `tax`, and
+   `tax_regime`, which is not on the payslip at all. It raised on its first
+   line of arithmetic.
+2. **Its `?format=html` branch was unreachable.** `format` is DRF's reserved
+   content-negotiation parameter — **the identical bug entry 196 hit with
+   `?format=csv`**, sitting in an older endpoint, in two places (`payroll` and
+   `portal`). Both are now `?export=html`.
+3. **The console has a Print button pointing at it**, so this was not
+   theoretical — and that button used `window.open` on an API URL, which
+   arrives with no `Authorization` header, so it would have been a 401 even
+   with the parameter right. Now fetched with the token and handed to a tab
+   opened *synchronously before the await*, because a `window.open` after an
+   asynchronous gap is no longer attributable to the click and popup blockers
+   stop it.
+
+**Two judgements while fixing it.** `is_statutory` is on the pay *component*
+and is not snapshotted on the line, so reading it would let somebody marking a
+component statutory next year change what a payslip paid last year says about
+itself; replaced with `explanation`, which is snapshotted. Same for the tax
+regime: taken from the payslip's own workings rather than the employee's
+current profile, because a payslip reissued after somebody marries must still
+read as it did when it was paid.
+
+**And the payslip HTML interpolated every name unescaped** — served
+same-origin to signed-in staff. The portal document generator learned this in
+an earlier entry; the payslip had the same hole and nobody had rendered one, so
+nobody had found it. Escaped, and **the audit label deliberately left raw**:
+recording "O&#x27;Brien" as the name of the person whose payslip was printed is
+a worse record than the apostrophe was ever a risk. Proved with a hostile name
+rather than observed on data that has no special characters in it — an escaping
+change verified against clean data has been verified against nothing.
+
+**Verified.** 102 tests.
+
+**Affects.** `apps/audit/exports.py` (new), `apps/audit/services.py`,
+`apps/reporting/api.py`, `apps/documents/api.py`, `apps/payroll/api.py`,
+`apps/portal/api.py`, `frontend/src/lib/api.ts`,
+`frontend/src/pages/SelfService.tsx`, `tests/test_invariants.py`.

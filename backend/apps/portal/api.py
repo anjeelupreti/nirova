@@ -393,7 +393,11 @@ class MeView(APIView):
                 )
             doc = generate_patient_document(account, patient, doc_type, reference)
             note_access(account, patient, f"document:{doc_type}", detail=reference, ip=ip)
-            if request.query_params.get("format") == "html":
+            # `export`, not `format` -- DRF reserves `format` for content
+            # negotiation, so this branch was unreachable and asking for
+            # a printable document returned a 404 for a document that
+            # plainly exists.
+            if request.query_params.get("export") == "html":
                 return HttpResponse(doc["html"], content_type="text/html")
             return Response(doc)
 

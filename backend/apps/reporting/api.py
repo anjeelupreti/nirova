@@ -25,6 +25,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.audit.exports import record_export
 from apps.common.dates import as_date
 from apps.common.permissions import get_authorization
 from apps.rbac.permissions import Scope
@@ -114,7 +115,10 @@ class RunReportView(APIView):
         # miserable thing to debug.
         if request.query_params.get("export") == "csv":
             return self._csv(
-                report, result, request.query_params.get("section", ""),
+                report,
+                result,
+                request.query_params.get("section", ""),
+                {key: str(value) for key, value in given.items()},
             )
         return Response({
             "report": report.code,
@@ -172,7 +176,7 @@ class RunReportView(APIView):
             if isinstance(value, list) and value and isinstance(value[0], dict)
         }
 
-    def _csv(self, report, result, section=""):
+    def _csv(self, report, result, section="", parameters=None):
         """Flatten a report to CSV, or say plainly which part to ask for.
 
         A dict of dicts is not a table, and inventing a shape for one produces
@@ -236,4 +240,16 @@ class RunReportView(APIView):
         # assets without opening them.
         name = f"{report.code}.{section}" if section else report.code
         response["Content-Disposition"] = f'attachment; filename="{name}.csv"'
+        # Logged as an export, not as a view. A read shows one screen to one
+        # person inside a system that can still refuse them tomorrow; an export
+        # makes a copy that leaves, and after that no permission here governs
+        # it. The row count and the parameters go in, so "what was in that
+        # file?" is answerable a year later without keeping the file.
+        record_export(
+            report.code,
+            label=f"{report.name}{f' ({section})' if section else ''}",
+            rows=len(rows),
+            parameters=parameters or {},
+            entity_type="report",
+        )
         return response

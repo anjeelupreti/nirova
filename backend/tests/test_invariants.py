@@ -2028,3 +2028,109 @@ def test_a_multi_table_report_refuses_to_export_one_of_them(tenant):
     assert client.get(
         "/api/reports/finance.balance_sheet/?export=csv&section=nonsense",
     ).status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Log 200 — what leaves the building leaves a line in the log
+# ---------------------------------------------------------------------------
+
+
+def test_taking_a_copy_is_recorded_as_taking_a_copy(tenant):
+    """`EXPORT`, `PRINT` and `DOWNLOAD` were defined and never once recorded.
+
+    Three actions in the enum, severities assigned for two of them, and nothing
+    in the codebase writing any — which is worse than their being absent,
+    because the log looks like it covers exports and did not. A read shows one
+    record to one person inside a system that can still refuse them tomorrow;
+    an export makes a copy that leaves, and no permission here governs it
+    afterwards.
+    """
+    from apps.audit.models import AuditAction, AuditEvent
+    from apps.documents.models import Document
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    def count(action):
+        return AuditEvent.objects.filter(action=action).count()
+
+    before_export = count(AuditAction.EXPORT)
+    exported = client.get("/api/reports/privacy.read_volume/?export=csv&days=365")
+    assert exported.status_code == 200
+    assert count(AuditAction.EXPORT) == before_export + 1
+
+    event = AuditEvent.objects.filter(
+        action=AuditAction.EXPORT,
+    ).order_by("-occurred_at").first()
+    # Sensitive, not informational: the question after a leak is "who took a
+    # copy?", and that has to be a different query from "who looked?".
+    assert event.severity == "sensitive"
+    # What was in it, so the question is answerable a year later without
+    # keeping the file — which nobody does and nobody should.
+    assert event.metadata["what"] == "privacy.read_volume"
+    assert event.metadata["rows"] > 0
+    assert event.metadata["parameters"]["days"] == "365"
+
+    document = Document.objects.filter(archived_at__isnull=True).first()
+    if document is not None:
+        before_download = count(AuditAction.DOWNLOAD)
+        got = client.get(f"/api/documents/{document.uuid}/download/")
+        assert got.status_code == 200
+        # Every document, not only a patient's. `record_patient_access` says
+        # nothing about an employee's certificate or a supplier contract, so
+        # before this those left no trace anywhere.
+        assert count(AuditAction.DOWNLOAD) == before_download + 1
+
+
+def test_the_payslip_printable_renders_and_escapes(tenant):
+    """It had never rendered once, and would not have been safe if it had.
+
+    Eight field names that do not exist (`present_days` for `days_present`,
+    `gross_pay` for `gross`, …), so it raised on its first line of arithmetic —
+    and its `?format=html` branch was unreachable anyway, because `format` is
+    DRF's reserved parameter. The same bug as `?format=csv` in the report
+    library, in an endpoint the console has a button for.
+    """
+    from apps.audit.models import AuditAction, AuditEvent
+    from apps.payroll.models import Payslip
+
+    client = _report_client("owner@manakamana.test", tenant)
+    slip = Payslip.objects.first()
+    if client is None or slip is None:
+        pytest.skip("no payslips")
+
+    structured = client.get(f"/api/payroll/payslips/{slip.reference}/document/")
+    assert structured.status_code == 200
+    body = json.loads(structured.content.decode())
+    assert body["net_pay"] and body["gross_pay"]
+
+    payload = "<script>alert('x')</script>"
+    was = slip.employee_name
+    slip.employee_name = f"Ram {payload} Bahadur"
+    slip.save(update_fields=["employee_name"])
+    try:
+        before = AuditEvent.objects.filter(action=AuditAction.PRINT).count()
+        printable = client.get(
+            f"/api/payroll/payslips/{slip.reference}/document/?export=html",
+        )
+        assert printable.status_code == 200
+        html = printable.content.decode()
+        # Served same-origin to signed-in staff, so an unescaped name runs.
+        assert payload not in html
+        assert "&lt;script&gt;" in html
+
+        assert AuditEvent.objects.filter(
+            action=AuditAction.PRINT,
+        ).count() == before + 1
+        event = AuditEvent.objects.filter(
+            action=AuditAction.PRINT,
+        ).order_by("-occurred_at").first()
+        assert event.severity == "sensitive"
+        # The audit label keeps the name as typed. Escaping it would record
+        # "O&#x27;Brien" as the name of the person whose payslip was printed,
+        # which is a worse record than the apostrophe was ever a risk.
+        assert payload in event.entity_label
+    finally:
+        slip.employee_name = was
+        slip.save(update_fields=["employee_name"])

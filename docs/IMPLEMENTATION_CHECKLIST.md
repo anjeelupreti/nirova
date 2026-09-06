@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1157** |
-| **Outstanding** | **99** | **627** |
+| **Done** | **33 of 132** | **1160** |
+| **Outstanding** | **99** | **626** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-627 understates the remaining work: in the later phases some lines group
+626 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -355,7 +355,15 @@ rather than redesigning around it.
 - [x] Field-level before/after with secret redaction
 - [x] Request correlation id
 - [x] Platform-actor distinction (acting on a customer's behalf)
-- [ ] Export and print logging
+- [x] Export and print logging. `EXPORT`, `PRINT` and `DOWNLOAD` existed in
+      the enum and had never been recorded once — wired to report CSV, every
+      document download (not only a patient's), and the payslip printable
+- [x] An export records **what was in it** — the report, its parameters, the
+      row count — so "what was in that file?" is answerable without keeping
+      the file
+- [x] A printable is recorded as "produced", never as "printed". Whether
+      anybody pressed print is not observable over HTTP, and an append-only
+      log that overstates gets quoted back as fact
 - [ ] Audit log UI and search
 - [ ] Immutability enforced by database grant (documented, not applied)
 

@@ -37,6 +37,10 @@ SEVERITY_BY_ACTION = {
     AuditAction.VIEW_SENSITIVE: AuditSeverity.SENSITIVE,
     AuditAction.EXPORT: AuditSeverity.SENSITIVE,
     AuditAction.DOWNLOAD: AuditSeverity.SENSITIVE,
+    # A printable is a copy that leaves on paper, which no permission in this
+    # system governs afterwards. It sat at the default `info` while its two
+    # siblings were sensitive, purely because nothing had ever recorded one.
+    AuditAction.PRINT: AuditSeverity.SENSITIVE,
     AuditAction.PATIENT_MERGE: AuditSeverity.CRITICAL,
     AuditAction.PRESCRIPTION_CHANGE: AuditSeverity.CRITICAL,
     AuditAction.PERMISSION_CHANGE: AuditSeverity.CRITICAL,

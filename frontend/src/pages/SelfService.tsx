@@ -1357,8 +1357,21 @@ export default function SelfServicePage() {
                 <Button
                   size="sm"
                   onClick={() => {
-                    const printUrl = `/api/payroll/payslips/${payslipModal.reference}/document/?format=html`;
-                    window.open(printUrl, "_blank");
+                    // `export=html`, not `format=html` -- DRF reserves
+                    // `format`, so the old URL was a 404 -- and fetched with
+                    // the token rather than navigated to, because a bare
+                    // window.open arrives with no Authorization header.
+                    void api
+                      .openPrintable(
+                        `/payroll/payslips/${payslipModal.reference}/document/?export=html`,
+                      )
+                      .catch((problem) =>
+                        setError(
+                          problem instanceof ApiError
+                            ? problem.message
+                            : "The payslip could not be produced.",
+                        ),
+                      );
                   }}
                 >
                   <Printer className="h-4 w-4 mr-1.5" /> Print / PDF

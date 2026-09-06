@@ -27,6 +27,7 @@ from rest_framework.parsers import (
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.audit.exports import record_download
 from apps.common.permissions import (
     HasClinicalAccess,
     HasPermission,
@@ -158,6 +159,16 @@ class DocumentViewSet(viewsets.ReadOnlyModelViewSet):
             record_patient_access(
                 patient, reason=f"Document: {document.title}",
             )
+        # Recorded for *every* document, not only a patient's.
+        # `record_patient_access` answers "who read this patient's record?" and
+        # says nothing at all about an employee's certificate or a supplier
+        # contract -- so before this line, taking a copy of those left no trace
+        # anywhere.
+        record_download(
+            "document", document.uuid, document.title,
+            size_bytes=document.size_bytes,
+            content_type=document.content_type,
+        )
         return FileResponse(
             document.file.open("rb"),
             as_attachment=True,

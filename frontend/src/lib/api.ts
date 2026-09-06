@@ -159,11 +159,66 @@ export async function download(path: string, filename: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Open a server-rendered printable in a new tab.
+ *
+ * `window.open("/api/…")` cannot work here and quietly did not: the bearer
+ * token lives in a header, not a cookie, so a bare navigation arrives
+ * unauthenticated. The document has to be fetched by this client and then
+ * handed to the tab.
+ *
+ * The tab is opened **synchronously, before the await**. A `window.open` after
+ * an asynchronous gap is no longer attributable to the click and popup
+ * blockers stop it — which is the difference between a print button that works
+ * and one that appears to do nothing.
+ *
+ * The object URL is revoked on a timer rather than immediately: unlike a
+ * download, where the browser takes its own reference as the click returns,
+ * the new tab needs the URL to survive long enough to load it.
+ */
+export async function openPrintable(path: string): Promise<void> {
+  const tab = window.open("", "_blank");
+  const headers: Record<string, string> = {};
+  const token = tokenStore.get();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const organization = organizationStore.get();
+  if (organization) headers["X-Organization"] = organization;
+
+  try {
+    const response = await fetch(`/api${path}`, { headers });
+    if (!response.ok) {
+      tab?.close();
+      const text = await response.text();
+      let envelope: ApiErrorBody | undefined;
+      try {
+        envelope = (JSON.parse(text)?.error as ApiErrorBody) ?? undefined;
+      } catch {
+        envelope = undefined;
+      }
+      throw new ApiError(
+        response.status,
+        envelope ?? {
+          code: "printable_failed",
+          message: `Could not produce that document (${response.status}).`,
+          detail: {},
+        },
+      );
+    }
+    const url = URL.createObjectURL(await response.blob());
+    if (tab) tab.location.href = url;
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (problem) {
+    tab?.close();
+    throw problem;
+  }
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>(path, { ...opts }),
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "POST", body }),
   download,
+  openPrintable,
 };
 
 export default api;

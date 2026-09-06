@@ -504,23 +504,41 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
                 "bank_name": emp.bank_name,
                 "bank_account_number": emp.bank_account_number,
             },
+            # Eight of these named fields that do not exist -- `present_days`
+            # for `days_present`, `gross_pay` for `gross`, `net_pay` for `net`
+            # and so on -- so this endpoint raised on its first line of
+            # arithmetic and had never once produced a payslip. Nothing called
+            # it, so nothing said so.
             "payable_days": str(slip.payable_days),
-            "present_days": str(slip.present_days),
-            "leave_days": str(slip.leave_days),
-            "unpaid_leave_days": str(slip.unpaid_leave_days),
-            "gross_pay": str(slip.gross_pay),
-            "total_deductions": str(slip.total_deductions),
-            "net_pay": str(slip.net_pay),
+            "present_days": str(slip.days_present),
+            "leave_days": str(slip.days_paid_leave),
+            "unpaid_leave_days": str(slip.days_unpaid_leave),
+            "gross_pay": str(slip.gross),
+            "total_deductions": str(slip.deductions),
+            "net_pay": str(slip.net),
             "employer_cost": str(slip.employer_cost),
-            "tax_regime": slip.tax_regime,
+            # From the payslip's own workings, not from the employee's profile.
+            # The profile says which regime they are on *now*; the workings say
+            # which one this payslip was computed under, and a payslip reissued
+            # after somebody marries must still read as it did when it was
+            # paid.
+            "tax_regime": (slip.tax_workings or {}).get("regime", ""),
             "taxable_gross": str(slip.taxable_gross),
-            "tax_deducted": str(slip.tax_deducted),
+            "tax_deducted": str(slip.tax),
             "earnings": [
                 {"name": e.name, "amount": str(e.amount), "is_taxable": e.is_taxable}
                 for e in earnings
             ],
             "deductions": [
-                {"name": d.name, "amount": str(d.amount), "is_statutory": d.is_statutory}
+                # `explanation`, not `is_statutory`. The latter lives on the
+                # component and is not snapshotted on the line, so reading it
+                # would let somebody marking a component statutory next year
+                # change what a payslip paid last year says about itself. The
+                # explanation *is* snapshotted, and says how the number was
+                # arrived at, which is what somebody querying a deduction
+                # actually wants.
+                {"name": d.name, "amount": str(d.amount),
+                 "explanation": d.explanation}
                 for d in deductions
             ],
             "employer_contributions": [
@@ -529,14 +547,28 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
             ],
         }
 
-        if request.query_params.get("format") == "html":
+        # `export`, not `format`. `format` is DRF's reserved
+        # content-negotiation parameter: with no HTML renderer registered the
+        # router refuses before this method runs, so this branch was
+        # unreachable and the printable could never be produced. The same bug
+        # the report library hit with `?format=csv`, in two older endpoints
+        # nobody had exercised.
+        if request.query_params.get("export") == "html":
+            # Escaped on the way in. Every value below is free text somebody
+            # typed -- an employee's name, a pay component, a bank branch --
+            # and this HTML is served same-origin to a signed-in member of
+            # staff. The portal document generator learned this the hard way;
+            # the payslip had the same hole and nobody had rendered one, so
+            # nobody had found it.
+            from apps.portal.services import _esc as esc
+
             earnings_rows = "".join(
-                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{e['name']}</td>"
+                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{esc(e['name'])}</td>"
                 f"<td style='padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;'>NPR {e['amount']}</td></tr>"
                 for e in doc["earnings"]
             )
             deductions_rows = "".join(
-                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{d['name']}</td>"
+                f"<tr><td style='padding:6px;border-bottom:1px solid #e5e7eb;'>{esc(d['name'])}</td>"
                 f"<td style='padding:6px;border-bottom:1px solid #e5e7eb;text-align:right;'>NPR {d['amount']}</td></tr>"
                 for d in doc["deductions"]
             )
@@ -544,7 +576,7 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Payslip - {doc['reference']}</title>
+  <title>Payslip - {esc(doc['reference'])}</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; color: #111827; }}
     .header {{ border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 24px; }}
@@ -563,20 +595,20 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
     <button onclick="window.print()" style="background:#2563eb;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:600;">Print / Save as PDF</button>
   </div>
   <div class="header">
-    <div class="title">{doc['organization_name']}</div>
-    <div class="sub">{doc['facility_name']} · Salary Payslip</div>
-    <div class="sub">Pay Period: <strong>{doc['period_label']}</strong> | Ref: {doc['reference']}</div>
+    <div class="title">{esc(doc['organization_name'])}</div>
+    <div class="sub">{esc(doc['facility_name'])} · Salary Payslip</div>
+    <div class="sub">Pay Period: <strong>{esc(doc['period_label'])}</strong> | Ref: {esc(doc['reference'])}</div>
   </div>
   <div class="grid">
     <div>
-      <div><strong>Employee:</strong> {doc['employee']['name']} ({doc['employee']['code']})</div>
-      <div><strong>Designation:</strong> {doc['employee']['position']}</div>
-      <div><strong>Department:</strong> {doc['employee']['department']}</div>
+      <div><strong>Employee:</strong> {esc(doc['employee']['name'])} ({esc(doc['employee']['code'])})</div>
+      <div><strong>Designation:</strong> {esc(doc['employee']['position'])}</div>
+      <div><strong>Department:</strong> {esc(doc['employee']['department'])}</div>
     </div>
     <div>
-      <div><strong>PAN:</strong> {doc['employee']['pan_number'] or '—'}</div>
-      <div><strong>Citizenship:</strong> {doc['employee']['citizenship_number'] or '—'}</div>
-      <div><strong>Bank:</strong> {doc['employee']['bank_name']} ({doc['employee']['bank_account_number'] or '—'})</div>
+      <div><strong>PAN:</strong> {esc(doc['employee']['pan_number']) or '—'}</div>
+      <div><strong>Citizenship:</strong> {esc(doc['employee']['citizenship_number']) or '—'}</div>
+      <div><strong>Bank:</strong> {esc(doc['employee']['bank_name'])} ({esc(doc['employee']['bank_account_number']) or '—'})</div>
     </div>
   </div>
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
@@ -605,6 +637,23 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
 </body>
 </html>"""
             from django.http import HttpResponse
+
+            from apps.audit.exports import record_printable
+
+            # A payslip carries somebody's salary, so producing a printable
+            # copy of it is worth a line in the log. Recorded as "a printable
+            # was produced" rather than "printed": whether they pressed print,
+            # saved a PDF or closed the tab is invisible from here, and an
+            # append-only log that overstates gets quoted back as fact.
+            record_printable(
+                "payslip", doc["reference"],
+                # Not escaped. This is an audit label, not markup: escaping it
+                # would record "O&#x27;Brien" as the name of the person whose
+                # payslip was printed, which is a worse record than the
+                # apostrophe was ever a risk.
+                f"Payslip: {doc['employee']['name']} · {doc['period_label']}",
+                kind="payslip",
+            )
             return HttpResponse(html, content_type="text/html")
 
         return Response(doc)
