@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1165** |
-| **Outstanding** | **99** | **627** |
+| **Done** | **33 of 132** | **1170** |
+| **Outstanding** | **99** | **628** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-627 understates the remaining work: in the later phases some lines group
+628 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2478,7 +2478,19 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
 ## §96 My workspace `[~]`
 - [x] Doctor worklist — open encounters, triage-ordered
 - [x] Laboratory worklist — STAT-first
-- [ ] My tasks · approvals · notifications · reminders · schedule
+- [x] **My approvals**, at `/workspace` — eight sources across procurement,
+      payroll, HR, point of sale, privacy and facility changes, gathered from
+      the modules that own them rather than recomputed
+- [x] Only what you can **act on** appears — absent, not greyed. A queue of
+      things you can only look at teaches people it is not their queue
+- [x] A source that fails is named as broken and `is_complete` goes false. An
+      empty approval queue is a positive claim that there is nothing to
+      approve, and a swallowed error makes that claim falsely
+- [x] Ordered by what it costs to leave it sitting, not alphabetically
+- [x] Unread notification count, read through the notification centre so the
+      screen cannot disagree with the bell
+- [ ] Tasks — needs §100, which has no model yet
+- [ ] Reminders and the day's schedule on the same screen
 - [x] Nurse workspace: assigned patients, vitals, medication, handover
 - [~] Pharmacist workspace: dispensing, stock, expiry and reorder screens
       built; POS and stock counts outstanding

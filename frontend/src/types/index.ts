@@ -4850,3 +4850,41 @@ export interface ReportRun {
   sections: string[];
   result: unknown;
 }
+
+/** My workspace (§96). */
+export interface WaitingItem {
+  uuid: string;
+  reference: string;
+  title: string;
+  detail: string;
+  waiting_since: string | null;
+}
+
+export interface WaitingGroup {
+  type: string;
+  label: string;
+  screen: string;
+  /** Roughly what it costs to leave this sitting. Ordering, not colour. */
+  urgency: number;
+  count: number;
+  items: WaitingItem[];
+}
+
+export interface MyWorkspace {
+  approvals: WaitingGroup[];
+  approvals_total: number;
+  /**
+   * False when a source failed. An empty approval queue is a positive claim
+   * that there is nothing to approve, so the screen must say when it does not
+   * actually know.
+   */
+  is_complete: boolean;
+  broken_sources: { type: string; label: string }[];
+  notifications: { unread: number | null; unavailable?: boolean };
+  today: {
+    has_employee_record: boolean;
+    employee?: string;
+    facility?: string | null;
+    department?: string | null;
+  };
+}

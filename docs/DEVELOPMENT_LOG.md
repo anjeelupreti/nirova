@@ -7041,3 +7041,81 @@ calls, and the suite runs in about 88 seconds.
 **Result.** Zero 5xx across every GET route, for every role tried. 103 tests.
 
 **Affects.** `backend/tests/test_invariants.py`.
+
+---
+
+## 202 - What needs you, and the queue that must not lie by being empty
+2026-09-06 · Backend, Frontend · feature
+
+§96. Every module has a screen showing what is pending in it, and somebody who
+approves purchase orders, signs off tills and reviews leave has to remember to
+visit three of them. `/api/me/workspace/` and `/workspace` answer the question
+once.
+
+Eight sources: emergency access to review, tills awaiting sign-off, payroll
+runs, facility changes, purchase orders, requisitions, leave, shift swaps.
+
+**It aggregates; it does not decide.** Each module already knows what is pending
+in it and which permission it takes to act. Reimplementing "which requisitions
+are awaiting approval" here would produce a second answer that disagrees with
+the procurement screen inside a month — the same argument the report registry
+makes for adding no arithmetic of its own.
+
+**An item you cannot act on does not appear.** Not greyed — absent. The report
+library lists what you cannot run because knowing the report exists is useful;
+a work queue is the opposite, and a list of things somebody can only look at
+teaches them the queue is not really theirs.
+
+**Ordered by what it costs to leave it sitting**, not alphabetically and not by
+count. A till unreconciled overnight is a cash control failure and an
+unreviewed emergency access is a privacy one; an unread leave request is a
+slightly annoyed nurse.
+
+**And the rule this module is really built around: a source that fails is
+reported broken, never skipped.** Every other list in this system degrades
+acceptably to empty. This one does not, because **an empty approval queue is a
+positive claim that there is nothing to approve.** Someone with twenty-two
+requisitions waiting must not be told their afternoon is free because a query
+fell over. So a failure is carried out as a named broken source, `is_complete`
+goes false, the screen says so in the place hardest to scroll past, and the
+total is rendered as "at least".
+
+**That rule paid for itself on the first run, twice.** `PayrollRunStatus` does
+not exist — the enum is `RunStatus` — and `LeaveRequest.start_date` does not
+either; it is `starts_on`. Both came back as named broken sources instead of a
+quiet zero. Under any other error policy I would have shipped a workspace that
+told a payroll approver there was nothing to approve.
+
+**Four of the eight had no pending rows in demo data**, so their formatting had
+never run — the same trap as `scheduled_start` and the payslip. Each was given
+a row to format and put back afterwards, which is now a test.
+
+**And that test met Log 162 again.** Flipping a row into a pending state can
+violate a partial unique constraint, and PostgreSQL aborts the whole
+transaction on a constraint violation — so `except IntegrityError: continue`
+then queried a dead transaction. It needs a savepoint, exactly as `notify` did.
+Third time this rule has been met in this project; it is not a special case,
+it is how PostgreSQL works.
+
+**The screen lists and links; it has no approve buttons.** Approving a payroll
+run out of a summary, without the run in front of you, is precisely the habit
+maker-checker exists to prevent. Times are shown as "waiting 9 days" rather
+than a timestamp, because that is the number somebody acts on.
+
+**Found on the way:** `/notifications` also had a route and no navigation
+entry — the second unreachable screen this session, after `/privacy`. Both now
+sit under a new "Mine" group with the workspace.
+
+**Not changed:** the landing page is still `/patients`. "What needs you" is the
+better home for an approver and the wrong one for a receptionist, and picking
+between them is a decision about who this product is for rather than a
+refactor.
+
+**Verified.** All eight sources format a real row; a deliberately broken source
+is reported rather than swallowed; a doctor sees no tills and no requisitions.
+106 tests.
+
+**Affects.** `apps/workspace/` (new), `config/settings/base.py`,
+`config/urls.py`, `frontend/src/pages/Workspace.tsx` (new),
+`frontend/src/App.tsx`, `frontend/src/types/index.ts`,
+`tests/test_invariants.py`.

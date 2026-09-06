@@ -2269,3 +2269,162 @@ def test_no_route_returns_a_server_error_for_any_role(tenant):
         f"only {len(identifiers)} list routes returned rows, so the detail "
         "sweep tested almost nothing"
     )
+
+
+# ---------------------------------------------------------------------------
+# Log 202 - my workspace, and the queue that must never lie by being empty
+# ---------------------------------------------------------------------------
+
+
+def test_a_broken_workspace_source_is_named_not_silently_empty(tenant):
+    """An empty approval queue is a positive claim that there is nothing to do.
+
+    Every other list in this system degrades acceptably to empty. This one does
+    not: somebody with twenty-two requisitions waiting must not be told their
+    afternoon is free because a source raised. The rule proved itself on its
+    first run -- `PayrollRunStatus` does not exist (it is `RunStatus`) and
+    `LeaveRequest.start_date` does not either -- and both came back as named
+    broken sources rather than as a quiet zero.
+    """
+    from apps.workspace import sources as workspace
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    healthy = json.loads(client.get("/api/me/workspace/").content.decode())
+    assert healthy["is_complete"], healthy["broken_sources"]
+    assert healthy["broken_sources"] == []
+
+    # Break one deliberately and require that it is reported, not swallowed.
+    victim = workspace.get_source_for_test = None
+    original = workspace._SOURCES["requisitions"]
+
+    def explode(request):
+        raise RuntimeError("the procurement query fell over")
+
+    workspace._SOURCES["requisitions"] = type(original)(
+        code=original.code, label=original.label,
+        permission=original.permission, scope=original.scope,
+        find=explode, screen=original.screen, urgency=original.urgency,
+    )
+    try:
+        broken = json.loads(client.get("/api/me/workspace/").content.decode())
+    finally:
+        workspace._SOURCES["requisitions"] = original
+    assert victim is None
+
+    assert broken["is_complete"] is False
+    assert [entry["type"] for entry in broken["broken_sources"]] == [
+        "requisitions",
+    ]
+    # And the request still answers. A workspace that 500s because one module
+    # is unwell is a workspace nobody can use to find out what else is waiting.
+    assert broken["approvals_total"] >= 0
+
+
+def test_the_workspace_only_lists_what_you_can_act_on(tenant):
+    """Not greyed -- absent.
+
+    A report library lists what you cannot run, because knowing the report
+    exists is useful. A work queue is the opposite: a list of things somebody
+    can only look at teaches them the queue is not really theirs, and then they
+    stop reading it.
+    """
+    owner = _report_client("owner@manakamana.test", tenant)
+    doctor = _report_client("doctor@manakamana.test", tenant)
+    if owner is None or doctor is None:
+        pytest.skip("missing demo accounts")
+
+    theirs = json.loads(owner.get("/api/me/workspace/").content.decode())
+    clinician = json.loads(doctor.get("/api/me/workspace/").content.decode())
+
+    assert theirs["approvals_total"] > 0, (
+        "the owner has nothing waiting, so this test proves nothing"
+    )
+    # A doctor approves no purchase orders and signs off no tills.
+    kinds = {group["type"] for group in clinician["approvals"]}
+    assert "requisitions" not in kinds
+    assert "tills" not in kinds
+
+    for body in (theirs, clinician):
+        # Counts are counts of what is shown, as everywhere else.
+        assert body["approvals_total"] == sum(
+            len(group["items"]) for group in body["approvals"]
+        )
+        for group in body["approvals"]:
+            assert group["count"] == len(group["items"])
+            # A group with nothing in it is not shown at all: an empty heading
+            # is a row of visual noise that trains people to skim.
+            assert group["items"]
+
+
+def test_every_workspace_source_can_format_a_real_row(tenant):
+    """Four of the eight have no pending rows in demo data.
+
+    Which means their formatting had never run -- the same trap that hid
+    `scheduled_start` in the search sources and eight wrong names in the
+    payslip. So each is given a row to format, and put back afterwards.
+    """
+    from django.db import IntegrityError
+
+    from apps.tenancy.db import tenant_atomic
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    def groups():
+        body = json.loads(client.get("/api/me/workspace/").content.decode())
+        return {group["type"]: group for group in body["approvals"]}
+
+    plans = [
+        ("leave", "apps.hr.models", "LeaveRequest", "status", "pending"),
+        ("purchase_orders", "apps.procurement.models", "PurchaseOrder",
+         "status", "pending_approval"),
+        ("payroll_runs", "apps.payroll.models", "PayrollRun",
+         "status", "pending_approval"),
+    ]
+
+    proved = set(groups())
+    for code, module_name, model_name, field, value in plans:
+        model = getattr(
+            __import__(module_name, fromlist=[model_name]), model_name,
+        )
+        row = was = None
+        for candidate in model.objects.all()[:12]:
+            was = getattr(candidate, field)
+            setattr(candidate, field, value)
+            try:
+                # A savepoint, because PostgreSQL aborts the whole transaction
+                # on a constraint violation and every later query in it fails
+                # with "you can't execute queries until the end of the atomic
+                # block". Log 162 taught this about `notify`; it is the same
+                # rule, and the reason `except IntegrityError: continue` is not
+                # enough on its own.
+                with tenant_atomic():
+                    candidate.save(update_fields=[field])
+            except IntegrityError:
+                # Seed data holds a partial unique constraint over live rows,
+                # so some rows cannot be moved into the pending state. Not a
+                # defect -- try the next one.
+                setattr(candidate, field, was)
+                continue
+            row = candidate
+            break
+        if row is None:
+            continue
+        try:
+            found = groups()
+            assert code in found, (
+                f"{code}: a row was put into '{value}' and did not appear"
+            )
+            item = found[code]["items"][0]
+            assert item["title"], f"{code} produced an item with no title"
+            proved.add(code)
+        finally:
+            back = model.objects.get(pk=row.pk)
+            setattr(back, field, was)
+            back.save(update_fields=[field])
+
+    assert len(proved) >= 6, f"only {len(proved)} sources formatted a row"

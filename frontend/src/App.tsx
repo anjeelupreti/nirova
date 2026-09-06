@@ -38,6 +38,8 @@ import {
   ClipboardCheck,
   BarChart3,
   ShieldAlert,
+  Inbox,
+  Bell,
 } from "lucide-react";
 
 import GlobalSearch from "@/components/GlobalSearch";
@@ -49,6 +51,7 @@ import FacilityRequestsPage from "@/pages/FacilityRequests";
 import LoginPage from "@/pages/Login";
 import NotificationsPage from "@/pages/Notifications";
 import PrivacyPage from "@/pages/Privacy";
+import WorkspacePage from "@/pages/Workspace";
 import ReportsPage from "@/pages/Reports";
 import NurseWorkspacePage from "@/pages/NurseWorkspace";
 import SelfServicePage from "@/pages/SelfService";
@@ -100,6 +103,13 @@ const NAV_GROUPS: {
   platformOnly?: boolean;
   items: { to: string; label: string; icon: typeof Users }[];
 }[] = [
+  {
+    label: "Mine",
+    items: [
+      { to: "/workspace", label: "What needs you", icon: Inbox },
+      { to: "/notifications", label: "Notifications", icon: Bell },
+    ],
+  },
   {
     label: "Clinical",
     items: [
@@ -381,6 +391,7 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
