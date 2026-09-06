@@ -6805,3 +6805,56 @@ including SQL injection, wildcards and Devanagari, zero 5xx. 99 tests.
 
 **Affects.** `apps/search/` (new), `apps/common/permissions.py`,
 `config/settings/base.py`, `config/urls.py`, `tests/test_invariants.py`.
+
+---
+
+## 198 - The omnibox, and the stale response nobody sees
+2026-09-06 · Frontend · feature
+
+The last two entries both ended "the console does not show it yet". This is the
+first half of that: one search box in the header, wired to §104.
+
+**In the header, not on a page.** A search you have to navigate to is a search
+nobody uses — and what people search for is almost always a way of *leaving*
+the screen they are on. Ctrl-K from anywhere, because that is the shortcut
+people already try.
+
+**Stale responses are dropped rather than rendered.** Type "ram", then
+"ramesh": two requests are in flight, and nothing guarantees they land in
+order. The slower one replacing the right answer with the wrong one is the
+oldest bug in search boxes, and it is invisible until somebody opens the wrong
+patient — which in this system is a clinical error, not an annoyance. Every
+request carries a sequence number and anything but the newest is discarded.
+
+**The API's refusals are shown, not filtered out.** Sources the caller cannot
+search appear greyed with the permission named on hover. The UI would quietly
+undo the backend's position by hiding them.
+
+**Hits found by reference are labelled "by reference".** Those reached past the
+care relationship — legitimately; it is the documented lookup — and somebody
+opening one should know which door they came through now, rather than read
+about it in a privacy report a month later.
+
+**The bug I wrote and caught before it shipped.** Results navigate to
+`/patients?focus=<uuid>`, and the Patients screen opens that record and clears
+the parameter — a `focus` left in the URL means a refresh silently re-opens a
+record the person has navigated away from, and since opening a patient is a
+*logged read*, it would record an access nobody performed. The first draft
+guarded the fetch with a `cancelled` flag in the effect's cleanup. But clearing
+the parameter re-runs the effect, so the cleanup fired **before** the fetch
+resolved and the record would never have opened at all. A ref of what has
+already been handled is the honest guard, because it survives the re-render
+that the clearing itself causes.
+
+**Why `?focus=` rather than a detail route.** Most screens here are lists that
+own their own selection. Inventing a detail route per domain is a far larger
+change than a search box has any business making, and a screen that does not
+understand the parameter still lands the person in the right place.
+
+**Verified.** The response contract checked field by field against the
+TypeScript interfaces — `by_reference`, `needs` and
+`narrowed_to_your_patients` included. `tsc -b` and a production build clean.
+
+**Affects.** `frontend/src/components/GlobalSearch.tsx` (new),
+`frontend/src/App.tsx`, `frontend/src/pages/Patients.tsx`,
+`frontend/src/types/index.ts`.

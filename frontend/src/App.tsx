@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 
+import GlobalSearch from "@/components/GlobalSearch";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import CapacityPage from "@/pages/Capacity";
@@ -187,6 +188,13 @@ export default function App() {
             </div>
             <span className="font-semibold tracking-tight">Nirova</span>
           </div>
+
+          {/*
+            The omnibox, in the header rather than on a page: a search you have
+            to navigate to is a search nobody uses. Hidden from a platform
+            operator with no membership, who has no tenant to search.
+          */}
+          {isPlatformOnly ? null : <GlobalSearch />}
 
           {/*
             The context switcher. Only rendered when there is somewhere to

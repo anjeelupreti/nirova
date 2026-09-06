@@ -4761,3 +4761,54 @@ export interface AccessPatterns {
     note: string;
   };
 }
+
+/**
+ * Global search (§104).
+ *
+ * `by_reference` is the one field a reader might skim past and should not. It
+ * marks a hit found by naming a record exactly rather than by browsing towards
+ * it — the documented lookup that deliberately reaches past the care
+ * relationship. The UI labels those, because somebody opening a record should
+ * know which door they came through.
+ */
+export interface SearchHit {
+  type: string;
+  uuid: string;
+  label: string;
+  sublabel: string;
+  matched_on: string;
+  by_reference: boolean;
+  url: string;
+}
+
+export interface SearchGroup {
+  type: string;
+  label: string;
+  narrowed_to_your_patients: boolean;
+  results: SearchHit[];
+}
+
+export interface RefusedSource {
+  type: string;
+  label: string;
+  /** The permission the caller is missing. Never a count. */
+  needs: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  /** Only ever what this caller may see. */
+  count: number;
+  groups: SearchGroup[];
+  searched: string[];
+  refused: RefusedSource[];
+  unknown_types: string[];
+}
+
+export interface SearchSource {
+  type: string;
+  label: string;
+  needs: string;
+  narrowed_to_your_patients: boolean;
+  you_may_search_it: boolean;
+}

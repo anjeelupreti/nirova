@@ -6,7 +6,8 @@
  * and should not have to decide which box it belongs in before they can look.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CircleAlert,
@@ -203,6 +204,9 @@ function PatientDetailPanel({ patient }: { patient: PatientDetail }) {
 }
 
 export default function PatientsPage() {
+  const [params, setParams] = useSearchParams();
+  //: Which `?focus=` has already been acted on. See the effect below.
+  const handled = useRef<string | null>(null);
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<Patient[]>([]);
   const [selected, setSelected] = useState<PatientDetail | null>(null);
@@ -266,6 +270,40 @@ export default function PatientsPage() {
     );
     setSelected(detail);
   }
+
+  /**
+   * `?focus=<uuid>` from the omnibox: open that record straight away.
+   *
+   * The parameter is cleared once it has been used. Leaving it in the URL
+   * means a refresh silently re-opens a record the person has since navigated
+   * away from -- and, because opening a patient is a logged read, it would
+   * also record an access nobody performed.
+   */
+  useEffect(() => {
+    const focus = params.get("focus");
+    if (!focus || handled.current === focus) return;
+    // Marked before the request, not after. Clearing the parameter re-runs
+    // this effect, and the first draft used a `cancelled` flag in the cleanup
+    // -- which the re-run set *before* the fetch resolved, so the record never
+    // opened. A ref of what has been handled is the honest guard: it survives
+    // the re-render that the clearing itself causes.
+    handled.current = focus;
+    api
+      .get<PatientDetail>(`/clinical/patients/${focus}/`)
+      .then(setSelected)
+      .catch((problem) =>
+        setError(
+          problem instanceof ApiError
+            ? problem.message
+            : "That record could not be opened.",
+        ),
+      )
+      .finally(() => {
+        const next = new URLSearchParams(params);
+        next.delete("focus");
+        setParams(next, { replace: true });
+      });
+  }, [params, setParams]);
 
   async function submitRegistration(force: boolean) {
     setError(null);
