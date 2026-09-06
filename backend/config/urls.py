@@ -35,6 +35,7 @@ urlpatterns = [
     path("api/privacy/", include("apps.rbac.urls")),
     path("api/documents/", include("apps.documents.urls")),
     path("api/reports/", include("apps.reporting.urls")),
+    path("api/search/", include("apps.search.urls")),
     # The patient-facing half, on its own prefix: a different
     # authentication and a different tenant binding.
     path("api/me/", include("apps.portal.me_urls")),

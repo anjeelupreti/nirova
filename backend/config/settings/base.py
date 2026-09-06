@@ -93,6 +93,7 @@ TENANT_APPS = [
     "apps.notifications",
     "apps.documents",
     "apps.reporting",
+    "apps.search",
 ]
 
 LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS

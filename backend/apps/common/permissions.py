@@ -337,7 +337,21 @@ def narrow_to_relationship(queryset, request, patient_field="patient_id"):
     """
     from apps.rbac.relationships import related_patient_ids_for_request
 
-    if not relationship_required():
+    # Resolved once per request. The switch is a configuration row, and an
+    # organization does not change its mind about privacy halfway through
+    # answering one HTTP request -- but until this memo existed, a global
+    # search asked the question once per clinical source and read the config
+    # table five times to get the same answer. The patient ids beneath are
+    # already cached the same way; this is the flag that guards them.
+    # The sentinel, not `None`, and for the reason `related_patient_ids_for_
+    # request` uses one: `False` is a real answer here, and a cache that treats
+    # it as "not looked up yet" recomputes on every call for exactly the
+    # organizations that turned the requirement off.
+    required = getattr(request, "_relationship_required", "unset")
+    if required == "unset":
+        required = relationship_required()
+        request._relationship_required = required
+    if not required:
         return queryset
 
     allowed = related_patient_ids_for_request(request)

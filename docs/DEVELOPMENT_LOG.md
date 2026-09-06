@@ -6734,3 +6734,74 @@ all along. Permissions genuinely absent still return `False` at every scope.
 
 **Affects.** `apps/reporting/` (new), `config/settings/base.py`,
 `config/urls.py`, `tests/test_invariants.py`.
+
+---
+
+## 197 - One search box, and the browse it must refuse
+2026-09-06 · Backend · feature
+
+§104. A global search is the single screen where every access rule in the
+system is enforced or bypassed at once, because it asks *what exists?* across
+every domain simultaneously — and that question is exactly the **browse** the
+Phase 2 design refuses for the clinical record. So `apps/search` is written
+around the refusal rather than around the search.
+
+Eleven sources: patients, staff, medicines, suppliers, invoices, documents,
+appointments, prescriptions, admissions, laboratory and imaging.
+
+**A source runs only if the caller holds its permission** — the query is never
+issued. Filtering after fetching is not filtering: it produces a count that
+leaks, a read that should not have happened, and a timing difference somebody
+can measure. **The count is the count of what you may see**; "42 results, 3
+shown" reports the other 39 into existence, which is usually the whole secret.
+**Refused sources are named, not dropped** — the refusal says which permission
+is missing and nothing else.
+
+**Clinical sources narrow to the care relationship; patients do not.** The
+uncomfortable line, and deliberate. The registration desk searches by name all
+day and cannot have a relationship with somebody not yet registered, so
+identity stays browsable — which `ACCESS_DESIGN.md` accepts explicitly — while
+prescriptions, admissions, orders and appointments narrow.
+
+**What measuring found.** `retrieve` by UUID is already open to a counter
+assistant, a doctor and a pharmacist alike — that is the documented lookup
+asymmetry — but **a printed prescription carries a reference, never a UUID, and
+nothing turned one into the other.** The documented lookup path could not
+actually be walked. So an **exact** reference match now searches unnarrowed
+while partial and name matches stay narrowed: naming a record exactly is a
+lookup, typing part of a name is a browse. It widens nothing `retrieve` did not
+already permit, every such hit is flagged `by_reference`, and the audit event
+counts lookups separately from browses — a run of searches that are *all*
+lookups against unrelated records is somebody walking the reference sequence,
+and that pattern is invisible if the two are added together.
+
+**One audit event per search, not one per hit.** Twenty-five patients matched
+must not write twenty-five access rows; that drowns the log
+`record_patient_access` exists to keep readable. The term is recorded.
+
+**The bug, and the general guard that found it.** `Appointment.scheduled_start`
+does not exist — the field is `scheduled_for` — and it survived three probes
+because none happened to match an appointment. **A source that has never
+returned a hit is a source nobody knows is broken**, so the test now forces
+every source to format a real row. Same lesson as the report registry, one day
+later.
+
+**And a cost found by counting rather than guessing.** 31 queries per search,
+five of them the same configuration read: each clinical source asked
+independently whether care relationships are required. An organization does not
+change its mind halfway through one request, so `narrow_to_relationship` now
+memoises it — 27 queries, 94ms in the database. The memo uses an `"unset"`
+sentinel rather than `None`, because `False` is a real answer and a cache that
+treats it as "not looked up yet" recomputes forever for exactly the
+organizations that turned the requirement off.
+
+**Checked and already safe:** LIKE wildcards. `q=%%` clears the two-character
+floor, and the ORM escapes it — guarded by a test anyway, since the regression
+would be a silent export of the patient index.
+
+**Verified.** 11 of 11 sources format a real row; 131 clinical hits across four
+roles, none outside the searcher's relationships; twelve roles × fourteen terms
+including SQL injection, wildcards and Devanagari, zero 5xx. 99 tests.
+
+**Affects.** `apps/search/` (new), `apps/common/permissions.py`,
+`config/settings/base.py`, `config/urls.py`, `tests/test_invariants.py`.

@@ -1752,3 +1752,239 @@ def test_csv_export_uses_export_not_format(tenant):
     # And a report that is not a table says so rather than inventing a shape.
     not_a_table = client.get("/api/reports/inpatient.census/?export=csv")
     assert not_a_table.status_code in (200, 400)
+
+
+# ---------------------------------------------------------------------------
+# Log 197 — global search, where every access rule is enforced or bypassed
+# ---------------------------------------------------------------------------
+
+
+def test_every_search_source_can_format_a_real_row(tenant):
+    """A source that has never returned a hit is a source nobody knows is
+    broken.
+
+    Exactly the lesson the report registry taught, and it repeated here:
+    `Appointment.scheduled_start` does not exist -- the field is
+    `scheduled_for` -- and the mistake survived three separate probes because
+    none of them happened to match an appointment. Formatting only runs when
+    there is a row to format, so the guard has to force one.
+    """
+    from apps.billing.models import Invoice
+    from apps.diagnostics.models import SPECIMEN_MODALITIES, DiagnosticOrder
+    from apps.documents.models import Document
+    from apps.hr.models import Employee
+    from apps.inpatient.models import Admission
+    from apps.patients.models import Patient, PatientStatus
+    from apps.pharmacy.models import Product
+    from apps.prescriptions.models import Prescription
+    from apps.procurement.models import Supplier
+    from apps.scheduling.models import Appointment
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    def term_for(queryset, attr):
+        row = queryset.first()
+        return getattr(row, attr) if row is not None else None
+
+    terms = {
+        # Merged records are excluded from search by design, so a merged shell
+        # is not evidence of anything -- and `Patient.objects.first()` returns
+        # one, which cost a confused minute the first time.
+        "patient": term_for(
+            Patient.objects.exclude(status=PatientStatus.MERGED), "mrn",
+        ),
+        "employee": term_for(Employee.objects, "employee_code"),
+        "medicine": term_for(Product.objects, "generic_name"),
+        "supplier": term_for(Supplier.objects, "name"),
+        "invoice": term_for(Invoice.objects, "number"),
+        "document": term_for(Document.objects, "title"),
+        "appointment": term_for(Appointment.objects, "reference"),
+        "prescription": term_for(Prescription.objects, "reference"),
+        "admission": term_for(Admission.objects, "reference"),
+        "lab": term_for(
+            DiagnosticOrder.objects.filter(modality__in=SPECIMEN_MODALITIES),
+            "reference",
+        ),
+        "radiology": term_for(
+            DiagnosticOrder.objects.exclude(modality__in=SPECIMEN_MODALITIES),
+            "reference",
+        ),
+    }
+
+    broken, formatted = [], 0
+    for code, term in terms.items():
+        if not term:
+            continue
+        response = client.get("/api/search/", {"q": term, "types": code})
+        if response.status_code != 200:
+            broken.append(
+                f"{code}: {response.status_code} "
+                f"{response.content.decode()[:160]}"
+            )
+            continue
+        body = json.loads(response.content.decode())
+        hits = [g for g in body["groups"] if g["type"] == code]
+        if not hits:
+            broken.append(f"{code}: searched {term!r} and found nothing")
+            continue
+        formatted += 1
+        sample = hits[0]["results"][0]
+        assert sample["label"], f"{code} produced a hit with no label"
+        assert sample["url"], f"{code} produced a hit with no url"
+
+    assert not broken, "\n".join(broken)
+    assert formatted >= 8, f"only {formatted} sources had data to prove"
+
+
+def test_browsing_never_reaches_a_patient_you_have_no_relationship_with(tenant):
+    """The general check, not the specific one.
+
+    It does not care which source leaked; it asks the whole search box the one
+    question that matters, for four different roles across eight terms. Hits
+    flagged `by_reference` are excluded deliberately -- naming a record exactly
+    is the documented lookup, and `retrieve` by UUID already permits it. Only
+    browsing is under test.
+    """
+    from apps.identity.models import Membership, User
+    from apps.rbac.relationships import related_patient_ids
+    from apps.rbac.services import resolve_authorization
+
+    models_by_type = {
+        "appointment": ("apps.scheduling.models", "Appointment"),
+        "prescription": ("apps.prescriptions.models", "Prescription"),
+        "admission": ("apps.inpatient.models", "Admission"),
+        "lab": ("apps.diagnostics.models", "DiagnosticOrder"),
+        "radiology": ("apps.diagnostics.models", "DiagnosticOrder"),
+    }
+    terms = ["un", "ra", "sh", "MRN", "ka", "de", "ma", "sa"]
+
+    checked, leaked = 0, []
+    for email in ("doctor@manakamana.test", "counter@manakamana.test",
+                  "pharmacy@manakamana.test", "manager@manakamana.test"):
+        user = User.objects.filter(email=email).first()
+        client = _report_client(email, tenant)
+        if user is None or client is None:
+            continue
+        membership = Membership.objects.filter(
+            user=user, organization__slug=tenant.slug,
+        ).first()
+        if membership is None:
+            continue
+        allowed = related_patient_ids(
+            user.uuid, resolve_authorization(user, membership),
+        )
+        # `None` means no restriction -- an owner or an organization-scoped
+        # role -- and is not the same answer as an empty set. Nothing to prove
+        # about somebody who is allowed everything.
+        if allowed is None:
+            continue
+
+        for term in terms:
+            response = client.get("/api/search/", {"q": term})
+            assert response.status_code == 200, (
+                f"{email} q={term!r} -> {response.status_code}"
+            )
+            for group in json.loads(response.content.decode())["groups"]:
+                if group["type"] not in models_by_type:
+                    continue
+                module_name, model_name = models_by_type[group["type"]]
+                module = __import__(module_name, fromlist=[model_name])
+                model = getattr(module, model_name)
+                for hit in group["results"]:
+                    if hit.get("by_reference"):
+                        continue
+                    checked += 1
+                    row = model.objects.get(uuid=hit["uuid"])
+                    if row.patient_id not in allowed:
+                        leaked.append(
+                            f"{email} q={term!r} {group['type']} "
+                            f"{hit['label']}"
+                        )
+
+    assert not leaked, "\n".join(leaked)
+    assert checked > 0, "no clinical hits were examined, so nothing was proved"
+
+
+def test_search_refuses_sources_the_caller_lacks_and_names_them(tenant):
+    """Refused, not silently dropped -- and the refusal discloses nothing.
+
+    Somebody who cannot see a domain they know exists concludes the system does
+    not have it; somebody told they lack `employee.read` asks for it. The
+    refusal names the permission and never a count, because a count of what you
+    were refused tells you the record is there, which is usually the secret.
+    """
+    client = _report_client("counter@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no counter account")
+
+    body = json.loads(client.get("/api/search/", {"q": "ra"}).content.decode())
+    refused = {entry["type"] for entry in body["refused"]}
+    assert refused, "a counter assistant was refused nothing at all"
+    assert "employee" in refused, "the counter can search staff records"
+    for entry in body["refused"]:
+        assert entry["needs"], "a refusal that does not say what it needs"
+        assert "count" not in entry and "results" not in entry
+
+    # The count describes only what this caller may see. "42 results, 3 shown"
+    # would report the other 39 into existence.
+    assert body["count"] == sum(
+        len(group["results"]) for group in body["groups"]
+    )
+    assert refused.isdisjoint({group["type"] for group in body["groups"]})
+
+
+def test_a_two_character_wildcard_is_not_a_way_to_browse_everything(tenant):
+    """`%` and `_` are LIKE wildcards, and `q=%%` clears the length check.
+
+    The ORM escapes them, so this passes today -- it is here because it is a
+    one-line regression away from not passing, and the failure would be a
+    silent export of the patient index through the search box.
+    """
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    for term in ("%%", "__", "%a", "a%"):
+        body = json.loads(
+            client.get("/api/search/", {"q": term}).content.decode()
+        )
+        assert body["count"] == 0, f"{term!r} matched {body['count']} rows"
+
+    # And one character is refused outright: two characters against a patient
+    # table is every patient whose name contains "ra".
+    assert client.get("/api/search/", {"q": "r"}).status_code == 400
+
+
+def test_one_search_writes_one_audit_event(tenant):
+    """Not one per hit.
+
+    A search touching twenty-five patients must not write twenty-five access
+    rows; that drowns the log `record_patient_access` exists to keep readable.
+    The term is recorded, because "who searched for that name?" is the question
+    asked after a privacy complaint.
+    """
+    from apps.audit.models import AuditAction, AuditEvent
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    before = AuditEvent.objects.filter(entity_type="search").count()
+    response = client.get("/api/search/", {"q": "ra"})
+    assert response.status_code == 200
+    hits = json.loads(response.content.decode())["count"]
+
+    written = AuditEvent.objects.filter(entity_type="search").count() - before
+    assert written == 1, f"one search wrote {written} audit events"
+
+    event = AuditEvent.objects.filter(
+        entity_type="search",
+    ).order_by("-occurred_at").first()
+    assert event.entity_label == "ra"
+    assert event.metadata["hits"] == hits
+    # Searching people is a different act from searching the medicine
+    # catalogue, and the severity has to say so or the log cannot be filtered.
+    if hits:
+        assert event.action == AuditAction.VIEW_SENSITIVE

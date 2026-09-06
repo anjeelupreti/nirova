@@ -18,20 +18,20 @@ line here, it is not scoped.**
 | | Sections | Feature lines |
 |---|---|---|
 | Built `[x]` | 22 | — |
-| Built to depth 🔷 | 10 | — |
-| Partial `[~]` | 45 | — |
-| Not started `[ ]` | 46 | — |
-| **Done** | **33 of 132** | **1147** |
-| **Outstanding** | **99** | **627** |
+| Built to depth 🔷 | 11 | — |
+| Partial `[~]` | 47 | — |
+| Not started `[ ]` | 43 | — |
+| **Done** | **33 of 132** | **1154** |
+| **Outstanding** | **99** | **628** |
 
-*Recounted from the file on 6 September 2026, after documents (§122) and
-the report library (§105) landed.*
+*Recounted from the file on 6 September 2026, after documents (§122), the
+report library (§105) and global search (§104) landed.*
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-627 understates the remaining work: in the later phases some lines group
+628 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2619,9 +2619,33 @@ because three modules were already working around its absence.*
 
 # Phase 10 — Intelligence `[ ]`
 
-## §104 Global search `[ ]`
-- [ ] Patient, employee, doctor, medicine, supplier, invoice, appointment, prescription, admission, lab, radiology, document
-- [ ] Permission filtering applied before results are returned
+## §104 Global search `[~]`
+
+*`apps/search`, mounted at `/api/search/`. Eleven sources.*
+
+- [x] Patients, staff, medicines, suppliers, invoices, documents,
+      appointments, prescriptions, admissions, laboratory, imaging
+- [x] Permission filtering applied **before** the query is issued, not after
+      the rows come back. Filtering after fetching leaks a count, logs a read
+      that should not have happened, and leaves a timing difference
+- [x] The count is the count of what the caller may see. No "42 results, 3
+      shown" — that reports the other 39 into existence
+- [x] Clinical sources narrow to the care relationship; patient identity stays
+      browsable, because the registration desk cannot have a relationship with
+      somebody not yet registered
+- [x] An **exact** reference searches unnarrowed while partial and name matches
+      stay narrowed — naming a record is a lookup, typing part of a name is a
+      browse. Flagged `by_reference` and counted separately in the audit event
+- [x] Sources the caller cannot use are named with the permission they need,
+      never silently dropped
+- [x] One audit event per search recording the term, not one per hit
+- [ ] Doctors as a source in their own right — today they are found through
+      `employee`, which is right for staff lookup and wrong for "who can I
+      refer this patient to?"
+- [ ] Ranking across sources. Each source ranks exact before partial; the
+      groups themselves are returned in a fixed order rather than by relevance
+- [ ] Trigram or full-text indexes. `icontains` across eleven sources is 27
+      queries and 94ms on demo data — fine now, measured, and not a plan
 
 ## §105 Reporting engine `[~]`
 
