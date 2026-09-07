@@ -257,7 +257,8 @@ def book_appointment(
             "source": source,
         },
     )
-    _meter(organization, MeterKey.APPOINTMENTS)
+    _meter(organization, MeterKey.APPOINTMENTS,
+           key=f"appointment:{appointment.uuid}")
     return appointment
 
 
@@ -533,12 +534,8 @@ def queue_statistics(facility, on_date=None) -> dict:
     }
 
 
-def _meter(organization, meter_key: str) -> None:
-    from apps.metering.models import UsageEvent
+def _meter(organization, meter_key: str, key: str = "") -> None:
+    """Thin wrapper kept for the call sites; the logic lives in metering."""
+    from apps.metering.services import meter
 
-    try:
-        UsageEvent.objects.create(
-            organization=organization, meter_key=meter_key, quantity=1
-        )
-    except Exception:
-        logger.exception("Failed to meter %s for %s", meter_key, organization.slug)
+    meter(organization, meter_key, key=key)

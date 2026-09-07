@@ -3045,3 +3045,76 @@ def test_a_death_on_the_ward_reaches_the_patient_record(tenant):
         "a patient died on the ward and their own record still says active"
     )
     assert patient.date_of_death is not None
+
+
+# ---------------------------------------------------------------------------
+# Log 210 - counting a customer's usage exactly once
+# ---------------------------------------------------------------------------
+
+
+def test_metering_the_same_thing_twice_bills_it_once(tenant):
+    """`idempotency_key` was declared with a unique constraint already on it,
+    and no caller ever supplied a key.
+
+    So the constraint guarded nothing and a retried registration billed the
+    customer twice. The key describes the thing rather than the moment --
+    `patient:<uuid>` is the same key on the first attempt and the fourth, which
+    is the only property that makes a retry safe.
+    """
+    from apps.metering.models import UsageEvent
+    from apps.metering.services import meter
+
+    key = "test:idempotency"
+    UsageEvent.objects.filter(idempotency_key=key).delete()
+
+    assert meter(tenant, "patients", key=key) is True
+    assert meter(tenant, "patients", key=key) is False
+    assert meter(tenant, "patients", key=key) is False
+    assert UsageEvent.objects.filter(idempotency_key=key).count() == 1
+
+    # **The transaction must still be usable.** PostgreSQL aborts the whole
+    # transaction on a constraint violation, so without a savepoint around the
+    # insert this query fails with "you can't execute queries until the end of
+    # the atomic block" — and the two collisions above would have taken patient
+    # registration down with them rather than being harmlessly ignored. The old
+    # helpers were safe only because they never supplied a key and so never
+    # collided; adding the key without the savepoint would have been an outage.
+    assert UsageEvent.objects.filter(organization=tenant).exists()
+
+    # A meter with no natural subject still counts every call, which is the
+    # previous behaviour preserved rather than an accident.
+    before = UsageEvent.objects.filter(
+        organization=tenant, meter_key="api_calls", idempotency_key="",
+    ).count()
+    meter(tenant, "api_calls")
+    meter(tenant, "api_calls")
+    assert UsageEvent.objects.filter(
+        organization=tenant, meter_key="api_calls", idempotency_key="",
+    ).count() == before + 2
+
+
+def test_registering_a_patient_meters_it_with_a_key(tenant):
+    """The call site, not just the helper.
+
+    Both places that metered had grown their own private `_meter` with the same
+    body and the same omission, so testing the helper alone would prove nothing
+    about whether anybody passes a key to it.
+    """
+    from apps.metering.models import UsageEvent
+    from apps.patients.models import Patient
+
+    patient = Patient.objects.exclude(status="merged").first()
+    if patient is None:
+        pytest.skip("no patients")
+
+    from apps.patients.services import _meter_patient
+
+    UsageEvent.objects.filter(
+        idempotency_key=f"patient:{patient.uuid}",
+    ).delete()
+    _meter_patient(tenant, patient)
+    _meter_patient(tenant, patient)
+
+    assert UsageEvent.objects.filter(
+        idempotency_key=f"patient:{patient.uuid}",
+    ).count() == 1

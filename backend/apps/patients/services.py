@@ -207,26 +207,24 @@ def register_patient(
         entity_label=f"{patient.full_name} ({patient.mrn})",
         metadata={"mrn": patient.mrn, "forced_over_duplicate": force},
     )
-    _meter_patient(organization)
+    _meter_patient(organization, patient)
 
     logger.info("Registered patient %s for %s", patient.mrn, organization.slug)
     return patient
 
 
-def _meter_patient(organization) -> None:
-    """Count the registration against the patient meter.
+def _meter_patient(organization, patient) -> None:
+    """Count the registration against the patient meter, exactly once.
 
-    Failure is logged, never raised: a metering problem is a billing problem
-    for the platform to fix, not a reason a patient cannot be registered.
+    Keyed on the patient rather than the moment, so a retried registration --
+    a client that resent the request, a queue that redelivered it -- counts
+    one patient and not two. The key was the missing half of a uniqueness
+    constraint that had been sitting on the table unused since metering was
+    written.
     """
-    from apps.metering.models import UsageEvent
+    from apps.metering.services import meter
 
-    try:
-        UsageEvent.objects.create(
-            organization=organization, meter_key=MeterKey.PATIENTS, quantity=1
-        )
-    except Exception:
-        logger.exception("Failed to meter patient registration for %s", organization.slug)
+    meter(organization, MeterKey.PATIENTS, key=f"patient:{patient.uuid}")
 
 
 # ---------------------------------------------------------------------------

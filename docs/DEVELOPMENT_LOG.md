@@ -7514,3 +7514,55 @@ I went to act on were wrong, and the only reason the third was not is that I
 checked all three first.
 
 **Affects.** `apps/identity/models.py`, `docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 210 - Billing a customer twice, and the savepoint that stops it being an outage
+2026-09-07 · Backend · fix
+
+From entry 209's corrected list. `UsageEvent.idempotency_key` was declared when
+metering was written, with a partial unique constraint over `(organization,
+meter_key, idempotency_key)` **already in place** — and no caller ever supplied
+a key. So the constraint guarded nothing, and a retried registration billed the
+customer twice.
+
+Both call sites had grown their own private `_meter` helper with the same body
+and the same omission, which is how the gap stayed invisible: neither looked
+wrong on its own. One helper now, and three things it gets right.
+
+**The key describes the thing, not the moment.** `patient:<uuid>` is the same
+key on the first attempt and the fourth, which is the only property that makes
+a retry safe. A timestamp would be unique every time and therefore useless.
+
+**A duplicate is a success.** "This was already counted" is exactly what the
+constraint exists to say, so it is caught by name and returns quietly. Logging
+it as an exception would fill the platform log with reports of the mechanism
+working.
+
+**And the part that matters most: the insert sits in a savepoint.** PostgreSQL
+aborts the entire transaction on a constraint violation, so `except Exception:
+log and carry on` does not carry on — every later query fails with "you can't
+execute queries until the end of the atomic block". The old helpers were safe
+only *because* they never supplied a key and so never collided. **Adding the
+key without the savepoint would have turned a harmless double-count into a
+failed patient registration**, the second time anybody retried one.
+
+Log 162, met for the fourth time in this project. It is not a special case; it
+is how PostgreSQL works, and every "swallow the error and continue" in a
+transaction is wrong without one.
+
+**Proved rather than asserted**, like entries 201 and 203: removing the
+savepoint makes both new tests fail on exactly that message. And the test
+exercises the *call site* as well as the helper, because two places metered and
+testing the helper alone would prove nothing about whether anybody passes it a
+key.
+
+**Also fixed on the way:** a scratchpad file named `pwd.py` shadowed the
+standard library's `pwd` for Celery, which fails with a stack trace pointing at
+Django settings and nothing to do with the cause. Renamed.
+
+**Verified.** Three calls with one key write one event; the transaction survives
+both collisions; an unkeyed meter still counts every call. 121 tests.
+
+**Affects.** `apps/metering/services.py` (new), `apps/patients/services.py`,
+`apps/scheduling/services.py`, `tests/test_invariants.py`.
