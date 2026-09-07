@@ -7636,3 +7636,37 @@ route and the status. 123 tests.
 **Affects.** `apps/common/permissions.py`, `apps/procurement/views.py`, and the
 viewsets in `billing`, `pharmacy`, `insurance`, `payroll`, `finance`, `hr`,
 `inpatient`, `diagnostics`, `scheduling` and `theatre`.
+
+---
+
+## 212 - DELETE, measured and clean
+2026-09-07 · Backend · verification
+
+A negative result, recorded so nobody repeats the work.
+
+Entry 211 measured PATCH because an empty body is harmless. DELETE is the more
+destructive verb and needs no body at all, so it measures just as cleanly —
+the only obstacle is that a sweep of it destroys what it touches.
+
+**Run inside a test, which rolls back.** That is the whole trick, and it is
+only available because entry 208 established that this suite does roll back. A
+sweep that would have wrecked the demo tenant as a script cost twenty seconds
+as a test.
+
+**Eight routes accept a DELETE, and every one of them from a role that holds
+the matching write permission** — a manager on payroll structures and shifts, a
+pharmacy manager on suppliers and supplier invoices. `HasPermission.of(...,
+write=...)` checks any unsafe verb rather than PATCH specifically, so the
+previous entry's fix covered this without a second thought being needed.
+
+**And the deletion is soft.** `BaseModel.delete()` stamps `deleted_at` rather
+than removing the row, so a tax slab that last year's payslips were computed
+from does not vanish from underneath them. Worth checking rather than assuming:
+"a manager can delete a tax slab" reads alarmingly until you know what delete
+means here.
+
+**Left open: POST.** Harder than the other two, and honestly so — a create
+needs a valid body per endpoint, and a sweep that posts nonsense tests the
+serializer rather than the permission.
+
+**Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.

@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1190** |
+| **Done** | **33 of 132** | **1191** |
 | **Outstanding** | **99** | **639** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -455,9 +455,15 @@ from somebody who should not have one**. See §211.*
       beyond being signed in, and they decide attendance and therefore pay
 - [x] `SupplierViewSet.perform_update` — an auditor could change a supplier's
       bank account number
-- [ ] The same measurement for POST and DELETE. PATCH was chosen because an
-      empty body is harmless; a POST sweep needs a valid body per endpoint and
-      a DELETE sweep destroys what it tests
+- [x] **DELETE measured and clean.** Run inside a test, which rolls back, so a
+      sweep that would have destroyed the demo tenant as a script was harmless.
+      Eight routes accept a DELETE and every one of them from a role that holds
+      the write permission — the `write=` guard covers any unsafe verb, not
+      only PATCH. And `BaseModel.delete()` is a soft delete, so a tax slab a
+      historical payslip was computed from does not vanish from under it
+- [ ] The same measurement for POST. Harder than the other two: a create needs
+      a valid body per endpoint, and a sweep that posts nonsense tests the
+      serializer rather than the permission
 
 ## Standing guards
 
