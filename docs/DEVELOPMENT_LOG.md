@@ -8069,3 +8069,52 @@ already built out of things that adapt. It had simply never been told it was
 allowed to.
 
 **Affects.** `patient/src/App.tsx`.
+
+---
+
+## 221 - A table and nothing behind it
+2026-09-07 · Frontend · feature
+
+The user's fourth observation: most screens are view-only, with no way to see
+more, and the product feels boring.
+
+Measured across all twenty-eight screens — table rows against clickable rows and
+detail state — the flattest are stark. **Facilities: six columns, five rows, no
+way into any of them.** Queue and change requests the same shape. Pharmacy has
+seventeen table rows and no detail view at all.
+
+**And the data was already there.** `/org/facilities/{uuid}/` has always
+returned the street address, the phone, the operating hours, the licence number
+and its expiry, and every department with its code — through a
+`FacilityDetailSerializer` written for exactly this and **called by no screen**.
+The same theme as the whole of the last two days: the capability exists and
+nothing reaches it. Here it made the product look thinner than it is.
+
+**One component, not a pattern per screen.** `DetailPanel` is a slide-over on a
+wide screen and a full sheet on a narrow one — a modal centred on a phone leaves
+no room for content and hides the list it came from, and a full-width sheet on a
+monitor loses the context that makes a detail view worth having. Escape closes
+it, so does the backdrop; a panel that traps you is worse than no panel.
+
+`DetailRow` renders a missing value as an em dash rather than leaving it blank,
+because **blank reads as "the screen failed to load it" and a dash reads as
+"there isn't one"** — different facts a reader should not have to guess between.
+
+**Applied to Facilities first**, which had the least and gains the most. Read-only
+by design — facilities exist only through an approved change request, so the
+footer offers that rather than an edit button — but **read-only is not the same
+as shallow, and the screen had been confusing the two.** The licence expiry
+turns red once it is past, because a date sitting quietly in a list is not a
+warning.
+
+**Fetched on the row click, not with the list.** The detail carries every
+department; loading all of them to show one is work nobody asked for.
+
+**Verified** against the live endpoint: every field the panel reads is present,
+and the facility used has four departments, so it renders something real.
+
+**The rest of the screens are on the checklist**, deliberately. Twenty-seven
+more is a considered pass; the component and the shape of it exist now.
+
+**Affects.** `frontend/src/components/ui/primitives.tsx`,
+`frontend/src/pages/Facilities.tsx`, `frontend/src/types/index.ts`.

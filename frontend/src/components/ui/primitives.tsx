@@ -395,3 +395,120 @@ export function AlertDescription({
     <div className={cn("text-sm [&_p]:leading-relaxed", className)} {...props} />
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Detail panel                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The panel a row opens into.
+ *
+ * Most screens in this console are a table and nothing else: rows you can read
+ * and no way to see the thing behind one. The data is usually already there —
+ * facilities have a detail endpoint with their departments on it that no screen
+ * had ever called — so the product reads as thinner than it is.
+ *
+ * One component so that opening a row feels the same everywhere. A pattern
+ * invented per screen is how a product ends up with four different ideas of
+ * what "view" means.
+ *
+ * **A slide-over on a wide screen, a full sheet on a narrow one.** A modal
+ * centred on a phone leaves no room for the content and hides the list it came
+ * from; a full-width sheet on a monitor loses the context that makes a detail
+ * view worth having.
+ *
+ * Escape closes it, and so does the backdrop. Both are what people try first,
+ * and a panel that traps you is worse than no panel.
+ */
+export function DetailPanel({
+  open,
+  title,
+  subtitle,
+  onClose,
+  footer,
+  children,
+}: {
+  open: boolean;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  onClose: () => void;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  React.useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div
+        className="absolute inset-0 bg-black/30"
+        onClick={onClose}
+        aria-hidden
+      />
+      <aside
+        role="dialog"
+        aria-modal="true"
+        className="relative flex h-full w-full flex-col border-l bg-background shadow-xl sm:max-w-lg"
+      >
+        <header className="flex items-start justify-between gap-3 border-b px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold">{title}</h2>
+            {subtitle ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {subtitle}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-muted"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+
+        {footer ? (
+          <footer className="border-t px-5 py-3">{footer}</footer>
+        ) : null}
+      </aside>
+    </div>
+  );
+}
+
+/**
+ * One labelled fact inside a detail panel.
+ *
+ * A dash rather than an empty cell for a missing value: blank reads as "the
+ * screen failed to load it", and an em dash reads as "there isn't one", which
+ * are different things a reader should not have to guess between.
+ */
+export function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children?: React.ReactNode;
+}) {
+  const empty =
+    children === null || children === undefined || children === "";
+  return (
+    <div className="flex items-start justify-between gap-4 border-b py-2 last:border-b-0">
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-right text-sm">
+        {empty ? <span className="text-muted-foreground">—</span> : children}
+      </span>
+    </div>
+  );
+}

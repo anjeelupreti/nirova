@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1202** |
+| **Done** | **33 of 132** | **1204** |
 | **Outstanding** | **99** | **647** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -512,11 +512,19 @@ when somebody happens to notice.*
       strip; the screens behind it assume a desk
 
 **Depth: view-only screens with nowhere to go**
-- [ ] Most lists show rows and stop — no detail panel, no edit, often no way to
-      see the thing behind the row. The data is there and the screen does not
-      offer it, which makes the product feel thinner than it is
-- [ ] A consistent pattern for row → detail → edit, so it reads the same
-      everywhere rather than being invented per screen
+- [x] `DetailPanel` and `DetailRow`: one component so a row opens the same way
+      everywhere, a slide-over on a wide screen and a full sheet on a narrow
+      one. A missing value renders as an em dash, because blank reads as
+      "failed to load" (§221)
+- [x] Facilities, which had the least and gains the most: address, contact,
+      operating hours, licence with an expiry that turns red once past, and
+      every department — all of it already returned by an endpoint no screen
+      had ever called
+- [ ] The other twenty-seven screens. Measured flattest first: Queue, change
+      requests and Pharmacy (seventeen rows, no detail at all), then Platform
+      and Time
+- [ ] Edit as well as view, where editing is legitimate. Facilities is
+      deliberately not — they change only through an approved request
 - [ ] Empty states that say what to do next rather than showing an empty table
 
 ## The console does not know what it may do

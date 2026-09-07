@@ -85,14 +85,45 @@ export interface Facility {
   uuid: string;
   code: string;
   name: string;
+  short_name?: string;
   facility_type: string;
   status: string;
   is_operational: boolean;
+  province?: string;
   district: string;
   municipality: string;
+  ward?: string;
+  street_address?: string;
+  phone?: string;
+  email?: string;
+  pan_number?: string;
+  license_number?: string;
+  license_expires_on?: string | null;
+  is_24x7?: boolean;
+  operating_hours?: string;
   department_count: number;
   opened_on: string | null;
+  closed_on?: string | null;
   origin_reference: string;
+}
+
+/** One department, as the facility detail endpoint returns it. */
+export interface FacilityDepartment {
+  uuid: string;
+  code: string;
+  name: string;
+  kind?: string;
+  is_revenue_generating?: boolean;
+  is_active?: boolean;
+}
+
+/**
+ * `/org/facilities/{uuid}/` — everything above plus the departments.
+ *
+ * The endpoint has always returned these; no screen had ever asked for them.
+ */
+export interface FacilityDetail extends Facility {
+  departments: FacilityDepartment[];
 }
 
 /** Capacity for one facility type. Drives the capacity screen. */
