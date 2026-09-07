@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1183** |
-| **Outstanding** | **99** | **636** |
+| **Done** | **33 of 132** | **1184** |
+| **Outstanding** | **99** | **639** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-636 understates the remaining work: in the later phases some lines group
+639 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -380,14 +380,25 @@ rather than redesigning around it.
 
 ## Columns declared and never written
 
-*Found by asking the source, not the database: a field mentioned nowhere except
-its own model definition is one nothing can set. The database version of the
-question returned 466 findings because it cannot tell "no code writes this"
-from "the seed does not fill it in"; the source version returns 166, and both
-known bugs were in it.*
+*Found by asking the source, not the database. Three passes, and the first two
+were wrong in ways worth recording.*
 
-*Most of the 166 are genuinely optional. These are the ones that are a missing
-feature wearing a column as a disguise.*
+*Asking the **database** which columns are null on every row returned 466 — it
+cannot tell "no code writes this" from "the seed does not fill it in".*
+
+*Asking the **Python** for a constructor keyword, an attribute assignment or a
+name near an `update()` returned 166 — better, but it misses the least visible
+way a field gets written: **a DRF serializer writes every name in its `fields`
+tuple generically**, with the field never appearing on the left of an
+assignment. `Supplier.drug_licence_expires_on` and `Facility.license_expires_on`
+were both reported unwired and are both editable through their API.*
+
+*Splitting those two buckets gives the real numbers: **55 fields nothing can
+write at all**, and **107 that only an API can write** — empty because no
+screen collects them, which is a different problem. The difference between a
+list somebody acts on and a list somebody stops believing.*
+
+*These are the ones that are a missing feature wearing a column as a disguise.*
 
 - [x] `Invoice.due_date` — nothing could be overdue (§205)
 - [x] `EmploymentContract.ends_on` — no fixed term could run out (§206)
@@ -403,10 +414,21 @@ feature wearing a column as a disguise.*
 - [ ] `TransfusionReaction.investigation_findings` /
       `reported_to_authority_at` — reportable events that cannot be recorded
       as reported
-- [ ] `Supplier.drug_licence_number` / `drug_licence_expires_on` — buying from
-      a supplier whose licence has lapsed is a regulatory problem, and the
-      reminder engine has nothing to watch
-- [ ] `Facility.license_expires_on` — same, for the hospital's own licence
+- [x] `User.password_changed_at` — declared and never assigned, so the age of
+      every password was unknown and any rotation rule unenforceable. Now
+      stamped by `set_password` itself, which is the only level that makes it
+      true for every caller (§209)
+- [ ] `Supplier.drug_licence_expires_on` and `Facility.license_expires_on` are
+      **editable through their APIs but collected on no screen**, so both are
+      empty and the reminder engine has nothing to watch. A form, not a field
+- [ ] `TenantDatabase.last_backup_at` / `backup_location` — **nothing records
+      that a backup happened.** For a healthcare tenant that is the most
+      serious entry on this list
+- [ ] `UsageEvent.idempotency_key` — declared and unwritten, so a retried
+      metering event double-counts and the customer is billed for it
+- [ ] `User.mfa_secret` / `mfa_enabled` — MFA is declared and not implemented
+- [ ] No self-service password change endpoint at all; `must_change_password`
+      exists with nothing to satisfy it
 - [ ] `Appointment.reminder_sent_at` — appointment reminders cannot be tracked;
       needs §93's channels
 - [ ] `Subscription.current_period_start` / `current_period_end` — billing

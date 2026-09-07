@@ -87,6 +87,22 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDModel, TimeStampedModel):
     def __str__(self):
         return f"{self.full_name} <{self.email}>"
 
+    def set_password(self, raw_password):
+        """Set the password and stamp when it changed.
+
+        Overridden here rather than at each call site, which is the only place
+        that makes it true for all of them -- `password_changed_at` was
+        declared when this model was written and **never assigned by anything**,
+        so the age of every password in the system was unknown and any rotation
+        rule was unenforceable.
+
+        It does not save. Neither does Django's, and a field that persisted
+        itself while the password beside it waited for an explicit `save()`
+        would be the two disagreeing exactly when it mattered.
+        """
+        super().set_password(raw_password)
+        self.password_changed_at = timezone.now()
+
     @property
     def display_name(self) -> str:
         return self.preferred_name or self.full_name

@@ -7457,3 +7457,60 @@ search — which is correct, since records outlive people. 119 tests.
 
 **Affects.** `apps/patients/services.py`, `apps/icu/services.py`,
 `apps/inpatient/services.py`, `tests/test_invariants.py`.
+
+---
+
+## 209 - Correcting my own finding, and the age of every password
+2026-09-07 · Backend · fix
+
+Entry 207 reported 166 fields that no code writes. **That number was wrong, and
+the way it was wrong is the point of this entry.**
+
+The check looked for three ways a field gets written: a constructor keyword, an
+attribute assignment, and a quoted name near an `update()`. It missed the
+fourth and least visible one — **a DRF serializer writes every name in its
+`fields` tuple generically**, without the field ever appearing on the left of an
+assignment.
+
+I found this by going to act on two of the findings.
+`Supplier.drug_licence_expires_on` and `Facility.license_expires_on` were both
+reported unwired, and both are editable through their API. Had I not checked
+before building, I would have "fixed" two fields that were never broken and
+written a confident log entry about it.
+
+Split properly: **55 fields nothing can write at all**, and **107 that only an
+API can write** — empty because no screen collects them, which is a different
+problem with a different fix. A form, not a field. The corrected figures and
+the reasoning are on the checklist, replacing the 166.
+
+**A second false positive, of another kind.** `User.last_login` is never set —
+and should not be. It is inherited from Django's `AbstractBaseUser`, and this
+project deliberately keeps its own `last_active_at`, which *is* written on every
+successful login. Two fields meaning nearly the same thing, one of them dead by
+design.
+
+**What survived checking.** `User.password_changed_at` was declared when the
+model was written and never assigned by anything, so the age of every password
+in the system was unknown and any rotation rule unenforceable.
+
+Fixed by overriding `set_password` on the model rather than at each call site,
+which is the only level that makes it true for all of them — including the two
+seeds and `create_user`, none of which would have been remembered.
+
+**It deliberately does not save.** Neither does Django's, and a field that
+persisted itself while the password beside it waited for an explicit `save()`
+would be the two disagreeing at exactly the moment it mattered.
+
+**Left on the checklist, named rather than fixed**, because each is a feature
+rather than a wire: nothing records that a backup happened, which for a
+healthcare tenant is the most serious entry on the list; a metering event has
+no idempotency key, so a retry double-counts and the customer is billed for it;
+MFA is declared and not implemented; and there is no self-service password
+change endpoint at all, though `must_change_password` exists with nothing to
+satisfy it.
+
+**The lesson worth keeping:** a finding is a hypothesis. Two of the first three
+I went to act on were wrong, and the only reason the third was not is that I
+checked all three first.
+
+**Affects.** `apps/identity/models.py`, `docs/IMPLEMENTATION_CHECKLIST.md`.
