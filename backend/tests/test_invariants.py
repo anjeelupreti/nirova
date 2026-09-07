@@ -3677,3 +3677,87 @@ def test_a_service_and_its_price_can_be_set_up(tenant):
         content_type="application/json",
     )
     assert refused.status_code == 403
+
+
+def test_the_hr_lists_can_be_configured(tenant):
+    """Four lists, none of which the console could touch.
+
+    The holiday calendar decides which days are worked, which decides
+    attendance, which decides pay. Shift patterns decide when somebody is late.
+    Leave types carry entitlements. Positions are the org chart.
+
+    **Each is checked by the identifier its own endpoint uses**, which is the
+    part that bit: `/hr/leave-types/` is addressed by `code`, and PATCHing it
+    by uuid returns **404** — indistinguishable from a permissions problem
+    unless you know. The generic master-data screen guessed uuid first, so
+    editing a leave type would have failed silently in exactly that way.
+    """
+    owner = _report_client("owner@manakamana.test", tenant)
+    doctor = _report_client("doctor@manakamana.test", tenant)
+    if owner is None or doctor is None:
+        pytest.skip("missing demo accounts")
+    owner.raise_request_exception = False
+    doctor.raise_request_exception = False
+
+    cases = [
+        ("/api/hr/holidays/", "uuid",
+         {"name": "Test Holiday", "date": "2026-12-25"}),
+        ("/api/hr/shifts/", "uuid",
+         {"code": "TSHIFT", "name": "Test Shift",
+          "starts_at": "08:00", "ends_at": "16:00"}),
+        ("/api/hr/leave-types/", "code",
+         {"code": "TLV", "name": "Test Leave"}),
+        ("/api/hr/positions/", "uuid",
+         {"code": "TPOS", "title": "Test Position"}),
+    ]
+
+    for endpoint, lookup, body in cases:
+        assert owner.get(endpoint).status_code == 200, endpoint
+
+        created = owner.post(
+            endpoint, data=json.dumps(body), content_type="application/json",
+        )
+        assert created.status_code == 201, f"{endpoint}: {created.content[:200]}"
+
+        identifier = json.loads(created.content.decode())[lookup]
+        edited = owner.patch(
+            f"{endpoint}{identifier}/", data=json.dumps({}),
+            content_type="application/json",
+        )
+        assert edited.status_code == 200, (
+            f"{endpoint} could not be edited by {lookup} "
+            f"({edited.status_code}) — the screen addresses rows this way"
+        )
+
+        refused = doctor.post(
+            endpoint, data=json.dumps(body), content_type="application/json",
+        )
+        assert refused.status_code == 403, endpoint
+
+
+def test_a_leave_type_is_addressed_by_code_not_uuid(tenant):
+    """Stated on its own because it is a trap, not a detail.
+
+    Both identifiers are in the payload, only one of them works, and the wrong
+    one fails with a 404 that reads as "you may not" rather than "not here".
+    """
+    owner = _report_client("owner@manakamana.test", tenant)
+    if owner is None:
+        pytest.skip("no owner account")
+    owner.raise_request_exception = False
+
+    rows = json.loads(
+        owner.get("/api/hr/leave-types/").content.decode(),
+    )["results"]
+    if not rows:
+        pytest.skip("no leave types")
+    row = rows[0]
+
+    assert owner.patch(
+        f"/api/hr/leave-types/{row['code']}/", data=json.dumps({}),
+        content_type="application/json",
+    ).status_code == 200
+    assert owner.patch(
+        f"/api/hr/leave-types/{row['uuid']}/", data=json.dumps({}),
+        content_type="application/json",
+    ).status_code == 404

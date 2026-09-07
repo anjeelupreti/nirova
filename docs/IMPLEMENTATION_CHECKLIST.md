@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1207** |
+| **Done** | **33 of 132** | **1209** |
 | **Outstanding** | **99** | **646** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -516,6 +516,9 @@ when somebody happens to notice.*
       everywhere, a slide-over on a wide screen and a full sheet on a narrow
       one. A missing value renders as an em dash, because blank reads as
       "failed to load" (§221)
+- [x] `MasterData`: a whole configure-this-list screen from a description —
+      columns, fields, required marks, search, empty state, detail and edit.
+      Each new list is about twenty lines (§225)
 - [x] Facilities, which had the least and gains the most: address, contact,
       operating hours, licence with an expiry that turns red once past, and
       every department — all of it already returned by an endpoint no screen
@@ -556,9 +559,12 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
 - [x] **Services and prices**, at Money → Services & prices: list, filter by
       category, search, view, add and edit, with the price lists that override
       the default shown beside them (§224)
+- [x] **Holidays, shift patterns, leave types and positions**, at Time →
+      Setup — written as configuration against a shared `MasterData` screen
+      rather than a fourth hand-built copy (§225)
 - [ ] The rest of the master data with no screen: price *list* editing,
-      theatres, stock locations, holidays, shifts, positions, tax slabs,
-      salary structures, payers
+      theatres, stock locations, tax slabs, salary structures, contribution
+      schemes, payers, insurance packages, diagnostic tests, referral providers
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 

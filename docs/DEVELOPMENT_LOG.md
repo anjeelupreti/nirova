@@ -8251,3 +8251,47 @@ pointing at a service that no longer answers to that name.
 
 **Affects.** `frontend/src/pages/Services.tsx` (new), `frontend/src/App.tsx`,
 `frontend/src/types/index.ts`, `backend/tests/test_invariants.py`.
+
+---
+
+## 225 - Four more lists, and the screen that stopped being copied
+2026-09-08 · Frontend · feature
+
+Holidays, shift patterns, leave types and positions — the four lists an HR
+department configures, none of which the console could touch. The holiday
+calendar decides which days are worked, which decides attendance, which decides
+pay; a missing festival is a day everybody is marked absent for.
+
+**Written as configuration, not as a fourth screen.** By the third hand-built
+master-data screen — the catalogue, wards and beds, services and prices — the
+shape was identical and only the fields differed. A fourth copy is the point at
+which they start drifting: four ideas of what "add" means, four empty states,
+four ways of marking a required field. So the shape moved into `MasterData` and
+each list is now a description of itself. A holiday calendar is twenty lines of
+configuration rather than three hundred of JSX.
+
+**What it deliberately will not express.** Anything needing a service call
+rather than a POST — a ward with a run of beds, a payroll run, an approval —
+stays its own screen. Bending those into a configuration format would produce a
+language nobody can read.
+
+**And it found a real bug in itself, by measuring.** The component identified
+rows by `uuid` with `code` as a fallback. `/hr/leave-types/` is addressed by
+**`code`**, and PATCHing it by uuid returns **404** — which reads as "you may
+not" rather than "not here", so editing a leave type would have failed in a way
+that looks exactly like a permissions problem. Both identifiers are in the
+payload and only one of them works. The spec now declares the lookup field
+where it is not `uuid`, and the trap has a test of its own because it is a trap
+rather than a detail.
+
+**The permissions are the ones settled in §215**, not fresh guesses: holidays
+and leave types behind `config.update`, shifts and positions behind
+`employee.manage` — which is what an HR manager holds, after a first attempt
+left only the organization administrator able to add a public holiday.
+
+**Verified**: all four list, create and edit **by the identifier their own
+endpoint uses**, and a doctor is refused all four.
+
+**Affects.** `frontend/src/components/MasterData.tsx` (new),
+`frontend/src/pages/hr/Setup.tsx` (new), `frontend/src/pages/Time.tsx`,
+`backend/tests/test_invariants.py`.

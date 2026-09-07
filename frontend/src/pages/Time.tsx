@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Settings2,
   AlertTriangle,
   CalendarDays,
   CalendarRange,
@@ -31,6 +32,7 @@ import {
   Users,
 } from "lucide-react";
 
+import HrSetup from "@/pages/hr/Setup";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -68,13 +70,16 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 
-type Tab = "mine" | "roster" | "leave" | "attendance";
+type Tab = "mine" | "roster" | "leave" | "attendance" | "setup";
 
 const TABS: { id: Tab; label: string; icon: typeof Clock }[] = [
   { id: "mine", label: "My time", icon: Clock },
   { id: "roster", label: "Roster", icon: CalendarRange },
   { id: "leave", label: "Away", icon: Plane },
   { id: "attendance", label: "Attendance", icon: Users },
+  // Last: the calendar, the shift patterns and the leave types are configured
+  // once a year and read every day by everything above them.
+  { id: "setup", label: "Setup", icon: Settings2 },
 ];
 
 const STATUS_TONE: Record<string, string> = {
@@ -165,6 +170,7 @@ export default function TimePage() {
       {tab === "roster" && <Roster facility={facility} />}
       {tab === "leave" && <Away facility={facility} />}
       {tab === "attendance" && <TeamAttendance facility={facility} />}
+      {tab === "setup" && <HrSetup />}
     </div>
   );
 }
