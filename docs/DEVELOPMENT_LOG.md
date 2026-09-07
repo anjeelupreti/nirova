@@ -7843,15 +7843,27 @@ guard makes the test name the role and route; 124 tests.
 one screen uses it.** Twenty-eight pages, and every action in the console is
 offered to everybody and left to the API to refuse.
 
-That was always a rough edge and became a real one the day entry 211 tightened
-twenty write endpoints: buttons that used to work now return 403, and the
-console has no idea. The backend learned to refuse correctly and the frontend
-never learned to ask.
+**Corrected before pushing.** I first wrote that entry 211's tightening had
+turned working buttons into 403s. **It had not**, and I should have checked
+before saying so. Crossing the twenty-six endpoints that gained a `write=`
+guard against all eighty-five writes the console performs finds exactly one
+overlap: the supplier licence editor I had written myself two entries earlier.
 
-Applied where I created the problem — the supplier licence editor, which needs
-`supplier.manage`. Somebody without it now sees the licence and its expiry as
-text, with a line saying which permission changing it would take, rather than a
-form and a button that fails.
+Which is a better observation than the one I replaced. **Twenty-five of those
+master-data endpoints have no screen at all** — no form creates a product, a
+price list, a holiday, a ward or a tax slab. That is precisely why they sat
+unguarded: the same theme as every other finding in this pass, that the bugs
+live in the code nobody executes. Nothing broke because nothing was calling
+them.
+
+The rough edge is real all the same, just smaller and older than I claimed: the
+console offers every action to everybody and lets the API refuse.
+
+Applied where it actually matters — the supplier licence editor, which needs
+`supplier.manage` and is the one place the console writes to a tightened
+endpoint. Somebody without it now sees the licence and its expiry as text, with
+a line saying which permission changing it would take, rather than a form and a
+button that fails.
 
 **Hiding a control is a courtesy, not a control.** The API refusal is the
 guard; this only stops somebody being offered a button that cannot work. Worth
@@ -7859,8 +7871,14 @@ stating because the opposite belief is how a hidden button becomes somebody's
 authorisation model.
 
 **And the rest of the console is left, deliberately, on the checklist.** Twenty-
-eight screens is a deliberate pass, not something to do while passing —
-and doing it badly, by hiding things that are actually permitted, is worse than
-the current honest failure. The pattern and the reasoning are here for it.
+eight screens is a deliberate pass, not something to do while passing — and
+doing it badly, by hiding things that are actually permitted, is worse than the
+current honest failure. The pattern and the reasoning are here for it.
+
+**The lesson is the correction itself.** I wrote a confident causal claim —
+"this change broke that" — about work I had done an hour earlier, and it was
+wrong. It cost one grep to check. Entry 209 said a finding is a hypothesis and
+entry 213 said an assumption is too; this adds the third: **so is a claim about
+what your own change did.**
 
 **Affects.** `frontend/src/pages/Procurement.tsx`.

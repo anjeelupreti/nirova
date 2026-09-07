@@ -22,7 +22,7 @@ line here, it is not scoped.**
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
 | **Done** | **33 of 132** | **1195** |
-| **Outstanding** | **99** | **640** |
+| **Outstanding** | **99** | **641** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-640 understates the remaining work: in the later phases some lines group
+641 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -482,13 +482,21 @@ from somebody who should not have one**. See §211.*
 ## The console does not know what it may do
 
 *`useSession` has exposed `can(permission)` since it was written and **no screen
-used it**, so every action is offered to everybody and left to the API to refuse.
-Harmless while the API was lax; a rough edge now that it is not (§211, §216).*
+used it**, so every action is offered to everybody and left to the API to refuse
+(§216).*
+
+*Checked rather than assumed: of the twenty-six endpoints that gained a write
+guard in §211, exactly one is written to by the console. **The other
+twenty-five have no screen at all** — no form creates a product, a price list, a
+holiday, a ward or a tax slab, which is why they sat unguarded so long.*
 
 - [x] The supplier licence editor asks before offering the form
 - [ ] The other twenty-seven screens. A deliberate pass, not something to do
       while passing — hiding a control somebody is actually permitted is worse
       than the honest 403 they get today
+- [ ] **Screens for the twenty-five master-data endpoints that have none.** A
+      product, a price list, a holiday, a ward and a tax slab can each be
+      created only by somebody with an HTTP client
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 
