@@ -39,6 +39,7 @@ import {
   Truck,
 } from "lucide-react";
 
+import { useSession } from "@/hooks/useSession";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -1432,6 +1433,14 @@ function LicenceEditor({
   supplier: Supplier;
   onSaved: (updated: Supplier) => void;
 }) {
+  // **Hiding a control is a courtesy, not a control.** The API refuses without
+  // `supplier.manage` and that refusal is the actual guard; this only stops
+  // somebody being offered a button that cannot work. `can()` had existed on
+  // the session hook since it was written and **not one screen used it**, so
+  // every action in the console was offered to everybody and left to fail --
+  // which got worse the day the write permissions were tightened.
+  const { can } = useSession();
+  const mayEdit = can("supplier.manage");
   const [number, setNumber] = useState(supplier.drug_licence_number ?? "");
   const [expires, setExpires] = useState(
     supplier.drug_licence_expires_on ?? "",
@@ -1483,6 +1492,18 @@ function LicenceEditor({
         <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs font-medium">Drug licence</span>
       </div>
+      {!mayEdit ? (
+        <div className="text-xs text-muted-foreground">
+          {supplier.drug_licence_number || "No licence number recorded"}
+          {supplier.drug_licence_expires_on
+            ? ` · expires ${supplier.drug_licence_expires_on}`
+            : " · no expiry recorded"}
+          <span className="mt-1 block">
+            Changing this needs the supplier management permission.
+          </span>
+        </div>
+      ) : (
+      <>
       <div className="grid gap-2 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="licence-number" className="text-xs">
@@ -1527,6 +1548,8 @@ function LicenceEditor({
           </span>
         ) : null}
       </div>
+      </>
+      )}
     </div>
   );
 }

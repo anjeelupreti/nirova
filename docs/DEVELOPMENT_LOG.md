@@ -7833,3 +7833,34 @@ guard makes the test name the role and route; 124 tests.
 **Affects.** `apps/rbac/permissions.py`, `apps/rbac/services.py`,
 `apps/pharmacy/views.py`, `apps/billing/views.py`, `apps/diagnostics/views.py`,
 `apps/hr/attendance_api.py`, `tests/test_invariants.py`.
+
+---
+
+## 216 - A helper nothing called
+2026-09-07 · Frontend · fix
+
+`useSession` has exposed a `can(permission)` helper since it was written. **Not
+one screen uses it.** Twenty-eight pages, and every action in the console is
+offered to everybody and left to the API to refuse.
+
+That was always a rough edge and became a real one the day entry 211 tightened
+twenty write endpoints: buttons that used to work now return 403, and the
+console has no idea. The backend learned to refuse correctly and the frontend
+never learned to ask.
+
+Applied where I created the problem — the supplier licence editor, which needs
+`supplier.manage`. Somebody without it now sees the licence and its expiry as
+text, with a line saying which permission changing it would take, rather than a
+form and a button that fails.
+
+**Hiding a control is a courtesy, not a control.** The API refusal is the
+guard; this only stops somebody being offered a button that cannot work. Worth
+stating because the opposite belief is how a hidden button becomes somebody's
+authorisation model.
+
+**And the rest of the console is left, deliberately, on the checklist.** Twenty-
+eight screens is a deliberate pass, not something to do while passing —
+and doing it badly, by hiding things that are actually permitted, is worse than
+the current honest failure. The pattern and the reasoning are here for it.
+
+**Affects.** `frontend/src/pages/Procurement.tsx`.
