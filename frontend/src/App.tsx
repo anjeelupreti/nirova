@@ -86,84 +86,117 @@ import {
 } from "@/components/ui/primitives";
 
 /**
- * Navigation, grouped.
+ * Navigation: grouped by the job, and filtered by what this person may open.
  *
- * A flat row of fourteen tabs is a row nobody scans — and the product is
- * still growing. Grouping by *who uses it* rather than by module keeps each
- * list short enough to read: a receptionist lives in Clinical, a storekeeper
- * in Supply, and neither has to walk past the other's screens to find their
- * own.
+ * **Grouped by the job, not by the module.** "Clinical" used to hold eleven
+ * items spanning outpatients, inpatients, theatre, the laboratory and the
+ * patient portal — and a list of eleven is a list nobody scans. Each group is
+ * now two to five items, named for the work rather than the codebase: somebody
+ * on a ward opens Inpatient, somebody at a counter opens Pharmacy & supply,
+ * and neither walks past the other's screens.
+ *
+ * **`needs` hides what this person cannot open.** Every item's permission is
+ * *derived* from the endpoints its screen actually calls, not guessed —
+ * guessing would be the wrong kind of confident, because hiding a menu item
+ * somebody can use is worse than showing one they cannot. Items with no
+ * `needs` are open to everybody who is signed in.
+ *
+ * A group whose every item is hidden does not render its heading either. An
+ * empty section with a title is worse than no section: it looks like something
+ * failed to load.
+ *
+ * **This is a courtesy, not a control.** The API refuses on its own and that
+ * refusal is the guard; this only stops people being offered doors that do not
+ * open for them.
  *
  * `platformOnly` marks the console that reads the control plane rather than a
- * tenant. It is hidden from customers entirely, not merely refused on click:
- * a menu item that always errors teaches people to ignore errors.
+ * tenant. Hidden from customers entirely, for the same reason: a menu item
+ * that always errors teaches people to ignore errors.
  */
 const NAV_GROUPS: {
   label: string;
   platformOnly?: boolean;
-  items: { to: string; label: string; icon: typeof Users }[];
+  items: {
+    to: string;
+    label: string;
+    icon: typeof Users;
+    needs?: string;
+    /** The scope the screen's own endpoints ask for. */
+    scope?: string;
+  }[];
 }[] = [
   {
     label: "Mine",
     items: [
       { to: "/workspace", label: "What needs you", icon: Inbox },
       { to: "/notifications", label: "Notifications", icon: Bell },
+      // Moved out of People, which is where somebody looks for *other* people.
+      { to: "/self-service", label: "Self service", icon: UserCheck },
     ],
   },
   {
-    label: "Clinical",
+    label: "Patients",
     items: [
-      { to: "/patients", label: "Patients", icon: Users },
-      { to: "/queue", label: "Queue", icon: ListOrdered },
-      { to: "/emergency", label: "Emergency", icon: Siren },
-      { to: "/wards", label: "Wards", icon: BedDouble },
-      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck },
-      { to: "/theatre", label: "Theatre", icon: Scissors },
-      { to: "/icu", label: "ICU", icon: HeartPulse },
-      { to: "/diagnostics", label: "Diagnostics", icon: FlaskConical },
-      { to: "/blood", label: "Blood bank", icon: Droplet },
-      { to: "/referrals", label: "Referrals", icon: Send },
-      { to: "/portal", label: "Patient portal", icon: KeyRound },
+      { to: "/patients", label: "Patients", icon: Users, needs: "patient.read", scope: "own" },
+      { to: "/queue", label: "Queue", icon: ListOrdered, needs: "encounter.read", scope: "own" },
+      { to: "/portal", label: "Portal accounts", icon: KeyRound, needs: "patient.read", scope: "facility" },
     ],
   },
   {
-    label: "Supply",
+    label: "Inpatient",
     items: [
-      { to: "/pharmacy", label: "Pharmacy", icon: Package },
-      { to: "/counter", label: "Counter", icon: ShoppingCart },
-      { to: "/procurement", label: "Procurement", icon: Truck },
+      { to: "/emergency", label: "Emergency", icon: Siren, needs: "encounter.read", scope: "own" },
+      { to: "/wards", label: "Wards", icon: BedDouble, needs: "encounter.read", scope: "own" },
+      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck, needs: "encounter.read", scope: "facility" },
+      { to: "/icu", label: "ICU", icon: HeartPulse, needs: "encounter.read", scope: "facility" },
+      { to: "/theatre", label: "Theatre", icon: Scissors, needs: "encounter.read", scope: "facility" },
+    ],
+  },
+  {
+    label: "Diagnostics",
+    items: [
+      { to: "/diagnostics", label: "Laboratory & imaging", icon: FlaskConical, needs: "encounter.read", scope: "own" },
+      { to: "/blood", label: "Blood bank", icon: Droplet, needs: "encounter.read", scope: "facility" },
+      { to: "/referrals", label: "Referrals", icon: Send, needs: "encounter.read", scope: "facility" },
+    ],
+  },
+  {
+    label: "Pharmacy & supply",
+    items: [
+      { to: "/pharmacy", label: "Pharmacy", icon: Package, needs: "stock.read", scope: "facility" },
+      { to: "/counter", label: "Counter", icon: ShoppingCart, needs: "sale.read", scope: "facility" },
+      { to: "/procurement", label: "Procurement", icon: Truck, needs: "purchase.read", scope: "facility" },
     ],
   },
   {
     label: "Money",
     items: [
-      { to: "/billing", label: "Billing", icon: Receipt },
-      { to: "/finance", label: "Finance", icon: Scale },
-      { to: "/claims", label: "Claims", icon: ShieldCheck },
-      { to: "/payroll", label: "Payroll", icon: Coins },
+      { to: "/billing", label: "Billing", icon: Receipt, needs: "invoice.read", scope: "facility" },
+      { to: "/claims", label: "Insurance claims", icon: ShieldCheck, needs: "invoice.read", scope: "facility" },
+      { to: "/finance", label: "Finance", icon: Scale, needs: "report.read", scope: "facility" },
     ],
   },
   {
     label: "People",
     items: [
-      { to: "/self-service", label: "Self Service", icon: UserCheck },
-      { to: "/people", label: "Directory", icon: UserCog },
-      { to: "/time", label: "Time", icon: CalendarClock },
+      { to: "/people", label: "Directory", icon: UserCog, needs: "employee.read", scope: "own" },
+      { to: "/time", label: "Attendance & leave", icon: CalendarClock, needs: "attendance.read", scope: "own" },
+      { to: "/payroll", label: "Payroll", icon: Coins, needs: "salary.read", scope: "facility" },
     ],
   },
   {
     label: "Oversight",
     items: [
-      { to: "/reports", label: "Reports", icon: BarChart3 },
-      { to: "/privacy", label: "Privacy", icon: ShieldAlert },
+      { to: "/reports", label: "Reports", icon: BarChart3, needs: "report.read", scope: "own" },
+      { to: "/privacy", label: "Privacy", icon: ShieldAlert, needs: "privacy.review", scope: "facility" },
     ],
   },
   {
     label: "Organization",
     items: [
-      { to: "/facilities", label: "Facilities", icon: Building2 },
-      { to: "/capacity", label: "Capacity", icon: GaugeCircle },
-      { to: "/facility-requests", label: "Change requests", icon: ScrollText },
+      { to: "/facilities", label: "Facilities", icon: Building2, needs: "facility.read", scope: "facility" },
+      { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "facility.read", scope: "facility" },
+      { to: "/facility-requests", label: "Change requests", icon: ScrollText, needs: "facility.read", scope: "facility" },
     ],
   },
   {
@@ -188,7 +221,7 @@ export default function App() {
     return <LoginPage session={session} />;
   }
 
-  const { session: data } = session;
+  const { session: data, can } = session;
   const organization = data?.organization;
   //: Where "/" goes. A platform operator with no membership has nothing to
   //: see on a clinical screen, and a customer has no business on the console.
@@ -197,6 +230,23 @@ export default function App() {
     (data?.memberships.length ?? 0) === 0;
   const home = isPlatformOnly ? "/platform" : "/patients";
   const memberships = data?.memberships ?? [];
+
+  /**
+   * The groups this person can actually use.
+   *
+   * Filtered once here rather than inside both navigations, so the sidebar and
+   * the narrow-screen strip can never disagree about what exists. A group with
+   * nothing left in it is dropped entirely: an empty section under a heading
+   * looks like something failed to load.
+   */
+  const visibleGroups = NAV_GROUPS.filter(
+    (group) => !group.platformOnly || data?.user.is_platform_staff,
+  )
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.needs || can(item.needs, item.scope)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -281,9 +331,7 @@ export default function App() {
           ones nobody finds.
         */}
         <nav className="hidden w-52 shrink-0 space-y-5 lg:block">
-          {NAV_GROUPS.filter(
-            (group) => !group.platformOnly || data?.user.is_platform_staff,
-          ).map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label}>
               <p className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {group.label}
@@ -317,9 +365,7 @@ export default function App() {
           a ward round actually uses.
         */}
         <nav className="-mx-4 mb-2 flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
-          {NAV_GROUPS.filter(
-            (group) => !group.platformOnly || data?.user.is_platform_staff,
-          )
+          {visibleGroups
             .flatMap((group) => group.items)
             .map(({ to, label, icon: Icon }) => (
               <NavLink

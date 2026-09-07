@@ -28,12 +28,35 @@ export interface UseSession {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   switchOrganization: (slug: string) => Promise<void>;
-  /** Does the signed-in user hold this permission in the current org? */
-  can: (permission: string) => boolean;
+  /**
+   * Does the signed-in user hold this permission, at least at this scope?
+   *
+   * The scope defaults to `own` — "do they hold it at all" — because that is
+   * the right question for a screen whose endpoints ask for the narrowest
+   * grant, and the wrong one everywhere else.
+   */
+  can: (permission: string, scope?: string) => boolean;
   /** Is this module included in the current subscription? */
   hasModule: (module: string) => boolean;
   refresh: () => Promise<void>;
 }
+
+/**
+ * The scope ladder, narrowest first — the same order the backend uses.
+ *
+ * Duplicated here rather than fetched because it is a fixed vocabulary, not
+ * data; if it ever stops matching `apps/rbac/permissions.py` the sidebar
+ * quietly starts lying, so the two belong in one commit whenever it changes.
+ */
+const SCOPE_LADDER = [
+  "own",
+  "own_patients",
+  "unit",
+  "department",
+  "facility",
+  "multi_facility",
+  "organization",
+];
 
 export function useSession(): UseSession {
   const [session, setSession] = useState<Session | null>(null);
@@ -107,12 +130,33 @@ export function useSession(): UseSession {
     [load],
   );
 
+  /**
+   * May this person do `permission`, at least at `scope`?
+   *
+   * **The scope half is not optional in practice.** Holding a permission and
+   * holding it widely enough are different questions, and answering only the
+   * first produced a sidebar where a doctor saw eleven screens that returned
+   * 403 — every one of them a permission they hold at *department* scope
+   * against an endpoint that asks for *facility*.
+   *
+   * The ladder is the backend's, in the backend's order. A grant satisfies a
+   * requirement when it sits at or above it: someone with organization scope
+   * passes a facility check, and someone with department scope does not.
+   */
   const can = useCallback(
-    (permission: string) => {
+    (permission: string, scope: string = "own") => {
       const auth = session?.authorization;
       if (!auth) return false;
       if (auth.is_organization_owner) return true;
-      return permission in auth.permissions;
+      const granted = auth.permissions[permission];
+      if (!granted) return false;
+      const held = SCOPE_LADDER.indexOf(granted.scope);
+      const needed = SCOPE_LADDER.indexOf(scope);
+      // An unrecognised scope on either side is treated as "cannot tell", and
+      // the honest answer there is to show the item and let the API refuse --
+      // hiding something somebody can use is the worse mistake.
+      if (held === -1 || needed === -1) return true;
+      return held >= needed;
     },
     [session],
   );

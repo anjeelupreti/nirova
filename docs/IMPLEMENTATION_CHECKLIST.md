@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1198** |
-| **Outstanding** | **99** | **641** |
+| **Done** | **33 of 132** | **1201** |
+| **Outstanding** | **99** | **647** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-641 understates the remaining work: in the later phases some lines group
+647 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -478,6 +478,42 @@ from somebody who should not have one**. See §211.*
       reported twenty 500s, **nineteen of which were the probe's own poisoned
       transaction** — one real bug: creating a payroll profile could never
       succeed at all (§214)
+
+## §130 Console experience
+
+*Not in the original 132 sections, and that is the point: the specification
+describes what the system must **do** and says almost nothing about what using it
+is **like**. Raised on 7 September 2026 after a walk through the console, and
+tracked here so it competes for attention with the rest rather than being done
+when somebody happens to notice.*
+
+**Navigation**
+- [x] A screen nobody in this role can open is not in their sidebar. Each
+      item's permission **and scope** are derived from the endpoints its screen
+      calls, not guessed; a doctor went from sixteen items with eleven dead to
+      six that all open (§219)
+- [x] Regrouped by the job: ten groups of two to five, replacing a "Clinical"
+      group of eleven spanning outpatients, inpatients, theatre and the lab
+- [x] Self service moved to Mine
+- [ ] **A doctor can reach six of twenty-five screens.** Honest, and thin. ICU,
+      blood bank, referrals and the nurse workspace ask for `encounter.read` at
+      *facility* while a doctor holds *department* — the same defect fixed for
+      other clinical reads earlier. Whether a doctor should reach those is a
+      clinical access decision, not a refactor
+
+**Responsiveness**
+- [ ] **The patient portal is laid out for a phone only.** Patients open things
+      on laptops too, and a fixed narrow column on a wide screen reads as
+      broken rather than as focused
+- [ ] Every screen at tablet width. The console assumes a desk
+
+**Depth: view-only screens with nowhere to go**
+- [ ] Most lists show rows and stop — no detail panel, no edit, often no way to
+      see the thing behind the row. The data is there and the screen does not
+      offer it, which makes the product feel thinner than it is
+- [ ] A consistent pattern for row → detail → edit, so it reads the same
+      everywhere rather than being invented per screen
+- [ ] Empty states that say what to do next rather than showing an empty table
 
 ## The console does not know what it may do
 

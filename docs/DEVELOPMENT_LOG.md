@@ -7981,3 +7981,57 @@ asserts it.
 **Affects.** `apps/inpatient/api.py`, `apps/theatre/api.py`,
 `apps/scheduling/serializers.py`, `apps/pharmacy/serializers.py`,
 `tests/test_invariants.py`.
+
+---
+
+## 219 - A menu of doors that do not open
+2026-09-07 · Frontend · feature, fix
+
+Raised by the user after walking through the console: **if a page is not
+accessible to somebody, do not offer it to them** — and the grouping is
+haphazard.
+
+Both true. The sidebar listed all twenty-eight screens to everybody and left the
+API to refuse, and "Clinical" held eleven items spanning outpatients,
+inpatients, theatre, the laboratory and the patient portal. A list of eleven is
+a list nobody scans.
+
+**Regrouped by the job rather than by the module.** Ten groups of two to five:
+Mine, Patients, Inpatient, Diagnostics, Pharmacy & supply, Money, People,
+Oversight, Organization, Platform. Self service moved out of People, which is
+where somebody looks for *other* people.
+
+**Each item's permission is derived, not guessed.** A script walks the URL conf,
+resolves the endpoints each page actually calls, and reads the permission the
+serving view declares. Guessing would be the wrong kind of confident here,
+because **hiding a menu item somebody can use is worse than showing one they
+cannot** — the first is invisible and the second merely annoying.
+
+**And the scope half is not optional, which took a measurement to learn.**
+`can()` compared permission *names* only. With that, a doctor's sidebar showed
+sixteen items of which **eleven answered 403** — every one a permission they
+hold at *department* scope against an endpoint asking for *facility*. `can()`
+now takes a scope and compares on the backend's own ladder. The doctor's
+sidebar went from sixteen items, eleven broken, to six that all open.
+
+**The test checks both directions**, and the second is the one worth having.
+Shown-but-shut is the visible failure. Hidden-but-open is the dangerous one:
+quietly removing a screen somebody is entitled to, which nobody reports because
+they never knew it was there.
+
+**Proving the guard caught that I had not built one.** Converting the probe into
+a test, one of my string replacements silently did nothing, so the file still
+ended `assert True` — it passed with nine scopes deliberately loosened. Third
+time this session a guard has needed proving before it was worth anything, and
+the second time proving it found the guard itself was broken. **A silent no-op
+replace produces a test that looks exactly like a passing one.**
+
+**What it exposed, which is a product question rather than a bug.** A doctor can
+now see honestly that they cannot open the ICU, the blood bank, referrals or the
+nurse workspace — all `encounter.read` at *facility* scope while a doctor holds
+*department*. Previously they saw the doors and got 403s. Neither is right; the
+underlying question is whether a doctor should reach those at all, which is a
+clinical access decision and is on the checklist rather than made here.
+
+**Affects.** `frontend/src/App.tsx`, `frontend/src/hooks/useSession.ts`,
+`backend/tests/test_nav.py` (new).

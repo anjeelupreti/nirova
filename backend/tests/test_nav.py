@@ -1,0 +1,136 @@
+"""Every screen in somebody's sidebar must actually open for them.
+
+A menu of doors that do not open teaches people to distrust the menu -- and
+before this the sidebar showed all twenty-eight screens to everybody, so a
+doctor was offered eleven that answer 403.
+
+**Both halves are checked**, because only one of them is obvious. Shown-but-shut
+is the visible failure. Hidden-but-open is the dangerous one: quietly removing a
+screen somebody is entitled to use, which nobody reports as a bug because they
+never knew it was there.
+
+The permission *and the scope* come from the screen's own endpoints. Scope is
+not optional here: `encounter.read` at department scope and the same permission
+at facility scope are different answers, and checking only the name put eleven
+dead links in a doctor's sidebar.
+"""
+import json
+import re
+import pathlib
+import pytest
+
+pytestmark = pytest.mark.django_db(databases="__all__")
+
+# The screen's main endpoint, so "can they open it" is a real question.
+PROBE = {
+    "/patients": "/api/clinical/patients/",
+    "/queue": "/api/clinical/encounters/",
+    "/portal": "/api/portal/accounts/",
+    "/emergency": "/api/ed/arrivals/",
+    "/wards": "/api/ipd/wards/",
+    "/nurse-workspace": "/api/ipd/nurse-workspace/summary/",
+    "/icu": "/api/icu/stays/",
+    "/theatre": "/api/ot/cases/",
+    "/diagnostics": "/api/diagnostics/orders/",
+    "/blood": "/api/blood/units/",
+    "/referrals": "/api/referrals/",
+    "/pharmacy": "/api/pharmacy/dispenses/",
+    "/counter": "/api/pos/sales/",
+    "/procurement": "/api/procurement/suppliers/",
+    "/billing": "/api/billing/invoices/",
+    "/claims": "/api/insurance/claims/",
+    "/finance": "/api/finance/accounts/",
+    "/people": "/api/hr/employees/",
+    "/time": "/api/hr/attendance/",
+    "/payroll": "/api/payroll/runs/",
+    "/reports": "/api/reports/",
+    "/privacy": "/api/privacy/grants/",
+    "/facilities": "/api/org/facilities/",
+    "/capacity": "/api/org/facilities/capacity/",
+    "/facility-requests": "/api/org/facility-requests/",
+}
+
+
+def _nav():
+    app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.tsx"
+    text = app.read_text(encoding="utf-8")
+    items = []
+    for match in re.finditer(r'\{\s*to:\s*"(/[^"]*)"[^}]*\}', text):
+        entry = match.group(0)
+        needs = re.search(r'needs:\s*"([a-z_.]+)"', entry)
+        scope = re.search(r'scope:\s*"([a-z_]+)"', entry)
+        items.append((match.group(1),
+                      needs.group(1) if needs else None,
+                      scope.group(1) if scope else "own"))
+    return items
+
+
+def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
+    from django.test import Client
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    from apps.identity.models import User
+
+    items = _nav()
+    assert len(items) > 20, (
+        f"only {len(items)} navigation items parsed out of App.tsx; the "
+        "pattern has stopped matching and this test checks nothing"
+    )
+    problems = []
+
+    for email in ("doctor@manakamana.test", "counter@manakamana.test",
+                  "pharmacy@manakamana.test", "manager@manakamana.test",
+                  "prakash@manakamana.test"):
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            continue
+        client = Client(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}",
+            HTTP_X_ORGANIZATION=tenant.slug,
+            raise_request_exception=False,
+        )
+        auth = json.loads(client.get("/api/auth/session/").content.decode())
+        held = set((auth.get("authorization") or {}).get("permissions", {}))
+        owner = (auth.get("authorization") or {}).get("is_organization_owner")
+
+        shown, hidden_but_open, shown_but_shut = [], [], []
+        for route, needs, want in items:
+            granted = ((auth.get("authorization") or {})
+                       .get("permissions", {}).get(needs) if needs else None)
+            if owner or not needs:
+                visible = True
+            elif granted is None:
+                visible = False
+            else:
+                ladder = ["own", "own_patients", "unit", "department",
+                          "facility", "multi_facility", "organization"]
+                visible = (ladder.index(granted["scope"])
+                           >= ladder.index(want)) if (
+                    granted["scope"] in ladder and want in ladder) else True
+            probe = PROBE.get(route)
+            if probe is None:
+                continue
+            code = client.get(probe).status_code
+            opens = code == 200
+            if visible:
+                shown.append(route)
+                if not opens:
+                    shown_but_shut.append(f"{route} ({probe} -> {code})")
+            elif opens:
+                hidden_but_open.append(route)
+        assert shown, f"{email} sees no navigation at all"
+        problems.extend(
+            f"{email}: shown but refused -- {entry}"
+            for entry in shown_but_shut
+        )
+        # `/reports` is hidden from somebody without `report.read` on
+        # purpose: the library opens for anybody signed in and shows them
+        # a page on which every report is greyed out. A screen with
+        # nothing on it is not worth a menu entry.
+        problems.extend(
+            f"{email}: hidden but open -- {entry}"
+            for entry in hidden_but_open
+            if entry != "/reports"
+        )
+
+    assert not problems, chr(10).join(problems)
