@@ -311,6 +311,23 @@ def load() -> None:
             status__in=["approved", "partially_paid"], due_date__isnull=False,
         ).select_related("facility")
 
+    def supplier_licences():
+        from apps.procurement.models import Supplier, SupplierStatus
+
+        # Only suppliers anybody would order from. Chasing a blacklisted
+        # vendor's paperwork is noise on somebody's list.
+        return Supplier.objects.filter(
+            status=SupplierStatus.ACTIVE,
+            drug_licence_expires_on__isnull=False,
+        )
+
+    def facility_licences():
+        from apps.organization.models import Facility
+
+        return Facility.objects.filter(
+            status="active", license_expires_on__isnull=False,
+        )
+
     def preauthorisations():
         from apps.insurance.models import PreAuthorisation, PreAuthStatus
 
@@ -405,6 +422,41 @@ def load() -> None:
             bands=DUE_BANDS, horizon_days=7,
             link="/procurement",
             extra={"subject_type": "finance.SupplierInvoice"},
+        ),
+        Reminder(
+            code="supplier_licence_expiring", noun="drug licence",
+            subjects=supplier_licences, date_attr="drug_licence_expires_on",
+            describe=lambda row: f"{row.name}: drug licence",
+            detail=lambda row: " - ".join(filter(None, [
+                row.drug_licence_number, row.contact_person, row.phone,
+            ])),
+            permission="supplier.manage",
+            # A supplier belongs to no facility, so holders are resolved
+            # organization-wide. Narrowing it wrongly would be worse than not
+            # narrowing it: the reminder would reach nobody.
+            facility_of=lambda row: None,
+            link="/procurement",
+            extra={"subject_type": "procurement.Supplier"},
+        ),
+        Reminder(
+            code="facility_licence_expiring", noun="operating licence",
+            subjects=facility_licences, date_attr="license_expires_on",
+            describe=lambda row: f"{row.name}: operating licence",
+            detail=lambda row: row.code,
+            permission="facility.approve_change",
+            facility_of=lambda row: row,
+            # A hospital operating without a current licence is not a
+            # paperwork problem, so this one starts warning six months out
+            # rather than three.
+            horizon_days=180,
+            bands=(
+                (0, NotificationCategory.CRITICAL, "has expired"),
+                (30, NotificationCategory.CRITICAL, "expires within a month"),
+                (90, NotificationCategory.WARNING, "expires within three months"),
+                (180, NotificationCategory.REMINDER, "expires within six months"),
+            ),
+            link="/facilities",
+            extra={"subject_type": "organization.Facility"},
         ),
         Reminder(
             code="preauth_expiring", noun="pre-authorisation",

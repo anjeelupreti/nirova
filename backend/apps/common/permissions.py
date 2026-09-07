@@ -116,16 +116,31 @@ class HasPermission(BasePermission):
         if not self.permission_code:
             return True
 
-        required = self.permission_code
-        if self.write_code and request.method not in SAFE_METHODS:
-            required = self.write_code
-
-        allowed = authorization.has(required, self.required_scope)
-        if not allowed:
+        # Reading is the floor. **An unsafe verb needs both** -- the read
+        # permission to see the thing and the write permission to change it --
+        # rather than the write one instead of the read one.
+        #
+        # Not a theoretical tidy-up. `doctor` and `nurse` hold `patient.update`
+        # and not `invoice.read`, so with "write instead of read" a doctor
+        # could PATCH an insurance policy they are not allowed to open. Editing
+        # what you cannot see is wrong however narrow the permission is, and
+        # requiring both removes the whole class rather than the one instance I
+        # happened to notice.
+        if not authorization.has(self.permission_code, self.required_scope):
             self.message = (
-                f"This action requires the '{required}' permission."
+                f"This action requires the '{self.permission_code}' permission."
             )
-        return allowed
+            return False
+
+        if self.write_code and request.method not in SAFE_METHODS:
+            if not authorization.has(self.write_code, self.required_scope):
+                self.message = (
+                    f"Changing this requires the '{self.write_code}' "
+                    f"permission."
+                )
+                return False
+
+        return True
 
 
 class IsPlatformStaff(BasePermission):

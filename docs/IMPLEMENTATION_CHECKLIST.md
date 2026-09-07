@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1191** |
+| **Done** | **33 of 132** | **1192** |
 | **Outstanding** | **99** | **639** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -418,9 +418,13 @@ list somebody acts on and a list somebody stops believing.*
       every password was unknown and any rotation rule unenforceable. Now
       stamped by `set_password` itself, which is the only level that makes it
       true for every caller (§209)
-- [ ] `Supplier.drug_licence_expires_on` and `Facility.license_expires_on` are
-      **editable through their APIs but collected on no screen**, so both are
-      empty and the reminder engine has nothing to watch. A form, not a field
+- [x] `Supplier.drug_licence_expires_on` — an editor on the supplier panel,
+      and a reminder that watches it. The table already painted "expired" in
+      red and the column was empty everywhere, so the red never appeared (§213)
+- [ ] `Facility.license_expires_on` — the reminder exists and watches six
+      months out; the field is still collected on no screen, and facilities are
+      deliberately read-only outside the change-request flow, so this needs a
+      decision about whether a licence renewal is a "facility change"
 - [ ] `TenantDatabase.last_backup_at` / `backup_location` — **nothing records
       that a backup happened.** For a healthcare tenant that is the most
       serious entry on this list
@@ -2622,7 +2626,8 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
       at. A sweep that finds forty expiring batches, tells nobody and reports
       success looks exactly like a system that is watching
 - [x] Licence · probation · contract · batch expiry · blood unit expiry ·
-      supplier invoice due · pre-authorisation expiry
+      supplier invoice due · pre-authorisation expiry · supplier drug licence ·
+      facility operating licence
 - [x] `Invoice.due_date` is now written at issue, from credit terms held per
       patient category in the configuration hierarchy. The default is **due on
       issue** — the cash counter's status quo written down, not a credit

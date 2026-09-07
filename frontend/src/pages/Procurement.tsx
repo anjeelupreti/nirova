@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ShieldCheck,
   AlertTriangle,
   Ban,
   BadgeCheck,
@@ -64,6 +65,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  Label,
   Select,
   Table,
   TableBody,
@@ -1405,6 +1407,131 @@ function Receipts({ facility }: { facility: string }) {
 /* Suppliers                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The drug licence, and the only place it can be set.
+ *
+ * The number and its expiry have been on the supplier model, in the API and on
+ * the table above — the table even renders "expired" in red — and **no screen
+ * could ever set them**, so the column was empty everywhere and the red never
+ * appeared. A field the API accepts and no form collects is not a field, it is
+ * a plan.
+ *
+ * It matters because ordering is blocked on it: buying medicines from a
+ * distributor whose licence has lapsed is a regulatory breach, and the check
+ * that refuses the order reads this date.
+ *
+ * Saving needs `supplier.manage`, which is a different permission from the one
+ * that lets you see this panel — so the failure is shown here rather than
+ * swallowed, because a save button that silently does nothing is worse than one
+ * that is not there.
+ */
+function LicenceEditor({
+  supplier,
+  onSaved,
+}: {
+  supplier: Supplier;
+  onSaved: (updated: Supplier) => void;
+}) {
+  const [number, setNumber] = useState(supplier.drug_licence_number ?? "");
+  const [expires, setExpires] = useState(
+    supplier.drug_licence_expires_on ?? "",
+  );
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Reset when a different supplier is selected, or the form keeps showing the
+  // previous one's licence against the new one's name.
+  useEffect(() => {
+    setNumber(supplier.drug_licence_number ?? "");
+    setExpires(supplier.drug_licence_expires_on ?? "");
+    setProblem(null);
+    setSaved(false);
+  }, [supplier.uuid, supplier.drug_licence_number, supplier.drug_licence_expires_on]);
+
+  const changed =
+    number !== (supplier.drug_licence_number ?? "") ||
+    expires !== (supplier.drug_licence_expires_on ?? "");
+
+  async function save() {
+    setSaving(true);
+    setProblem(null);
+    try {
+      const updated = await api.patch<Supplier>(
+        `/procurement/suppliers/${supplier.uuid}/`,
+        {
+          drug_licence_number: number,
+          drug_licence_expires_on: expires || null,
+        },
+      );
+      onSaved(updated);
+      setSaved(true);
+    } catch (error) {
+      setProblem(
+        error instanceof ApiError
+          ? error.message
+          : "The licence could not be saved.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="mb-2 flex items-center gap-1.5">
+        <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium">Drug licence</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="licence-number" className="text-xs">
+            Number
+          </Label>
+          <Input
+            id="licence-number"
+            value={number}
+            onChange={(event) => setNumber(event.target.value)}
+            placeholder="DDA/…"
+            className="h-8"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="licence-expiry" className="text-xs">
+            Expires on
+          </Label>
+          <Input
+            id="licence-expiry"
+            type="date"
+            value={expires}
+            onChange={(event) => setExpires(event.target.value)}
+            className="h-8"
+          />
+        </div>
+      </div>
+      {problem ? (
+        <p className="mt-2 text-xs text-destructive">{problem}</p>
+      ) : null}
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7"
+          disabled={!changed || saving}
+          onClick={() => void save()}
+        >
+          {saving ? "Saving…" : "Save licence"}
+        </Button>
+        {saved && !changed ? (
+          <span className="text-xs text-muted-foreground">
+            Saved. The reminder will now watch it.
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+
 function Suppliers() {
   const [rows, setRows] = useState<Supplier[]>([]);
   const [open, setOpen] = useState<Supplier | null>(null);
@@ -1503,6 +1630,18 @@ function Suppliers() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <LicenceEditor
+              supplier={open}
+              onSaved={(updated) => {
+                setOpen(updated);
+                setRows((current) =>
+                  current.map((row) =>
+                    row.uuid === updated.uuid ? updated : row,
+                  ),
+                );
+              }}
+            />
+
             {!open.can_order_from && (
               <Alert variant="destructive">
                 <Ban className="h-4 w-4" />

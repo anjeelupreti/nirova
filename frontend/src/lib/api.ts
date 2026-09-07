@@ -217,6 +217,12 @@ export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>(path, { ...opts }),
   post: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "POST", body }),
+  // PATCH, not PUT. Every editable resource in this application is edited a
+  // field or two at a time, and a PUT would require the client to send back
+  // every field it was given -- including ones a newer server added and this
+  // client does not know about, which is how a save quietly blanks a column.
+  patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>(path, { ...opts, method: "PATCH", body }),
   download,
   openPrintable,
 };

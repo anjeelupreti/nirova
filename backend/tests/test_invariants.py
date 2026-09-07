@@ -2607,11 +2607,16 @@ def test_every_reminder_considers_rows_or_says_why_not(tenant):
     from apps.notifications import reminders
 
     known_empty = {
-        # `ends_on` is null on every contract; nothing sets it.
+        # Both of these are now *settable* -- `issue_contract` requires an end
+        # date on a fixed-term engagement, and `issue_invoice` writes a due
+        # date -- but nothing was back-filled, so the existing rows predate the
+        # fix and there is genuinely nothing yet to remind anybody about.
         "contract_ending",
-        # `due_date` is null on every invoice; nothing sets it, so an invoice
-        # can never be overdue and credit terms are unenforceable.
         "invoice_overdue",
+        # `Facility.license_expires_on` is editable through the API and
+        # collected on no screen, so it is empty everywhere. A form, not a
+        # field; it is on the checklist as such.
+        "facility_licence_expiring",
     }
 
     silent = []

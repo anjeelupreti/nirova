@@ -7670,3 +7670,58 @@ needs a valid body per endpoint, and a sweep that posts nonsense tests the
 serializer rather than the permission.
 
 **Affects.** `docs/IMPLEMENTATION_CHECKLIST.md`.
+
+---
+
+## 213 - The licence nothing could set, and writing what you cannot see
+2026-09-07 · Backend, Frontend · feature, fix
+
+Finishing the thread entry 211 interrupted.
+
+`Supplier.drug_licence_number` and `drug_licence_expires_on` have been on the
+model, in the API, and **rendered on the supplier table — which even paints
+"expired" in red** — and no screen could ever set them. So the column was empty
+everywhere and the red never appeared. **A field the API accepts and no form
+collects is not a field, it is a plan.**
+
+It matters because ordering is blocked on it: buying medicines from a
+distributor whose licence has lapsed is a regulatory breach, and the check that
+refuses the order reads this date.
+
+So: an editor on the supplier panel, `api.patch` on the client — **PATCH, not
+PUT**, because a PUT requires the client to send back every field it was given,
+including ones a newer server added and this client does not know about, which
+is how a save quietly blanks a column — and two new reminders, for the
+supplier's drug licence and the facility's own operating licence. The facility
+one starts warning six months out rather than three, because a hospital
+operating without a current licence is not a paperwork problem.
+
+**Verified end to end:** a pharmacy manager saves a licence expiring in twenty
+days, the sweep raises a `WARNING` naming the licence number and the contact,
+and a counter assistant and a doctor are refused.
+
+**And then a bug I had introduced two hours earlier.** I asked which roles hold
+a write permission without the read that goes with it — expecting none —
+and found two: `doctor` and `nurse` hold `patient.update` and not
+`invoice.read`. I had given `PolicyViewSet` `write="patient.update"`, so **a
+doctor could PATCH an insurance policy they are not allowed to open.**
+
+`HasPermission` now requires **both** on an unsafe verb: the read permission to
+see the thing and the write permission to change it, rather than the write one
+*instead of* the read one. Editing what you cannot see is wrong however narrow
+the permission is, and requiring both removes the whole class rather than the
+one instance I happened to notice.
+
+Re-measured after the change: the same 40 accepted and 36 refused, so nothing
+legitimate was lost — every role that could write could already read.
+
+**The pattern worth noting:** the check that found this was one I ran expecting
+a clean answer. Entry 209 said a finding is a hypothesis; this is the other
+half — **an assumption is a hypothesis too, and the cheap ones are worth
+testing precisely because you expect nothing.**
+
+**Verified.** 123 tests.
+
+**Affects.** `apps/common/permissions.py`, `apps/notifications/reminders.py`,
+`frontend/src/lib/api.ts`, `frontend/src/pages/Procurement.tsx`,
+`tests/test_invariants.py`.
