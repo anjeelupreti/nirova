@@ -61,24 +61,52 @@ def get_authorization(request):
     return authorization
 
 
+#: HTTP verbs that only read. Everything else changes something.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 class HasPermission(BasePermission):
     """Requires a named permission, at an optional minimum scope.
 
     Used as `HasPermission.of("facility.read")` so views stay declarative:
 
         permission_classes = [IsAuthenticated, HasPermission.of("facility.read")]
+
+    **`write=` is the important half, and it exists because leaving it out was
+    a real vulnerability.** A DRF `ModelViewSet` exposes every verb by default,
+    so a viewset declaring only a read permission accepted writes from anybody
+    who could read -- and the omission looks like nothing at all, because the
+    line that should be there simply is not.
+
+    Measured rather than reasoned about: an empty `PATCH` against every
+    patchable route, as eight roles, found **31 routes accepting a write from
+    somebody who should not have one.** Every role in the system, including a
+    doctor and a counter assistant, could rewrite the holiday calendar and the
+    leave types -- which decide attendance and therefore payroll. A counter
+    assistant could edit a price list: change a price, sell, change it back.
+
+    So:
+
+        HasPermission.of("invoice.read", write="invoice.create")
+
+    reads with one permission and writes with another, in one declaration that
+    is hard to half-write. Passing no `write` is still allowed and now means
+    "reading and writing genuinely take the same authority" -- a claim somebody
+    made on purpose, rather than a line nobody remembered.
     """
 
     permission_code = ""
+    write_code = ""
     required_scope = Scope.FACILITY
     message = "You do not have permission to perform this action."
 
     @classmethod
-    def of(cls, code: str, scope: str = Scope.FACILITY):
+    def of(cls, code: str, scope: str = Scope.FACILITY, write: str = ""):
         return type(
             f"HasPermission_{code.replace('.', '_')}",
             (cls,),
-            {"permission_code": code, "required_scope": scope},
+            {"permission_code": code, "required_scope": scope,
+             "write_code": write},
         )
 
     def has_permission(self, request, view):
@@ -87,10 +115,15 @@ class HasPermission(BasePermission):
             return False
         if not self.permission_code:
             return True
-        allowed = authorization.has(self.permission_code, self.required_scope)
+
+        required = self.permission_code
+        if self.write_code and request.method not in SAFE_METHODS:
+            required = self.write_code
+
+        allowed = authorization.has(required, self.required_scope)
         if not allowed:
             self.message = (
-                f"This action requires the '{self.permission_code}' permission."
+                f"This action requires the '{required}' permission."
             )
         return allowed
 

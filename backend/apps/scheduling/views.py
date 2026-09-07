@@ -44,7 +44,7 @@ from apps.scheduling.services import (
 
 class ProviderScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ProviderScheduleSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("facility.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("facility.read", write="facility.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         ProviderSchedule, relations=['facility', 'department'], fields=['weekday', 'is_active']

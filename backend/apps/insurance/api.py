@@ -324,7 +324,7 @@ class ReasonSerializer(serializers.Serializer):
 
 class PayerViewSet(viewsets.ModelViewSet):
     serializer_class = PayerSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="config.update")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(Payer, fields=["kind", "is_active"])
 
@@ -343,7 +343,7 @@ class PayerViewSet(viewsets.ModelViewSet):
 
 class PolicyViewSet(viewsets.ModelViewSet):
     serializer_class = PolicySerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="patient.update")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Policy, relations=["payer", "patient"], fields=["status"],
@@ -593,7 +593,7 @@ class ClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SchemePackageViewSet(viewsets.ModelViewSet):
     serializer_class = SchemePackageSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="config.update")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         SchemePackage, relations=["payer"], fields=["is_active", "category"],

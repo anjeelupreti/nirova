@@ -323,7 +323,7 @@ def _self_or(request, employee_uuid):
 
 class ShiftViewSet(viewsets.ModelViewSet):
     serializer_class = ShiftSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("employee.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("employee.read", write="employee.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Shift, relations=["facility", "department"],
@@ -340,7 +340,15 @@ class ShiftViewSet(viewsets.ModelViewSet):
 
 class HolidayViewSet(viewsets.ModelViewSet):
     serializer_class = HolidaySerializer
-    permission_classes = [IsAuthenticated]
+    # Read by everybody, changed by few. The holiday calendar decides which
+    # days are worked, which decides attendance, which decides pay -- and this
+    # viewset carried no permission at all beyond being signed in, so any
+    # authenticated user in the tenant could add a public holiday. Found by
+    # sending an empty PATCH as eight roles and watching all eight succeed.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("attendance.read", write="config.update"),
+    ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Holiday, relations=["facility"], fields=["is_optional"]
@@ -568,7 +576,12 @@ class RegularisationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class LeaveTypeViewSet(viewsets.ModelViewSet):
     serializer_class = LeaveTypeSerializer
-    permission_classes = [IsAuthenticated]
+    # Same as the holiday calendar, and for the same reason: leave types
+    # carry entitlements and whether the leave is paid.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("attendance.read", write="config.update"),
+    ]
     lookup_field = "code"
 
     def get_queryset(self):

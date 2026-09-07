@@ -80,7 +80,7 @@ class PositionViewSet(viewsets.ModelViewSet):
     """The org chart's jobs, whether or not anyone holds them."""
 
     serializer_class = PositionSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("employee.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("employee.read", write="employee.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Position, relations=["facility", "department"],

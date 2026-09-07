@@ -3118,3 +3118,125 @@ def test_registering_a_patient_meters_it_with_a_key(tenant):
     assert UsageEvent.objects.filter(
         idempotency_key=f"patient:{patient.uuid}",
     ).count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Log 211 - reading a thing and changing it are not the same authority
+# ---------------------------------------------------------------------------
+
+
+def test_master_data_refuses_writes_from_people_who_may_only_read_it(tenant):
+    """A `ModelViewSet` exposes every verb by default.
+
+    So a viewset declaring only a read permission accepted writes from anybody
+    who could read — and the omission looks like nothing at all, because the
+    line that should be there simply is not there.
+
+    Measured rather than reasoned about: an empty `PATCH` against every
+    patchable route, as eight roles, found 31 routes accepting a write from
+    somebody who should not have one. A counter assistant could edit a price
+    list — change a price, sell, change it back. **Every role in the system,
+    including a doctor and a nurse, could rewrite the holiday calendar and the
+    leave types**, which decide attendance and therefore pay; those two
+    viewsets carried no permission at all beyond being signed in.
+    """
+    import json
+    import re
+
+    from apps.identity.models import User
+
+    # Routes that decide money or entitlement, and a role that must not touch
+    # them. An empty PATCH changes nothing and distinguishes the answers: 403
+    # is guarded, 405 is not exposed, 200 is a hole.
+    # Each pair is a role that **can read** the route and must not write it.
+    # Measured, not assumed: the first version of this test paired a doctor
+    # with the holiday calendar, and a doctor cannot read holidays at all, so
+    # the check skipped and the test passed having examined nothing. Proving
+    # it by removing a guard is what exposed that -- the removal did not fail
+    # the test.
+    forbidden = [
+        ("counter@manakamana.test", "/api/billing/price-lists/"),
+        ("counter@manakamana.test", "/api/billing/services/"),
+        ("counter@manakamana.test", "/api/pharmacy/products/"),
+        ("counter@manakamana.test", "/api/insurance/payers/"),
+        ("manager@manakamana.test", "/api/hr/holidays/"),
+        ("manager@manakamana.test", "/api/hr/leave-types/"),
+        ("manager@manakamana.test", "/api/payroll/components/"),
+        ("pharmacy@manakamana.test", "/api/finance/bank-accounts/"),
+        ("doctor@manakamana.test", "/api/diagnostics/tests/"),
+        ("doctor@manakamana.test", "/api/ipd/wards/"),
+    ]
+
+    holes = []
+    examined = 0
+    for email, list_route in forbidden:
+        client = _report_client(email, tenant)
+        user = User.objects.filter(email=email).first()
+        if client is None or user is None:
+            continue
+
+        listing = client.get(list_route)
+        if listing.status_code != 200:
+            continue
+        body = json.loads(listing.content.decode())
+        rows = body.get("results") if isinstance(body, dict) else body
+        if not rows:
+            continue
+
+        row = rows[0]
+        identifier = next(
+            (str(row[key]) for key in ("uuid", "code", "reference", "id")
+             if row.get(key)),
+            None,
+        )
+        if identifier is None:
+            continue
+
+        examined += 1
+        response = client.patch(
+            f"{list_route}{identifier}/",
+            data="{}", content_type="application/json",
+        )
+        if response.status_code in (200, 202):
+            holes.append(
+                f"{email} may PATCH {list_route} ({response.status_code})"
+            )
+
+    # The guard against the failure this test itself had: a skipped pair is
+    # silent, and a test that examined nothing passes just as green as one that
+    # examined everything.
+    assert examined >= 8, (
+        f"only {examined} of {len(forbidden)} pairs were actually exercised; "
+        "the rest skipped, so this test is not checking what it claims"
+    )
+    assert not holes, "\n".join(holes)
+
+
+def test_a_read_permission_alone_does_not_open_a_write_endpoint(tenant):
+    """The mechanism, so the fix cannot quietly regress one viewset at a time.
+
+    `HasPermission.of(read, write=...)` asks for a different permission on an
+    unsafe verb. Without the `write=`, the same permission governs both — which
+    is now a claim somebody makes on purpose rather than a line nobody wrote.
+    """
+    import types
+
+    from apps.common.permissions import HasPermission
+    from apps.rbac.permissions import Scope
+
+    guard = HasPermission.of("invoice.read", write="config.update")()
+    holder = _authorization_with(
+        tenant, "invoice.read", Scope.ORGANIZATION, None,
+    )
+
+    def as_request(method):
+        fields = dict(vars(holder))
+        fields["method"] = method
+        return types.SimpleNamespace(**fields)
+
+    assert guard.has_permission(as_request("GET"), None)
+    assert guard.has_permission(as_request("HEAD"), None)
+    # The same person, the same permission, an unsafe verb: refused.
+    assert not guard.has_permission(as_request("PATCH"), None)
+    assert not guard.has_permission(as_request("POST"), None)
+    assert not guard.has_permission(as_request("DELETE"), None)

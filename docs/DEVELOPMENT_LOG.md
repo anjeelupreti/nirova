@@ -7566,3 +7566,73 @@ both collisions; an unkeyed meter still counts every call. 121 tests.
 
 **Affects.** `apps/metering/services.py` (new), `apps/patients/services.py`,
 `apps/scheduling/services.py`, `tests/test_invariants.py`.
+
+---
+
+## 211 - Reading a thing and changing it are not the same authority
+2026-09-07 · Backend · security
+
+The most serious finding of the session, and it began as a footnote.
+
+While adding a licence-expiry form I noticed `SupplierViewSet` is a
+`ModelViewSet` guarded at the class level by `purchase.read`, with
+`perform_create` narrowing creation to `supplier.manage` — and **nothing
+narrowing update**. Four shipped roles hold `purchase.read` and not
+`supplier.manage`: `accountant`, `auditor`, `facility_manager` and
+`pharmacist`. The auditor is the one that matters: a read-only oversight role
+that could change a supplier's **bank account number**, which is where the
+payments go.
+
+**A first probe said it was fine.** I tried two demo accounts; one held both
+permissions and the other held neither, so neither showed anything. The role
+*catalogue* found it. Probing users tests the users, and the question was about
+the endpoint.
+
+**So I asked all forty-four ModelViewSets at once — and then did not trust the
+answer.** A static check said sixty write paths were guarded only by a read
+permission, and entry 209 is a standing reminder that a heuristic is a
+hypothesis. This one is about authorisation, so it got measured: an empty
+`PATCH` — which changes nothing — against every patchable detail route, as
+eight roles.
+
+**31 routes accepted a write from somebody who should not have one.**
+
+- **`/api/hr/holidays/` and `/api/hr/leave-types/` accepted writes from every
+  role in the system** — a doctor, a nurse, a counter assistant. Both viewsets
+  carried `permission_classes = [IsAuthenticated]` and nothing else. The
+  holiday calendar decides which days are worked, which decides attendance,
+  which decides pay.
+- A counter assistant could edit `price-lists` and `services`: change a price,
+  sell, change it back. The oldest till fraud there is.
+- A manager could rewrite salary structures, components and tax slabs.
+- `bank-accounts`, `payers`, `policies` and the product master, likewise.
+
+**The fix is the mechanism, not thirty patches.** `HasPermission.of(read,
+write=...)` asks for a different permission on an unsafe verb, in one
+declaration that is hard to half-write. The bug was never that somebody forgot
+a line — it is that **a `ModelViewSet` permits every verb by default, so the
+guard has to be written for each one and its absence looks like nothing at
+all.** Omitting `write=` is now a claim that reading and writing take the same
+authority, made on purpose.
+
+Applied to twenty viewsets, with the write permission taken from the existing
+catalogue rather than invented. Re-measured: **writes accepted fell from 82 to
+40, refusals rose from 6 to 36**, and everything still accepted is either the
+organization owner or a role that genuinely holds the permission.
+
+**And the test I wrote to lock it in was itself broken, silently.** Proving it
+the way entries 201 and 203 were proved — remove a guard, expect a failure —
+the test **passed**. It had paired a doctor with the holiday calendar, and a
+doctor cannot *read* holidays, so the check skipped and the assertion examined
+nothing. Every pair is now measured to be a role that genuinely reads the
+route, and the test asserts how many pairs it actually exercised. **A test that
+examined nothing passes just as green as one that examined everything** — that
+is the third guard this session to have needed proving before it was worth
+anything, and the first that was wrong when proved.
+
+**Verified.** Removing one guard now fails the test and names the role, the
+route and the status. 123 tests.
+
+**Affects.** `apps/common/permissions.py`, `apps/procurement/views.py`, and the
+viewsets in `billing`, `pharmacy`, `insurance`, `payroll`, `finance`, `hr`,
+`inpatient`, `diagnostics`, `scheduling` and `theatre`.

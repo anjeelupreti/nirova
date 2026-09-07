@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1185** |
-| **Outstanding** | **99** | **638** |
+| **Done** | **33 of 132** | **1190** |
+| **Outstanding** | **99** | **639** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-638 understates the remaining work: in the later phases some lines group
+639 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -440,6 +440,25 @@ list somebody acts on and a list somebody stops believing.*
       — an insurance policy records none of its terms
 - [ ] `Employee.emergency_contact_*` — collected on no screen
 
+## Write endpoints guarded only by a read permission
+
+*A DRF `ModelViewSet` permits every verb by default, so the guard has to be
+written for each one and its absence looks like nothing at all. Measured with an
+empty PATCH against every patchable route as eight roles: **31 accepted a write
+from somebody who should not have one**. See §211.*
+
+- [x] `HasPermission.of(read, write=...)` — a different permission on an unsafe
+      verb, in one declaration that is hard to half-write
+- [x] Applied to twenty viewsets across billing, pharmacy, insurance, payroll,
+      finance, HR, inpatient, diagnostics, scheduling, theatre, procurement
+- [x] `HolidayViewSet` and `LeaveTypeViewSet` had **no permission at all**
+      beyond being signed in, and they decide attendance and therefore pay
+- [x] `SupplierViewSet.perform_update` — an auditor could change a supplier's
+      bank account number
+- [ ] The same measurement for POST and DELETE. PATCH was chosen because an
+      empty body is harmless; a POST sweep needs a valid body per endpoint and
+      a DELETE sweep destroys what it tests
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something
@@ -456,6 +475,9 @@ nothing else would have, kept here so they are not quietly dropped.*
 - [x] Every model field is assigned by some line of code, or is listed above
       as a known gap — twice a column was declared and never written, and
       both were found by accident before this existed
+- [x] Master data refuses writes from roles that may only read it — and the
+      test asserts how many pairs it actually exercised, because the first
+      version skipped every pair and passed having checked nothing
 - [x] Every console route has a way in, and every menu item has a route —
       `/privacy` and `/notifications` were both routed and unreachable
 - [x] Every workspace source formats a real row, and a broken one is named

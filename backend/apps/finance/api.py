@@ -313,7 +313,7 @@ def _resolve_account(value: str) -> Account:
 
 class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Account, relations=["facility", "parent"],
@@ -446,7 +446,7 @@ class JournalViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierInvoiceSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="purchase.approve")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         SupplierInvoice, relations=["facility"], fields=["status"],
@@ -491,7 +491,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
 class ExpenseViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Expense, relations=["facility", "account"], fields=["status"],
@@ -532,7 +532,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
 class BankAccountViewSet(viewsets.ModelViewSet):
     serializer_class = BankAccountSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         BankAccount, relations=["facility"], fields=["is_active"],

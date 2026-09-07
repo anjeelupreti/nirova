@@ -322,7 +322,7 @@ class CancelSerializer(serializers.Serializer):
 
 class TheatreViewSet(viewsets.ModelViewSet):
     serializer_class = TheatreSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", write="bed.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Theatre, relations=["facility", "department"],

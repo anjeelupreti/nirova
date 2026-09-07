@@ -687,7 +687,7 @@ class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
 
 class EmployeePayrollViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeePayrollSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", write="payroll.process")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         EmployeePayroll, relations=["employee", "structure", "scheme"],
@@ -715,7 +715,7 @@ class EmployeePayrollViewSet(viewsets.ModelViewSet):
 
 class PayComponentViewSet(viewsets.ModelViewSet):
     serializer_class = PayComponentSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", write="payroll.process")]
     lookup_field = "code"
     filterset_fields = ["component_type", "is_active", "is_statutory"]
 
@@ -731,7 +731,7 @@ class PayComponentViewSet(viewsets.ModelViewSet):
 
 class SalaryStructureViewSet(viewsets.ModelViewSet):
     serializer_class = SalaryStructureSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", write="payroll.process")]
     lookup_field = "code"
 
     def get_queryset(self):
@@ -750,7 +750,7 @@ class TaxSlabViewSet(viewsets.ModelViewSet):
     """The tax table, editable because it changes with every budget."""
 
     serializer_class = TaxSlabSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", write="payroll.process")]
     lookup_field = "uuid"
     filterset_fields = ["fiscal_year", "regime"]
 
@@ -774,7 +774,7 @@ class TaxSlabViewSet(viewsets.ModelViewSet):
 
 class ContributionSchemeViewSet(viewsets.ModelViewSet):
     serializer_class = ContributionSchemeSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("salary.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("salary.read", write="payroll.process")]
     lookup_field = "uuid"
     filterset_fields = ["fiscal_year", "code", "is_active"]
 

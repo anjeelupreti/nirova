@@ -309,7 +309,8 @@ class RoundSerializer(serializers.Serializer):
 
 class WardViewSet(viewsets.ModelViewSet):
     serializer_class = WardSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN,
+                          write="bed.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Ward, relations=["facility", "department"],
@@ -342,7 +343,8 @@ class WardViewSet(viewsets.ModelViewSet):
 
 class BedViewSet(viewsets.ModelViewSet):
     serializer_class = BedSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
+    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN,
+                          write="bed.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Bed, relations=["ward"], fields=["status", "is_active", "is_isolation"]

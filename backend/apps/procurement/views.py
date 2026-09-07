@@ -76,6 +76,39 @@ class SupplierViewSet(viewsets.ModelViewSet):
         authorization.require("supplier.manage", Scope.FACILITY)
         serializer.save(created_by_id=self.request.user.uuid)
 
+    def perform_update(self, serializer):
+        """The same authority it takes to create one.
+
+        **This was missing.** The viewset is a `ModelViewSet` guarded at the
+        class level by `purchase.read`, `perform_create` narrowed creation to
+        `supplier.manage`, and nothing narrowed *update* -- so anybody who
+        could see the supplier list could rewrite it.
+
+        That is not theoretical. Four shipped roles hold `purchase.read` and
+        not `supplier.manage`: `accountant`, `auditor`, `facility_manager` and
+        `pharmacist`. The auditor is the one that matters -- a read-only
+        oversight role that could change a supplier's **bank account number**,
+        which is where the payments go.
+
+        It escaped the earlier probe because the two demo accounts tried
+        happened to hold both permissions or neither. The role catalogue found
+        it; the accounts did not. Probing users tests the users, and the
+        question was about the endpoint.
+        """
+        authorization = get_authorization(self.request)
+        authorization.require("supplier.manage", Scope.FACILITY)
+        serializer.save(updated_by_id=self.request.user.uuid)
+
+    def perform_destroy(self, instance):
+        """Guarded for the same reason, and separately from update.
+
+        Nothing in this system hard-deletes a supplier with purchase history
+        behind it, but the route existed and was reachable by a reader.
+        """
+        authorization = get_authorization(self.request)
+        authorization.require("supplier.manage", Scope.FACILITY)
+        super().perform_destroy(instance)
+
     @action(detail=True, methods=["get"], url_path="performance")
     def performance(self, request, uuid=None):
         """What this supplier has actually done, computed from receipts."""

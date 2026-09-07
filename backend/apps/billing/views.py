@@ -56,7 +56,7 @@ class ServiceItemViewSet(viewsets.ModelViewSet):
     """The billable services catalogue."""
 
     serializer_class = ServiceItemSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="config.update")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         ServiceItem, relations=['department'], fields=['category', 'is_active']
@@ -102,7 +102,7 @@ class ServiceItemViewSet(viewsets.ModelViewSet):
 
 class PriceListViewSet(viewsets.ModelViewSet):
     serializer_class = PriceListSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="config.update")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         PriceList, relations=['facility'], fields=['patient_category', 'is_active']
