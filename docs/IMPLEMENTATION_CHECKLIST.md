@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1201** |
+| **Done** | **33 of 132** | **1202** |
 | **Outstanding** | **99** | **647** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -502,10 +502,14 @@ when somebody happens to notice.*
       clinical access decision, not a refactor
 
 **Responsiveness**
-- [ ] **The patient portal is laid out for a phone only.** Patients open things
-      on laptops too, and a fixed narrow column on a wide screen reads as
-      broken rather than as focused
-- [ ] Every screen at tablet width. The console assumes a desk
+- [x] The patient application widens by breakpoint instead of being capped at
+      phone width at every size. It contained **no responsive class at all**
+      — the sign-in form still stays narrow on purpose, because a form
+      stretched across a monitor is harder to use (§220)
+- [ ] The rest of the patient application's detail screens, checked at width —
+      the shell adapts now, each section's own content has not been looked at
+- [ ] Every console screen at tablet width. The sidebar already collapses to a
+      strip; the screens behind it assume a desk
 
 **Depth: view-only screens with nowhere to go**
 - [ ] Most lists show rows and stop — no detail panel, no edit, often no way to

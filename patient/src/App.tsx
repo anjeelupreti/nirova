@@ -138,7 +138,11 @@ export default function App() {
   }
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md bg-background px-4 pb-16 pt-6">
+    // Phone first, and then it stops pretending. Everything here was capped at
+    // `max-w-md` at every width, so a patient opening their results on a laptop
+    // got a narrow strip down the middle of a wide screen -- which reads as
+    // broken rather than as focused. The cap widens at each breakpoint instead.
+    <div className="mx-auto min-h-screen w-full max-w-md bg-background px-4 pb-16 pt-6 sm:max-w-2xl sm:px-6 lg:max-w-5xl lg:px-8 lg:pt-10">
       {screen === "home" ? (
         <Home
           record={record}
@@ -165,7 +169,10 @@ function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
   const [mode, setMode] = useState<"in" | "register">("in");
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md px-4 py-10">
+    // The *form* stays narrow at every width -- a sign-in box stretched across
+    // a monitor is harder to use, not easier -- but it is centred in the page
+    // rather than pinned to a phone-width column on the left.
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-10 sm:py-16">
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-semibold tracking-tight">
           My health record
@@ -587,6 +594,12 @@ function Home({
         </Alert>
       )}
 
+      {/*
+        The two things a patient came to check, side by side once there is room
+        for them. Stacked they push the rest of the page below the fold on a
+        laptop, which is the one screen with no shortage of room.
+      */}
+      <div className="grid gap-4 sm:grid-cols-2">
       {data.next_appointment && (
         <Card>
           <CardHeader className="pb-2">
@@ -622,8 +635,14 @@ function Home({
           </CardContent>
         </Card>
       )}
+      </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/*
+        Two across a phone, three on a tablet, four on a laptop. A two-column
+        grid on a wide screen leaves the tiles enormous and the page mostly
+        empty.
+      */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {TILES.filter((tile) => {
           if (tile.needs === "results") return data.can_see_results;
           if (tile.needs === "invoices") return data.can_see_invoices;

@@ -8035,3 +8035,37 @@ clinical access decision and is on the checklist rather than made here.
 
 **Affects.** `frontend/src/App.tsx`, `frontend/src/hooks/useSession.ts`,
 `backend/tests/test_nav.py` (new).
+
+---
+
+## 220 - The patient application was a phone pretending to be a website
+2026-09-07 · Patient app · fix
+
+Raised by the user: the patient side only has a mobile layout, and people open
+things on laptops.
+
+Correct, and more literally than expected. **`patient/src/App.tsx` contained not
+one responsive class** — no `sm:`, no `md:`, no `lg:` anywhere in fifteen
+hundred lines. Every screen was capped at `max-w-md`, twenty-eight rem, at every
+width. On a laptop that is a narrow strip down the middle of an empty page,
+which reads as broken rather than as focused.
+
+**The cap now widens by breakpoint** — `max-w-md` on a phone, `2xl` on a tablet,
+`5xl` on a laptop — with padding that grows to match.
+
+**The sign-in form deliberately does not.** A form stretched across a monitor is
+harder to use, not easier: the eye has further to travel between a label and its
+field. It stays narrow and is centred in the page instead of pinned to a
+phone-width column on the left, which is the actual complaint.
+
+**Two grids that only made sense on a phone.** The section tiles were two across
+at every width — enormous on a laptop, with the page mostly empty — and are now
+two, three or four. The two summary cards a patient actually came to check, the
+next appointment and the outstanding balance, were stacked, which pushed
+everything else below the fold on the one screen with no shortage of room.
+
+**Nothing here needed new components**, which is worth noting: the layout was
+already built out of things that adapt. It had simply never been told it was
+allowed to.
+
+**Affects.** `patient/src/App.tsx`.
