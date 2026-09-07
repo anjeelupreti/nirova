@@ -2841,3 +2841,99 @@ def test_a_fixed_term_engagement_needs_an_end_date(tenant):
         EmploymentContract.objects.filter(pk__in=active_before).update(
             status=ContractStatus.ACTIVE,
         )
+
+
+# ---------------------------------------------------------------------------
+# Log 207 - a critical result nobody acknowledged
+# ---------------------------------------------------------------------------
+
+
+def test_an_unacknowledged_critical_value_escalates_itself(tenant):
+    """`AlertStatus.ESCALATED` existed and nothing could reach it.
+
+    `escalated_at` and `escalation_note` were declared on the model and never
+    assigned by any line of code, so a critical potassium the ward did not
+    acknowledge sat `pending` for ever — and the one situation the whole entity
+    exists to catch was the one it could not record.
+
+    Escalation is automatic and time-based, because waiting for a human to
+    press "escalate" is waiting for the person who is already not answering.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.diagnostics.models import AlertStatus, CriticalValueAlert
+    from apps.diagnostics.services import (
+        DiagnosticsError,
+        escalate_critical,
+        escalation_minutes,
+        sweep_unacknowledged_criticals,
+    )
+    from apps.notifications.models import Notification
+
+    alert = CriticalValueAlert.objects.select_related(
+        "patient", "result", "order",
+    ).first()
+    if alert is None:
+        pytest.skip("no critical value alerts in this tenant")
+
+    saved = {
+        field: getattr(alert, field)
+        for field in ("status", "raised_at", "escalated_at", "escalation_note",
+                      "acknowledged_at", "acknowledged_by_id", "action_taken")
+    }
+    limit = escalation_minutes()
+    assert limit <= 60, "an escalation limit measured in hours is not one"
+
+    try:
+        # An acknowledged alert has nothing left to escalate.
+        alert.status = AlertStatus.ACKNOWLEDGED
+        alert.save(update_fields=["status"])
+        with pytest.raises(DiagnosticsError):
+            escalate_critical(alert, "should be refused")
+
+        # Pending, but inside the limit: left alone.
+        alert.status = AlertStatus.PENDING
+        alert.acknowledged_at = None
+        alert.acknowledged_by_id = None
+        alert.action_taken = ""
+        alert.raised_at = timezone.now() - timedelta(minutes=max(1, limit - 5))
+        alert.save()
+        assert sweep_unacknowledged_criticals()["escalated"] == 0
+        alert.refresh_from_db()
+        assert alert.status == AlertStatus.PENDING
+
+        # Past the limit: escalated, and somebody wider is told.
+        alert.raised_at = timezone.now() - timedelta(minutes=limit * 6)
+        alert.save(update_fields=["raised_at"])
+        report = sweep_unacknowledged_criticals()
+        assert report["escalated"] == 1, report
+
+        alert.refresh_from_db()
+        assert alert.status == AlertStatus.ESCALATED
+        assert alert.escalated_at is not None
+        assert alert.escalation_note, "escalated with no reason recorded"
+
+        notice = Notification.objects.filter(
+            event="critical_value_escalated", subject_uuid=alert.uuid,
+        ).first()
+        assert notice is not None, "escalated and told nobody"
+        assert notice.category == "critical"
+        assert notice.receipts.exists()
+
+        # Running again must not escalate it a second time.
+        assert sweep_unacknowledged_criticals()["escalated"] == 0
+
+        # And escalation does not discharge the obligation: somebody still has
+        # to acknowledge and say what was done.
+        alert.refresh_from_db()
+        assert alert.status != AlertStatus.ACKNOWLEDGED
+        assert not alert.action_taken
+    finally:
+        for field, value in saved.items():
+            setattr(alert, field, value)
+        alert.save()
+        Notification.all_objects.filter(
+            event="critical_value_escalated",
+        ).delete()

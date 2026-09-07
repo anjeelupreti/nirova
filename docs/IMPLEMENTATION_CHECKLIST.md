@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1178** |
-| **Outstanding** | **99** | **627** |
+| **Done** | **33 of 132** | **1182** |
+| **Outstanding** | **99** | **637** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-627 understates the remaining work: in the later phases some lines group
+637 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -378,6 +378,43 @@ rather than redesigning around it.
 - [ ] Version comparison UI
 - [ ] Configuration and compensation versioning
 
+## Columns declared and never written
+
+*Found by asking the source, not the database: a field mentioned nowhere except
+its own model definition is one nothing can set. The database version of the
+question returned 466 findings because it cannot tell "no code writes this"
+from "the seed does not fill it in"; the source version returns 166, and both
+known bugs were in it.*
+
+*Most of the 166 are genuinely optional. These are the ones that are a missing
+feature wearing a column as a disguise.*
+
+- [x] `Invoice.due_date` — nothing could be overdue (§205)
+- [x] `EmploymentContract.ends_on` — no fixed term could run out (§206)
+- [x] `CriticalValueAlert.escalated_at` / `escalation_note` — **a critical
+      result nobody acknowledged could never be escalated** (§207)
+- [ ] `Patient.date_of_death` / `cause_of_death` — a patient cannot be
+      recorded as having died, so the system will go on scheduling them
+- [ ] `AnaesthesiaRecord.difficult_airway_detail`, `intubation_attempts`,
+      `lowest_spo2`, `lowest_systolic`, `adverse_events` — a difficult airway
+      not recorded is a risk to the *next* anaesthetic
+- [ ] `TransfusionReaction.investigation_findings` /
+      `reported_to_authority_at` — reportable events that cannot be recorded
+      as reported
+- [ ] `Supplier.drug_licence_number` / `drug_licence_expires_on` — buying from
+      a supplier whose licence has lapsed is a regulatory problem, and the
+      reminder engine has nothing to watch
+- [ ] `Facility.license_expires_on` — same, for the hospital's own licence
+- [ ] `Appointment.reminder_sent_at` — appointment reminders cannot be tracked;
+      needs §93's channels
+- [ ] `Subscription.current_period_start` / `current_period_end` — billing
+      periods are never set on the control plane
+- [ ] `Encounter.previous_encounter` — follow-up visits are not linked to what
+      they follow up
+- [ ] `Policy.card_number`, `sub_limits`, `exclusions`, `waiting_period_until`
+      — an insurance policy records none of its terms
+- [ ] `Employee.emergency_contact_*` — collected on no screen
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something
@@ -391,6 +428,9 @@ nothing else would have, kept here so they are not quietly dropped.*
       defect that prompted it, because a guard that has never been shown to
       fail is not a guard
 - [x] Every clinical search hit belongs to a patient the searcher relates to
+- [x] Every model field is assigned by some line of code, or is listed above
+      as a known gap — twice a column was declared and never written, and
+      both were found by accident before this existed
 - [x] Every console route has a way in, and every menu item has a route —
       `/privacy` and `/notifications` were both routed and unreachable
 - [x] Every workspace source formats a real row, and a broken one is named

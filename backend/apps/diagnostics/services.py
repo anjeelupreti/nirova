@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
-from apps.audit.models import AuditAction
+from apps.audit.models import AuditAction, AuditSeverity
 from apps.audit.services import record, record_version
 from apps.catalog.keys import ModuleCode
 from apps.common.exceptions import DomainError
@@ -794,6 +794,141 @@ def acknowledge_critical(
         reason=action_taken,
     )
     return alert
+
+
+#: Minutes a critical value may sit unacknowledged before it is escalated.
+#:
+#: Short on purpose. The published guidance for critical results is measured in
+#: minutes, and the whole reason this record exists is that somebody must be
+#: *told*, not that a number was displayed in red. Configurable per
+#: organization, because a district clinic with one doctor on site and a
+#: tertiary hospital with a switchboard are not the same problem.
+ESCALATION_NAMESPACE = "diagnostics"
+ESCALATION_KEY = "critical_value_escalation_minutes"
+DEFAULT_ESCALATION_MINUTES = 30
+
+
+def escalation_minutes(facility=None) -> int:
+    from apps.organization.config import config_value
+
+    try:
+        return max(1, int(config_value(
+            ESCALATION_NAMESPACE, ESCALATION_KEY,
+            default=DEFAULT_ESCALATION_MINUTES, facility=facility,
+        )))
+    except (TypeError, ValueError):
+        return DEFAULT_ESCALATION_MINUTES
+
+
+@tenant_atomic_method
+def escalate_critical(
+    alert: CriticalValueAlert, note: str, actor=None,
+) -> CriticalValueAlert:
+    """Record that nobody acknowledged in time, and widen who is being told.
+
+    `AlertStatus.ESCALATED` has been in the enum since diagnostics was written
+    and **nothing could reach it** -- `escalated_at` and `escalation_note` were
+    declared and never assigned. So a critical potassium that the ward did not
+    acknowledge sat `pending` for ever, and the one situation this whole entity
+    exists to catch was the one it could not record.
+
+    **Escalating does not discharge the obligation.** The alert is not closed:
+    somebody still has to acknowledge it and say what was done. What escalation
+    records is that the *failure* to acknowledge was itself noticed, which is
+    the fact an investigation asks about afterwards.
+    """
+    if alert.status in (AlertStatus.ACKNOWLEDGED, AlertStatus.CLOSED):
+        raise DiagnosticsError(
+            "That alert has already been acknowledged; there is nothing left "
+            "to escalate."
+        )
+    if not note.strip():
+        raise DiagnosticsError("Record why it is being escalated.")
+
+    alert.status = AlertStatus.ESCALATED
+    alert.escalated_at = timezone.now()
+    alert.escalation_note = note[:512]
+    alert.save(
+        update_fields=[
+            "status", "escalated_at", "escalation_note", "updated_at",
+        ]
+    )
+    record(
+        AuditAction.UPDATE,
+        entity_type="diagnostics.CriticalValueAlert",
+        entity_id=alert.uuid,
+        entity_label=f"Critical value escalated after "
+                     f"{alert.minutes_outstanding} minutes",
+        severity=AuditSeverity.CRITICAL,
+        reason=note,
+    )
+    return alert
+
+
+def sweep_unacknowledged_criticals(now=None) -> dict:
+    """Escalate every critical value nobody has acknowledged in time.
+
+    **Automatic and time-based, because waiting for a human to press
+    "escalate" is waiting for the person who is already not answering.** That
+    is the failure this guards: the laboratory telephoned the ward, nobody
+    picked up the result, and the alert sat pending while the patient did not
+    improve.
+
+    Safe to run as often as you like: an already-escalated alert is skipped, so
+    a five-minute cron escalates once and then leaves it alone.
+    """
+    # `holders_of` is imported here rather than at module level: rbac imports
+    # diagnostics indirectly, and hoisting this makes the app registry order
+    # load-bearing. NotificationCategory and notify are already at the top.
+    from apps.rbac.services import holders_of
+
+    now = now or timezone.now()
+    escalated = 0
+    undeliverable = 0
+    pending = CriticalValueAlert.objects.filter(
+        status=AlertStatus.PENDING,
+    ).select_related("patient", "order", "order__facility", "result")
+
+    for alert in pending:
+        facility = getattr(alert.order, "facility", None)
+        limit = escalation_minutes(facility)
+        age = (now - alert.raised_at).total_seconds() / 60
+        if age < limit:
+            continue
+
+        note = (
+            f"No acknowledgement {int(age)} minutes after the result was "
+            f"released; the limit is {limit}."
+        )
+        escalate_critical(alert, note)
+        escalated += 1
+
+        # Widened deliberately. The people who were already told are the ones
+        # who have not answered, so telling them again is not escalation.
+        recipients = holders_of("encounter.create", facility=facility)
+        if not recipients:
+            undeliverable += 1
+            continue
+        notify(
+            source="diagnostics",
+            event="critical_value_escalated",
+            category=NotificationCategory.CRITICAL,
+            title=f"Unacknowledged critical result: "
+                  f"{alert.patient.full_name}",
+            body=f"{alert.result.analyte_name} {alert.value}. {note}",
+            link="/diagnostics",
+            recipients=recipients,
+            subject_type="diagnostics.CriticalValueAlert",
+            subject_uuid=alert.uuid,
+            facility=facility,
+            # Keyed on the alert alone: escalating twice is not two events.
+            dedupe_key=f"critical_escalated:{alert.uuid}",
+        )
+
+    return {
+        "escalated": escalated,
+        "undeliverable": undeliverable,
+    }
 
 
 # ---------------------------------------------------------------------------

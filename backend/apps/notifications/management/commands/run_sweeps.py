@@ -9,6 +9,7 @@ produce one notification per situation rather than one per run.
 
 from django.core.management.base import BaseCommand
 
+from apps.diagnostics.services import sweep_unacknowledged_criticals
 from apps.notifications.reminders import run_all
 from apps.notifications.sweeps import sweep_expiring_credentials
 from apps.tenancy.connections import context_for_organization
@@ -46,6 +47,26 @@ class Command(BaseCommand):
                 f"already standing {report['standing']}, "
                 f"resolved {report['resolved']}"
             )
+
+            # Before the reminders, because this one is measured in minutes
+            # while the rest are measured in days. A critical potassium nobody
+            # has acknowledged is not a thing to look at tomorrow morning --
+            # **this command needs a five-minute cron, not a nightly one**, and
+            # the reminders are simply cheap enough to ride along with it.
+            with tenant_context(context_for_organization(organization)):
+                criticals = sweep_unacknowledged_criticals()
+            if criticals["escalated"] or criticals["undeliverable"]:
+                self.stdout.write(
+                    f"  {organization.slug:20s} critical values: "
+                    f"escalated {criticals['escalated']}"
+                    + (f", UNDELIVERABLE {criticals['undeliverable']}"
+                       if criticals["undeliverable"] else "")
+                )
+            if criticals["undeliverable"]:
+                self.stderr.write(
+                    f"  {organization.slug:20s} a critical result was "
+                    f"escalated and there was nobody to tell."
+                )
 
             with tenant_context(context_for_organization(organization)):
                 reminders = run_all()

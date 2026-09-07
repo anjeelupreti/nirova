@@ -7336,3 +7336,67 @@ is byte-for-byte as it was.
 
 **Affects.** `apps/hr/models.py`, `apps/hr/services.py`,
 `tests/test_invariants.py`.
+
+---
+
+## 207 - Finding the rest of them, and a critical result nobody acknowledged
+2026-09-07 · Backend · fix, feature
+
+Two entries in a row found a column that was declared and never written:
+`Invoice.due_date`, so nothing could be overdue, and
+`EmploymentContract.ends_on`, so no fixed-term contract could run out. Both
+were found by accident. **Twice is a class**, so I went looking for the rest.
+
+**The first instrument was wrong, and instructively so.** Asking the database
+which columns are null on every row of a populated table returned **466
+findings** — because it cannot tell "no code writes this" from "the seed does
+not fill it in". A `notes` field empty across a demo tenant is not a defect.
+
+The sharper question is about the source: a field mentioned nowhere except its
+own model definition is one that nothing can set. Three ways a field gets
+written — as a keyword to a constructor, as an attribute assignment, and inside
+an `update()` or `update_fields` — and looking for all three cut it to **166**.
+Both known bugs were in that list, which is the check that the check works.
+
+**The list is on the checklist now, as a section rather than an appendix**,
+because most of the 166 are genuinely optional fields and a handful are missing
+features hiding as columns. Ones that stand out: a patient cannot be recorded
+as having died; an anaesthetic record cannot record a difficult airway; a
+supplier's drug licence has an expiry column nothing writes; a transfusion
+reaction cannot be marked as reported to the authority.
+
+**And one that could not wait.** `AlertStatus.ESCALATED` has been in the
+diagnostics enum since it was written, `escalated_at` and `escalation_note`
+have been on the model, and **nothing could reach any of them**. So a critical
+potassium that the ward did not acknowledge sat `pending` for ever — the one
+situation the whole entity exists to catch was the one it could not record.
+
+`escalate_critical` and a sweep now close that.
+
+**Automatic and time-based, because waiting for a human to press "escalate" is
+waiting for the person who is already not answering.** Thirty minutes by
+default, configurable per organization — a district clinic with one doctor and
+a tertiary hospital with a switchboard are not the same problem — and the test
+refuses a limit measured in hours.
+
+**Escalation widens who is told rather than repeating itself.** The people
+already telephoned are the ones who have not answered.
+
+**And escalating does not discharge the obligation.** The alert is not closed:
+somebody still has to acknowledge it and record what was done. What escalation
+records is that the *failure* to acknowledge was itself noticed, which is the
+fact an investigation asks about afterwards.
+
+**The sweep command now needs a five-minute cron, not a nightly one.** The
+reminders are measured in days and are cheap enough to ride along; this one is
+measured in minutes, and that is written where somebody scheduling it will see
+it.
+
+**Verified** against a real alert — Potassium 6.9 — through five cases:
+acknowledged refuses, inside the limit is untouched, past it escalates and
+tells three people at `critical`, a second run does not escalate again, and the
+alert stays open afterwards. 117 tests.
+
+**Affects.** `apps/diagnostics/services.py`,
+`apps/notifications/management/commands/run_sweeps.py`,
+`tests/test_invariants.py`.
