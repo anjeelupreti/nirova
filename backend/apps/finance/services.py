@@ -667,7 +667,7 @@ POSTABLE_INVOICE_STATUSES = (
 
 
 @tenant_atomic_method
-def post_invoice(invoice: Invoice, actor) -> tuple[JournalEntry, bool]:
+def post_invoice(invoice: Invoice, actor) -> tuple[JournalEntry | None, bool]:
     """Revenue recognised, and a debt owed — or the reverse, for a credit note.
 
     Debit receivables for what is owed; credit revenue for the net; credit VAT
@@ -694,6 +694,22 @@ def post_invoice(invoice: Invoice, actor) -> tuple[JournalEntry, bool]:
     receivable = money(invoice.total)
     discount = money(invoice.discount_total)
     tax = money(invoice.tax_total)
+
+    # A document worth nothing has no entry to make, and saying so is not the
+    # same as failing.
+    #
+    # A fully waived bill and an implant recorded at cost are both legitimate
+    # invoices: they need a number, they belong in the audit trail, and they
+    # move no money. Every line built below would be zero, `post_document`
+    # drops zero lines, and the run then died on "an entry with no lines is not
+    # an entry" -- taking the whole posting batch with it, because one correctly
+    # recorded document happened to be worth nothing.
+    #
+    # `None` rather than an empty entry: an entry with no lines in the ledger
+    # is a row that has to be explained to an auditor forever, and the honest
+    # record is that there was nothing to post.
+    if receivable == 0 and discount == 0 and tax == 0:
+        return None, False
     # Revenue is the gross before the discount, so that both figures are
     # visible in the accounts rather than one netted into the other.
     revenue = receivable + discount - tax
@@ -1149,6 +1165,8 @@ def receivables_ageing(until=None) -> dict:
     buckets = {f"{low}-{high or 'plus'}": ZERO for low, high in AGEING_BUCKETS}
     rows = []
     total = ZERO
+    overdue_total = ZERO
+    undated = 0
 
     for invoice in invoices:
         outstanding = money(invoice.total) - money(invoice.amount_paid)
@@ -1158,17 +1176,41 @@ def receivables_ageing(until=None) -> dict:
         # amount -- which is how a receivables balance silently goes wrong.
         if outstanding == 0:
             continue
+        if invoice.due_date is None:
+            undated += 1
         days = (until - invoice.issued_at.date()).days
         for low, high in AGEING_BUCKETS:
             if days >= low and (high is None or days <= high):
                 buckets[f"{low}-{high or 'plus'}"] += outstanding
                 break
         total += outstanding
+        # Days *past due* alongside days since issue, not instead of it.
+        #
+        # The buckets age from the invoice date because that is the standard
+        # presentation and because this figure is reconciled against the
+        # receivables control account -- changing what the buckets mean would
+        # move a number two independent records are compared on.
+        #
+        # But "ninety days old" and "ninety days late" are different facts, and
+        # until invoices had due dates at all this report could only report the
+        # first. Collections needs the second.
+        #
+        # `None` where there is no due date, never zero: invoices issued before
+        # credit terms existed were deliberately not back-filled, and calling
+        # those "0 days overdue" would report a punctuality nobody earned.
+        overdue = (
+            (until - invoice.due_date).days
+            if invoice.due_date is not None else None
+        )
+        if overdue is not None and overdue > 0:
+            overdue_total += outstanding
         rows.append({
             "invoice": invoice.number,
             "patient": getattr(invoice.patient, "full_name", "") or "Walk-in",
             "issued": invoice.issued_at.date(),
             "days": days,
+            "due": invoice.due_date,
+            "days_overdue": overdue,
             "total": money(invoice.total),
             "paid": money(invoice.amount_paid),
             "outstanding": outstanding,
@@ -1184,6 +1226,16 @@ def receivables_ageing(until=None) -> dict:
             value for key, value in buckets.items()
             if key in ("91-180", "181-plus")
         ),
+        # What is actually late, as opposed to merely old. An insurance
+        # invoice sixty days after issue is not overdue if the payer has
+        # forty-five days and settles on the fortieth.
+        "overdue": overdue_total,
+        # And how much of this report cannot answer the question. Invoices
+        # issued before credit terms existed have no due date and were not
+        # back-filled, so "0 overdue" across a hundred of them would be a
+        # claim the data does not support. Saying how many are undated is the
+        # honest version.
+        "without_a_due_date": undated,
     }
 
 

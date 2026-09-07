@@ -7223,3 +7223,70 @@ raised, not un-resolved, because a notification is a statement about a moment.
 `apps/notifications/api.py`, `apps/notifications/management/commands/run_sweeps.py`,
 `apps/notifications/management/commands/seed_notifications_demo.py`,
 `tests/test_invariants.py`.
+
+---
+
+## 205 - The column that was never written
+2026-09-07 · Backend · fix, feature
+
+`Invoice.due_date` has been on the model since billing was written and **no
+line of code has ever set it**. Sixty-four issued invoices in the demo tenant,
+not one with a due date — so nothing could be overdue, credit terms were
+unenforceable, and the reminder that chases unpaid invoices found nothing to
+chase.
+
+Found by entry 204's rule that a reminder considering zero rows is suspicious
+rather than reassuring. The reminder was right; the column was empty.
+
+**The default is due on issue, and that is deliberately the least interesting
+choice available.** A Nepali hospital's counter is a cash counter: the patient
+pays at discharge, and "due immediately" is what already happens. Inventing
+net-30 as a default would be writing somebody's credit policy for them, which
+is not a decision a billing module gets to make on its own.
+
+**Terms vary by who pays**, because that is the only axis on which they really
+do — a walk-in pays today, an insurer pays when it has adjudicated. So the
+setting is per patient category, in the ordinary configuration hierarchy, with
+per-key fallback so an organization that configures only `insurance` does not
+silently lose the others. A malformed setting is ignored rather than becoming
+"everything is due in ninety days".
+
+**Nothing is back-filled.** An invoice issued last March did not have a due
+date, and inventing one now would fabricate an ageing history. A receivables
+report that suddenly shows six months of overdue debt nobody ever recorded is
+worse than one that shows none.
+
+**Which the ageing report now says out loud.** Days *past due* is reported
+alongside days since issue, never instead of it — the buckets still age from
+the invoice date, because that is the standard presentation and because this
+figure is reconciled against the receivables control account, and changing what
+the buckets mean would move a number two independent records are compared on.
+Rows with no due date carry `None`, never zero, and the report counts how many
+it could not answer for: **"0 days overdue" across a hundred undated invoices
+would claim a punctuality nobody earned.**
+
+**And a second bug, found by accident, which is the more interesting one.**
+
+A probe issued an invoice for a single "Implant, at cost" charge priced at
+zero. The next run of the finance seed died on "an entry with no lines is not
+an entry" — **and took the whole posting batch with it**, because one correctly
+recorded document happened to be worth nothing. A fully waived bill is exactly
+the same shape and entirely legitimate: it needs a number, it belongs in the
+audit trail, and it moves no money.
+
+`post_invoice` now returns `None` for a document worth nothing, rather than
+raising. `None` rather than an empty journal entry, because an entry with no
+lines is a row somebody has to explain to an auditor forever, and the honest
+record is that there was nothing to post. The seed counts them separately — a
+number that drifts upward there means somebody is issuing invoices for nothing.
+
+**Also this session:** Docker Desktop had stopped, which is why the first probe
+after resuming timed out rather than failing. Restarted.
+
+**Verified.** An insurance patient's invoice now falls due in 45 days and a
+general patient's on the day. 115 tests.
+
+**Affects.** `apps/billing/credit_terms.py` (new), `apps/billing/services.py`,
+`apps/finance/services.py`,
+`apps/finance/management/commands/seed_finance_demo.py`,
+`tests/test_invariants.py`.

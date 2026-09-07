@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1175** |
-| **Outstanding** | **99** | **629** |
+| **Done** | **33 of 132** | **1177** |
+| **Outstanding** | **99** | **628** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-629 understates the remaining work: in the later phases some lines group
+628 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2530,9 +2530,13 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
       success looks exactly like a system that is watching
 - [x] Licence · probation · contract · batch expiry · blood unit expiry ·
       supplier invoice due · pre-authorisation expiry
-- [ ] **`Invoice.due_date` is never written by any code**, so no invoice can be
-      overdue and credit terms are unenforceable. Needs a credit-terms policy
-      (per payer? per patient category?) — a decision, not a refactor
+- [x] `Invoice.due_date` is now written at issue, from credit terms held per
+      patient category in the configuration hierarchy. The default is **due on
+      issue** — the cash counter's status quo written down, not a credit
+      policy invented on somebody's behalf
+- [x] Receivables ageing reports days *past due* alongside days since issue,
+      and counts the invoices it cannot answer for rather than calling them
+      punctual. Nothing was back-filled
 - [ ] **`EmploymentContract.ends_on` is never written either**, so no
       fixed-term contract can end
 - [ ] Appointment reminders and clinical follow-up — these go to *patients*,

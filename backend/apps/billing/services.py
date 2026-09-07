@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record, record_version
+from apps.billing.credit_terms import due_date_for
 from apps.billing.fiscal import fiscal_year_for
 from apps.billing.models import (
     ZERO,
@@ -544,10 +545,16 @@ def issue_invoice(invoice: Invoice, actor=None) -> Invoice:
     invoice.status = InvoiceStatus.ISSUED
     invoice.issued_at = timezone.now()
     invoice.issued_by_id = getattr(actor, "uuid", None)
+    # Set here, at issue, and nowhere else. A draft has no due date because it
+    # is not owed yet, and the number and the date should be allocated by the
+    # same act for the same reason. Until this line existed the column was
+    # declared and never written, so no invoice could ever be overdue and the
+    # credit terms in `credit_terms.py` had nothing to apply to.
+    invoice.due_date = due_date_for(invoice, timezone.localdate())
     invoice.save(
         update_fields=[
             "number", "fiscal_year", "status", "issued_at",
-            "issued_by_id", "updated_at",
+            "issued_by_id", "due_date", "updated_at",
         ]
     )
 

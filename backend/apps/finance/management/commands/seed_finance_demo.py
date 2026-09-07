@@ -148,14 +148,25 @@ class Command(BaseCommand):
         )
         posted = 0
         already = 0
+        nothing_to_post = 0
         credit_notes = 0
         for invoice in invoices:
-            _, was_new = post_invoice(invoice, actor=actor)
-            posted += 1 if was_new else 0
-            already += 0 if was_new else 1
+            entry, was_new = post_invoice(invoice, actor=actor)
+            if entry is None:
+                # A fully waived bill, or an implant recorded at cost. A real
+                # document that moves no money, and counted rather than hidden:
+                # a number that quietly drifts upward here means somebody is
+                # issuing invoices for nothing.
+                nothing_to_post += 1
+            elif was_new:
+                posted += 1
+            else:
+                already += 1
             credit_notes += 1 if invoice.is_credit_note else 0
         self.say(f"   {len(invoices)} documents ({credit_notes} of them credit "
-                 f"notes): {posted} newly posted, {already} already there.")
+                 f"notes): {posted} newly posted, {already} already there"
+                 + (f", {nothing_to_post} worth nothing to post"
+                    if nothing_to_post else "") + ".")
 
         # Idempotency is the property worth demonstrating, because every
         # nightly job in this system will eventually run twice.

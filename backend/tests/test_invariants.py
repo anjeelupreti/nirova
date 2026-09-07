@@ -2624,3 +2624,142 @@ def test_every_reminder_considers_rows_or_says_why_not(tenant):
         "these reminders considered no rows at all, which is usually a filter "
         "that matches nothing rather than good news: " + ", ".join(silent)
     )
+
+
+# ---------------------------------------------------------------------------
+# Log 205 - the column that was never written
+# ---------------------------------------------------------------------------
+
+
+def test_an_issued_invoice_falls_due(tenant):
+    """`Invoice.due_date` was declared and never written by any line of code.
+
+    Sixty-four issued invoices in the demo tenant, not one with a due date, so
+    nothing could ever be overdue, credit terms were unenforceable, and the
+    reminder that chases unpaid invoices had nothing to chase. Found by the
+    reminder engine considering zero rows — which is why "considered nothing"
+    is itself a test.
+    """
+    from apps.billing.models import Charge, ChargeStatus
+    from apps.billing.services import create_invoice
+
+    charge = (
+        Charge.objects.filter(status=ChargeStatus.PENDING)
+        .select_related("patient", "facility")
+        .first()
+    )
+    if charge is None:
+        pytest.skip("no pending charges to invoice")
+
+    invoice = create_invoice(
+        tenant, charge.patient, charge.facility, charges=[charge], issue=True,
+    )
+    assert invoice.due_date is not None, (
+        "an issued invoice still has no due date"
+    )
+    # A draft is not owed yet, so the date is allocated by the same act that
+    # allocates the number.
+    assert invoice.due_date >= invoice.issued_at.date()
+
+
+def test_credit_terms_follow_who_pays(tenant):
+    """The only axis on which terms really vary.
+
+    A walk-in pays today; an insurer pays when it has adjudicated, which is
+    weeks. The default for a general patient is **zero days** — due on issue —
+    because that is the status quo at a cash counter written down, not a credit
+    policy this module invented on somebody's behalf.
+    """
+    from apps.billing.credit_terms import DEFAULT_CREDIT_DAYS, credit_days
+    from apps.organization.config import set_config_value
+    from apps.billing.credit_terms import KEY, NAMESPACE
+
+    assert credit_days("general") == 0
+    assert credit_days("staff") == 0
+    assert credit_days("insurance") > credit_days("general")
+
+    # An unknown category must not silently become generous.
+    assert credit_days("something_nobody_defined") == 0
+
+    # Configurable, and configuring one key must not lose the others.
+    set_config_value(NAMESPACE, KEY, {"corporate": 60})
+    try:
+        assert credit_days("corporate") == 60
+        assert credit_days("insurance") == DEFAULT_CREDIT_DAYS["insurance"]
+        assert credit_days("general") == 0
+    finally:
+        set_config_value(NAMESPACE, KEY, {})
+
+    # A malformed setting must not take billing down, and must not quietly
+    # become "everything is due in ninety days" either.
+    set_config_value(NAMESPACE, KEY, "not a mapping at all")
+    try:
+        assert credit_days("insurance") == DEFAULT_CREDIT_DAYS["insurance"]
+    finally:
+        set_config_value(NAMESPACE, KEY, {})
+
+
+def test_ageing_says_when_it_cannot_tell_you_what_is_overdue(tenant):
+    """Nothing was back-filled, and the report says so.
+
+    Invoices issued before credit terms existed have no due date. Reporting
+    those as "0 days overdue" would claim a punctuality nobody earned, so the
+    row carries `None` and the report counts how many it could not answer for.
+    """
+    from apps.finance.services import receivables_ageing
+
+    report = receivables_ageing()
+    assert "overdue" in report
+    assert "without_a_due_date" in report
+
+    undated = [row for row in report["invoices"] if row["due"] is None]
+    assert all(row["days_overdue"] is None for row in undated), (
+        "an invoice with no due date was reported as a number of days overdue"
+    )
+    assert report["without_a_due_date"] == len(undated)
+
+    # The buckets still age from the invoice date. They are reconciled against
+    # the receivables control account, and changing what they mean would move
+    # a number two independent records are compared on.
+    assert set(report["buckets"]) == {"0-30", "31-60", "61-90", "91-180",
+                                      "181-plus"}
+
+
+def test_an_invoice_worth_nothing_posts_nothing_rather_than_failing(tenant):
+    """A document worth nothing has no entry to make, and that is not a failure.
+
+    Found by accident: a probe issued an invoice for a single "Implant, at
+    cost" charge priced at zero, and the next run of the finance seed died on
+    "an entry with no lines is not an entry" — **taking the whole posting batch
+    with it**, because one correctly recorded document happened to be worth
+    nothing. A fully waived bill is the same shape and entirely legitimate: it
+    needs a number, it belongs in the audit trail, and it moves no money.
+    """
+    from apps.billing.models import Invoice, InvoiceStatus
+    from apps.finance.services import post_invoice
+
+    worthless = (
+        Invoice.objects.filter(total=0)
+        .exclude(status__in=[InvoiceStatus.DRAFT, InvoiceStatus.CANCELLED])
+        .first()
+    )
+    if worthless is None:
+        pytest.skip("no zero-value issued invoice in this tenant")
+
+    entry, was_new = post_invoice(worthless, actor=None)
+    # `None` rather than an empty entry: a journal entry with no lines is a row
+    # somebody has to explain to an auditor forever, and the honest record is
+    # that there was nothing to post.
+    assert entry is None
+    assert was_new is False
+
+    # And a document that *is* worth something still posts, so the check above
+    # is measuring the amount rather than a broken poster.
+    real = (
+        Invoice.objects.filter(status=InvoiceStatus.ISSUED)
+        .exclude(total=0)
+        .first()
+    )
+    if real is not None:
+        entry, _ = post_invoice(real, actor=None)
+        assert entry is not None
