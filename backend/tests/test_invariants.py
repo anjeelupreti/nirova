@@ -3552,3 +3552,69 @@ def test_a_medicine_can_be_added_and_edited_through_the_api(tenant):
         content_type="application/json",
     )
     assert refused.status_code == 403
+
+
+def test_a_ward_and_its_beds_can_be_set_up(tenant):
+    """The console had no way to lay out a ward.
+
+    The admissions half of that screen is deep — admit, move, discharge — and
+    every part of it assumes a ward with beds in it already exists. Nothing
+    created either, so a new facility's ward list could only be loaded with an
+    HTTP client.
+
+    The setup screen also depends on filtering beds by ward, which is what
+    makes "the beds in this ward" a question the panel can ask.
+    """
+    from apps.inpatient.models import Ward
+    from apps.organization.models import Facility
+
+    owner = _report_client("owner@manakamana.test", tenant)
+    doctor = _report_client("doctor@manakamana.test", tenant)
+    if owner is None or doctor is None:
+        pytest.skip("missing demo accounts")
+    owner.raise_request_exception = False
+    doctor.raise_request_exception = False
+
+    ward = Ward.objects.first()
+    facility = Facility.objects.first()
+    if ward is None or facility is None:
+        pytest.skip("no ward or facility to work from")
+
+    # The panel lists the beds in one ward, not every bed in the hospital.
+    filtered = owner.get(f"/api/ipd/beds/?ward={ward.uuid}")
+    assert filtered.status_code == 200
+    rows = json.loads(filtered.content.decode())["results"]
+    assert all(row["ward"] == str(ward.uuid) for row in rows), (
+        "the ward filter returned beds from other wards"
+    )
+
+    created = owner.post(
+        "/api/ipd/wards/",
+        data=json.dumps({
+            "code": "SETUPTEST", "name": "Setup Test Ward",
+            "ward_type": "general", "facility": str(facility.uuid),
+        }),
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content[:300]
+
+    bed = owner.post(
+        "/api/ipd/beds/",
+        data=json.dumps({
+            "ward": json.loads(created.content.decode())["uuid"],
+            "code": "SETUPTEST-1",
+        }),
+        content_type="application/json",
+    )
+    assert bed.status_code == 201, bed.content[:300]
+
+    # Laying out a ward is the facility manager's, not the doctor's. The screen
+    # hides the buttons; this is the guard.
+    refused = doctor.post(
+        "/api/ipd/wards/",
+        data=json.dumps({
+            "code": "NOPE", "name": "Nope", "facility": str(facility.uuid),
+        }),
+        content_type="application/json",
+    )
+    assert refused.status_code == 403

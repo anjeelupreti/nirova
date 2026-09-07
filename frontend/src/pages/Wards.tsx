@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Settings2,
   AlertTriangle,
   ArrowRightLeft,
   BedDouble,
@@ -44,6 +45,7 @@ import {
   Wrench,
 } from "lucide-react";
 
+import WardSetup from "@/pages/wards/Setup";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -83,12 +85,15 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 
-type Tab = "board" | "patients" | "census";
+type Tab = "board" | "patients" | "census" | "setup";
 
 const TABS: { id: Tab; label: string; icon: typeof BedDouble }[] = [
   { id: "board", label: "Bed board", icon: BedDouble },
   { id: "patients", label: "Patients", icon: Stethoscope },
   { id: "census", label: "Census", icon: Hospital },
+  // Last: a ward is laid out once and then run every day. The board is the
+  // daily screen; this is the one you visit when a bay opens.
+  { id: "setup", label: "Wards & beds", icon: Settings2 },
 ];
 
 const rupees = (value: string | number) =>
@@ -202,6 +207,7 @@ export default function WardsPage() {
         <Patients facility={facility} onOpen={setOpen} />
       )}
       {tab === "census" && <CensusView facility={facility} onOpen={setOpen} />}
+      {tab === "setup" && <WardSetup facilityUuid={facility} />}
     </div>
   );
 }

@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1205** |
+| **Done** | **33 of 132** | **1206** |
 | **Outstanding** | **99** | **646** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -550,9 +550,12 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
       through this system but not set up in it (§218)
 - [x] **Products**, at Pharmacy → Catalogue: list, search, view, add and edit,
       with the form hidden from anybody without `catalog.manage` (§222)
+- [x] **Wards and beds**, at Wards → Wards & beds: list, view a ward with its
+      beds, create a ward, and add beds in a numbered run rather than one at a
+      time (§223)
 - [ ] The rest of the master data with no screen: price lists, service items,
-      wards, beds, theatres, stock locations, holidays, shifts, positions, tax
-      slabs, salary structures, payers
+      theatres, stock locations, holidays, shifts, positions, tax slabs,
+      salary structures, payers
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 

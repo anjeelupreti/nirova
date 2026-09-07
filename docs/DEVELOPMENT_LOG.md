@@ -8168,3 +8168,44 @@ assistant refused (403).
 **Affects.** `frontend/src/pages/pharmacy/Catalogue.tsx` (new),
 `frontend/src/pages/Pharmacy.tsx`, `frontend/src/types/index.ts`,
 `backend/tests/test_invariants.py`.
+
+---
+
+## 223 - A ward round with nowhere to lay out the ward
+2026-09-08 · Frontend · feature
+
+The second master-data screen, and the pattern from §221 and §222 applied a
+third time.
+
+The wards screen is *deep* — admit, move, discharge, the whole stay, eighteen
+hundred lines of it. **And every part of it assumes a ward with beds already
+exists.** Nothing created either. A new facility's ward list could only be
+loaded with an HTTP client, and opening a new bay meant asking an engineer.
+
+(Until two days ago it could not be done at all: `Ward.facility` and `Bed.ward`
+were declared read-only on serializers whose columns are not nullable, so every
+create violated a not-null constraint — log 218.)
+
+**Beds are added in a run.** A ward opens with twelve beds, not with one, and
+making somebody fill the same form twelve times is how a setup screen goes
+unused and the data ends up loaded from a spreadsheet by somebody else. Give a
+prefix and a range and it says how many it is about to create before it does.
+
+**Failures are collected, not fatal.** There is no bulk endpoint, so the run is
+twelve requests; stopping at the first failure would leave a half-numbered ward
+and no way to tell how far it got. Every failure is reported together and the
+list is reloaded either way.
+
+**A ward with no beds says "none yet" rather than showing a zero**, because
+that is the state this screen exists to fix and a quiet 0 in a column reads as
+a number rather than as a job to do.
+
+**`bed.manage` to change, `encounter.read` to look.** A ward sister should see
+the layout of her ward; changing it is the facility manager's.
+
+**Verified**: the bed filter returns only that ward's beds — which is what
+makes "the beds in this ward" a question the panel can ask at all — a ward and
+a bed both create, and a doctor is refused.
+
+**Affects.** `frontend/src/pages/wards/Setup.tsx` (new),
+`frontend/src/pages/Wards.tsx`, `backend/tests/test_invariants.py`.
