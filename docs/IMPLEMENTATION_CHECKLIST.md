@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1177** |
-| **Outstanding** | **99** | **628** |
+| **Done** | **33 of 132** | **1178** |
+| **Outstanding** | **99** | **627** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-628 understates the remaining work: in the later phases some lines group
+627 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -2537,8 +2537,10 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
 - [x] Receivables ageing reports days *past due* alongside days since issue,
       and counts the invoices it cannot answer for rather than calling them
       punctual. Nothing was back-filled
-- [ ] **`EmploymentContract.ends_on` is never written either**, so no
-      fixed-term contract can end
+- [x] `EmploymentContract.ends_on` is enforced: a locum, intern, trainee or
+      fixed-term contract is refused without one, while daily-wage, part-time
+      and visiting engagements stay open-ended because those describe how
+      somebody is paid rather than how long they are engaged
 - [ ] Appointment reminders and clinical follow-up — these go to *patients*,
       so they need §93's channels first
 - [ ] Stock count due · low stock · maintenance · calibration · accreditation

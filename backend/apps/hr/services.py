@@ -28,6 +28,7 @@ from apps.audit.services import record
 from apps.common.exceptions import DomainError
 from apps.hr.models import (
     BLOCKING_CREDENTIALS,
+    FIXED_TERM_TYPES,
     WORKING_STATUSES,
     ContractStatus,
     Credential,
@@ -524,13 +525,40 @@ def issue_contract(
     Supersede rather than edit: last year's payroll must still be explicable
     against the terms that applied when it ran.
     """
+    kind = employment_type or employee.employment_type
+    # A fixed-term engagement with no end date is not an open-ended one, it is
+    # a contract missing a term. Refused here rather than left to be noticed
+    # later, because `ends_on` is also what the reminder engine watches to warn
+    # HR that somebody's contract is running out -- an unbounded locum is
+    # invisible to it forever.
+    #
+    # Measured before enforcing: every contract in the demo tenant is permanent
+    # or daily wage, so nothing existing violates this. Three times this
+    # project has been saved by checking a column before adding a rule to it.
+    if kind in FIXED_TERM_TYPES and ends_on is None:
+        label = EmploymentType(kind).label.lower()
+        raise HrError(
+            # "An intern", not "A intern". This message is shown to whoever is
+            # hiring somebody, and an error that reads like a machine wrote it
+            # is one people trust a little less than they should.
+            f"{'An' if label[0] in 'aeiou' else 'A'} {label} engagement needs "
+            f"an end date. If it is genuinely open-ended, it is not "
+            f"fixed-term.",
+            detail={"employment_type": kind},
+        )
+    if ends_on is not None and ends_on <= starts_on:
+        raise HrError(
+            "A contract cannot end before it starts.",
+            detail={"starts_on": str(starts_on), "ends_on": str(ends_on)},
+        )
+
     EmploymentContract.objects.filter(
         employee=employee, status=ContractStatus.ACTIVE
     ).update(status=ContractStatus.SUPERSEDED)
 
     contract = EmploymentContract.objects.create(
         employee=employee,
-        employment_type=employment_type or employee.employment_type,
+        employment_type=kind,
         starts_on=starts_on,
         ends_on=ends_on,
         basic_salary=Decimal(str(basic_salary)),

@@ -454,6 +454,22 @@ class ContractStatus(models.TextChoices):
     TERMINATED = "terminated", "Terminated"
 
 
+#: Engagements that are time-bounded by their nature. A locum, an intern and a
+#: fixed-term contract all end on an agreed date -- that is what distinguishes
+#: them from permanent employment, so a row of one of these kinds with no
+#: `ends_on` is not a permissive default, it is a missing term.
+#:
+#: `daily_wage`, `part_time` and `visiting` are deliberately *not* here. They
+#: describe how somebody is paid rather than how long they are engaged for, and
+#: a daily-wage cleaner can be on the books for years.
+FIXED_TERM_TYPES = frozenset({
+    EmploymentType.CONTRACT,
+    EmploymentType.LOCUM,
+    EmploymentType.INTERN,
+    EmploymentType.TRAINEE,
+})
+
+
 class EmploymentContract(BaseModel):
     """The terms someone works under, dated.
 

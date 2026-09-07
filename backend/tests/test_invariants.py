@@ -2763,3 +2763,81 @@ def test_an_invoice_worth_nothing_posts_nothing_rather_than_failing(tenant):
     if real is not None:
         entry, _ = post_invoice(real, actor=None)
         assert entry is not None
+
+
+def test_a_fixed_term_engagement_needs_an_end_date(tenant):
+    """`EmploymentContract.ends_on` was declared and never written either.
+
+    The sibling of the invoice due date, found by the same reminder. The API
+    already accepted `ends_on`; no caller ever passed it, so no fixed-term
+    contract could ever run out and the reminder watching for it was blind.
+
+    A locum, an intern and a fixed-term contract all end on an agreed date —
+    that is what distinguishes them from permanent employment, so one with no
+    `ends_on` is a missing term rather than a permissive default.
+    `daily_wage`, `part_time` and `visiting` are deliberately excluded: they
+    describe how somebody is *paid*, not how long they are engaged for, and a
+    daily-wage cleaner can be on the books for years.
+
+    Measured before enforcing — every contract in the tenant is permanent or
+    daily wage, so nothing existing violates this.
+    """
+    from datetime import date, timedelta
+
+    from apps.hr.models import (
+        ContractStatus,
+        Employee,
+        EmploymentContract,
+        EmploymentType,
+    )
+    from apps.hr.services import HrError, issue_contract
+
+    employee = Employee.objects.filter(status="active").first()
+    if employee is None:
+        pytest.skip("no active employee")
+
+    start = date.today()
+    active_before = list(
+        EmploymentContract.objects.filter(
+            employee=employee, status=ContractStatus.ACTIVE,
+        ).values_list("pk", flat=True)
+    )
+    created = []
+    try:
+        for kind in (EmploymentType.LOCUM, EmploymentType.INTERN,
+                     EmploymentType.CONTRACT, EmploymentType.TRAINEE):
+            with pytest.raises(HrError):
+                issue_contract(
+                    employee, start, 40000, employment_type=kind, ends_on=None,
+                )
+
+        # A date before the start is not a term, it is a typo.
+        with pytest.raises(HrError):
+            issue_contract(
+                employee, start, 40000,
+                employment_type=EmploymentType.CONTRACT,
+                ends_on=start - timedelta(days=1),
+            )
+
+        # Open-ended arrangements are still allowed to be open-ended.
+        for kind in (EmploymentType.PERMANENT, EmploymentType.DAILY_WAGE):
+            contract = issue_contract(
+                employee, start, 40000, employment_type=kind, ends_on=None,
+            )
+            created.append(contract.pk)
+            assert contract.ends_on is None
+
+        dated = issue_contract(
+            employee, start, 40000, employment_type=EmploymentType.LOCUM,
+            ends_on=start + timedelta(days=90),
+        )
+        created.append(dated.pk)
+        assert dated.ends_on == start + timedelta(days=90)
+    finally:
+        # `issue_contract` supersedes whatever was active, so putting the rows
+        # back is not enough -- the employee's real contract has to be made
+        # active again or the tenant is left without one.
+        EmploymentContract.objects.filter(pk__in=created).delete()
+        EmploymentContract.objects.filter(pk__in=active_before).update(
+            status=ContractStatus.ACTIVE,
+        )

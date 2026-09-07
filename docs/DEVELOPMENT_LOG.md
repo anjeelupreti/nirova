@@ -7290,3 +7290,49 @@ general patient's on the day. 115 tests.
 `apps/finance/services.py`,
 `apps/finance/management/commands/seed_finance_demo.py`,
 `tests/test_invariants.py`.
+
+---
+
+## 206 - A fixed-term engagement with no end
+2026-09-07 · Backend · fix
+
+The sibling of the previous entry, found by the same reminder.
+`EmploymentContract.ends_on` was declared and never written — the service
+already accepted an `ends_on` argument and no caller ever passed one, so no
+fixed-term contract could ever run out and the reminder watching for it was
+blind.
+
+**A locum, an intern, a trainee and a fixed-term contract all end on an agreed
+date.** That is what distinguishes them from permanent employment, so one with
+no end date is a missing term rather than a permissive default, and
+`issue_contract` now refuses it.
+
+**`daily_wage`, `part_time` and `visiting` are deliberately excluded.** They
+describe how somebody is *paid*, not how long they are engaged for, and a
+daily-wage cleaner can be on the books for years. Getting that boundary wrong
+would have made the rule an obstacle rather than a control, which is how
+validation gets switched off.
+
+Also refused: an end date on or before the start date. That is not a term, it
+is a typo, and it produces a contract that has already expired.
+
+**Measured before enforcing**, as every column-level rule in this project now
+is: all 62 contracts in the tenant are `permanent` or `daily_wage`, so nothing
+existing violates the rule. Fourth time that check has come before a rule; it
+has prevented shipping something harmful three times.
+
+**And a note on the probe, because it did real damage.** `issue_contract`
+supersedes whatever contract was active, so a probe that creates contracts and
+then deletes them leaves the employee with **no active contract at all** —
+which is worse than the state it started in, and invisible unless you look.
+Found by re-running the survey afterwards, repaired, and the test now restores
+the previous active row rather than only deleting what it made. Deleting what
+you created is not the same as putting things back.
+
+**Verified.** Six cases: locum, intern, contract and trainee without a date all
+refused; permanent and daily wage without a date allowed; a locum with a date
+allowed; a contract ending before it starts refused. 116 tests, and the tenant
+is byte-for-byte as it was.
+
+**Affects.** `apps/hr/models.py`, `apps/hr/services.py`,
+`tests/test_invariants.py`.
