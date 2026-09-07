@@ -7725,3 +7725,57 @@ testing precisely because you expect nothing.**
 **Affects.** `apps/common/permissions.py`, `apps/notifications/reminders.py`,
 `frontend/src/lib/api.ts`, `frontend/src/pages/Procurement.tsx`,
 `tests/test_invariants.py`.
+
+---
+
+## 214 - POST, and nineteen bugs that were not there
+2026-09-07 · Backend · fix
+
+The last open item from entry 211's list said a POST sweep "needs a valid body
+per endpoint, and a sweep that posts nonsense tests the serializer rather than
+the permission". **That was wrong, and usefully so.** An *empty* body separates
+the answers perfectly:
+
+- **403** — refused at the permission. Correct.
+- **400** — got past the permission and was stopped by validation. That is what
+  a create endpoint should do with nonsense.
+- **500** — got past both and reached the database: a serializer that does not
+  require what the table does.
+
+So the 500s are the finding, and nothing is created either way.
+
+Run across 77 create routes as four roles, it reported **twenty 500s** — every
+one of them the same role, on endpoints where other roles got a clean 400.
+
+**Nineteen of them were my own probe.** The first genuine 500 aborted the
+transaction the test was running in, and PostgreSQL then failed every
+subsequent query with "you can't execute queries until the end of the atomic
+block". Re-running each route in its own test — one failure cannot poison the
+next — left exactly one. **Log 162 again, this time in the instrument rather
+than the code**, which is a good reminder that a measurement is a program and
+has bugs like one.
+
+**The one real finding is a good one.** `EmployeePayrollSerializer` declared
+`employee`, `structure` and `scheme` all `read_only`. So `perform_create` saved
+a profile with no employee, `employee` is a non-null one-to-one, and the
+request reached the database and 500'd. **Creating a payroll profile — the only
+way to give somebody a salary structure or a tax regime — could never succeed**,
+and nothing else in the codebase creates one either. Read-only on the three
+fields that are the entire point of the record.
+
+Fixed by making them writable, with the employee fixed once the profile exists:
+it is a one-to-one record *about* that person, and moving it would silently
+transfer their salary structure, tax regime and insurance declarations along
+with it.
+
+**What this pass is really about.** Three sweeps in two days — every GET route,
+every PATCH, every POST — and the pattern in what they find is consistent:
+**the bugs are in the code nobody has ever executed.** Not in the hard parts;
+in the endpoints, fields and branches that looked finished because nothing had
+ever called them.
+
+**Verified.** An empty body is a 400 naming the missing field, a real body
+creates the profile, and a later attempt to reassign the employee is ignored.
+124 tests.
+
+**Affects.** `apps/payroll/api.py`, `tests/test_invariants.py`.

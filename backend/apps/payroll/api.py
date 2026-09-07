@@ -119,9 +119,30 @@ class ContributionSchemeSerializer(serializers.ModelSerializer):
 
 
 class EmployeePayrollSerializer(serializers.ModelSerializer):
-    employee = UUIDRelatedField(read_only=True)
-    structure = UUIDRelatedField(read_only=True)
-    scheme = UUIDRelatedField(read_only=True)
+    """How one employee is paid.
+
+    **All three of these were `read_only`, which made the endpoint that owns
+    them impossible to use.** `perform_create` saved a profile with no
+    employee, and since `employee` is a non-null `OneToOneField` the request
+    reached the database and returned a 500 -- so creating a payroll profile,
+    the only way to give somebody a salary structure or a tax regime, could
+    never succeed at all. Nothing else in the codebase creates one either.
+
+    Found by POSTing an empty body to every create endpoint: a malformed
+    request should be answered with a 400, and this one crashed instead, which
+    is the signature of a serializer that does not require what the table does.
+    """
+
+    # Writable, because assigning them is the entire purpose of this record.
+    employee = UUIDRelatedField(queryset=Employee.objects.all())
+    structure = UUIDRelatedField(
+        queryset=SalaryStructure.objects.all(), required=False,
+        allow_null=True,
+    )
+    scheme = UUIDRelatedField(
+        queryset=ContributionScheme.objects.all(), required=False,
+        allow_null=True,
+    )
     employee_name = serializers.CharField(
         source="employee.full_name", read_only=True
     )
@@ -140,8 +161,8 @@ class EmployeePayrollSerializer(serializers.ModelSerializer):
             "health_insurance_premium", "cit_contribution",
             "remote_area_category", "is_disabled", "is_on_hold", "hold_reason",
         )
-        read_only_fields = ("uuid", "employee", "employee_name",
-                            "structure_name", "scheme_name")
+        read_only_fields = ("uuid", "employee_name", "structure_name",
+                            "scheme_name")
 
 
 class PayslipLineSerializer(serializers.ModelSerializer):
@@ -710,6 +731,11 @@ class EmployeePayrollViewSet(viewsets.ModelViewSet):
         get_authorization(self.request).require(
             "payroll.process", Scope.FACILITY
         )
+        # The employee is fixed once the profile exists. It is a one-to-one
+        # record *about* that person, and moving it to somebody else would
+        # silently transfer their salary structure, tax regime and insurance
+        # declarations along with it.
+        serializer.validated_data.pop("employee", None)
         serializer.save()
 
 

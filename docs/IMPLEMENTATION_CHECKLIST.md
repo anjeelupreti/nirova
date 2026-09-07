@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1192** |
-| **Outstanding** | **99** | **639** |
+| **Done** | **33 of 132** | **1193** |
+| **Outstanding** | **99** | **638** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-639 understates the remaining work: in the later phases some lines group
+638 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -465,9 +465,12 @@ from somebody who should not have one**. See §211.*
       the write permission — the `write=` guard covers any unsafe verb, not
       only PATCH. And `BaseModel.delete()` is a soft delete, so a tax slab a
       historical payslip was computed from does not vanish from under it
-- [ ] The same measurement for POST. Harder than the other two: a create needs
-      a valid body per endpoint, and a sweep that posts nonsense tests the
-      serializer rather than the permission
+- [x] **POST measured.** An *empty* body separates the answers without needing
+      a valid one per endpoint: 403 is refused, 400 is past the permission and
+      stopped by validation, 500 is past both and into the database. It
+      reported twenty 500s, **nineteen of which were the probe's own poisoned
+      transaction** — one real bug: creating a payroll profile could never
+      succeed at all (§214)
 
 ## Standing guards
 

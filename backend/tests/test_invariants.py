@@ -3245,3 +3245,71 @@ def test_a_read_permission_alone_does_not_open_a_write_endpoint(tenant):
     assert not guard.has_permission(as_request("PATCH"), None)
     assert not guard.has_permission(as_request("POST"), None)
     assert not guard.has_permission(as_request("DELETE"), None)
+
+
+# ---------------------------------------------------------------------------
+# Log 214 - an endpoint that could never have worked
+# ---------------------------------------------------------------------------
+
+
+def test_a_payroll_profile_can_actually_be_created(tenant):
+    """Every field on it was `read_only`, including the employee.
+
+    So `perform_create` saved a profile with no employee, and since `employee`
+    is a non-null one-to-one the request reached the database and returned a
+    500. Creating a payroll profile — the only way to give somebody a salary
+    structure or a tax regime — could never succeed, and nothing else in the
+    codebase creates one either.
+
+    Found by POSTing an **empty body** to every create endpoint. A malformed
+    request should be answered with a 400; this one crashed, which is the
+    signature of a serializer that does not require what the table does.
+    """
+    from apps.hr.models import Employee
+    from apps.payroll.models import EmployeePayroll, SalaryStructure
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+
+    # A bad request is a 400, not a crash.
+    empty = client.post(
+        "/api/payroll/profiles/", data="{}",
+        content_type="application/json",
+    )
+    assert empty.status_code == 400, empty.content[:200]
+    assert "employee" in empty.content.decode()
+
+    candidate = Employee.objects.exclude(
+        pk__in=EmployeePayroll.objects.values("employee_id"),
+    ).first()
+    if candidate is None:
+        pytest.skip("every employee already has a payroll profile")
+
+    structure = SalaryStructure.objects.first()
+    created = client.post(
+        "/api/payroll/profiles/",
+        data=json.dumps({
+            "employee": str(candidate.uuid),
+            "structure": str(structure.uuid) if structure else None,
+            "tax_regime": "individual",
+        }),
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content[:300]
+    body = json.loads(created.content.decode())
+    assert body["employee"] == str(candidate.uuid)
+
+    # And the employee is fixed once it exists: this is a one-to-one record
+    # *about* that person, and moving it would silently transfer their salary
+    # structure, tax regime and insurance declarations with it.
+    someone_else = Employee.objects.exclude(pk=candidate.pk).first()
+    if someone_else is not None:
+        client.patch(
+            f"/api/payroll/profiles/{body['uuid']}/",
+            data=json.dumps({"employee": str(someone_else.uuid)}),
+            content_type="application/json",
+        )
+        assert EmployeePayroll.objects.get(
+            uuid=body["uuid"],
+        ).employee_id == candidate.pk
