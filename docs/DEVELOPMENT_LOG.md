@@ -7400,3 +7400,60 @@ alert stays open afterwards. 117 tests.
 **Affects.** `apps/diagnostics/services.py`,
 `apps/notifications/management/commands/run_sweeps.py`,
 `tests/test_invariants.py`.
+
+---
+
+## 208 - A patient who could not be recorded as having died
+2026-09-07 · Backend · fix
+
+The next item from entry 207's list, and the one with the widest blast radius.
+
+`PatientStatus.DECEASED`, `Patient.date_of_death` and `Patient.cause_of_death`
+have all been on the model since patients were written, and **nothing set any
+of them.** Meanwhile emergency, ICU, inpatient and the encounter record each
+have their own death outcome — `DIED` in three enumerations and `("died",
+"Died")` in a fourth.
+
+So the hospital knew, in four places, and the patient record did not. **Somebody
+who died in intensive care last week was still `active`**: still schedulable,
+still swept by the reminder engine, still a name a receptionist would offer an
+appointment to.
+
+**The patient record is where this fact belongs.** A death recorded on an ICU
+stay answers "how did this stay end". It cannot answer "is this person alive",
+which is what scheduling, the sweeps and the person at the counter are all
+actually asking. So the modules that *observe* a death now call
+`record_death`, and the fact lives in one place.
+
+**Recording it does not cascade.** The admission, the encounter and the ICU
+stay each end through their own path with their own outcome and their own audit
+line. Cascading from here would mean a correction to a date of death silently
+reopening a discharge, which is not a thing anybody wants to explain.
+
+**It does cancel future appointments**, because that is the actual harm: a
+reminder telephoning a bereaved family about next Tuesday's clinic. Past
+appointments are untouched — they happened.
+
+**It is idempotent**, because two modules observing the same death — the ICU
+stay and the encounter — must not fight over the record or write two audit
+lines for one event.
+
+**Audited at `CRITICAL`**, and not because it is dramatic: this is the field
+that decides whether a person is contacted again, and a wrong one is both a
+clinical error and a cruelty. Refused: a date in the future, a date before
+birth, and recording a death against a merged shell rather than the surviving
+record.
+
+**Learned on the way: this test suite rolls back.** I had been restoring
+mutated rows by hand in `finally` blocks all session, which is harmless but
+unnecessary — and it mattered here, because knowing it let the integration test
+actually discharge a real admission with `DIED` and assert the patient record
+learned, rather than testing the setter and hoping about the wiring.
+
+**Verified.** Future date refused, pre-birth date refused, death recorded with
+cause, the future appointment cancelled with a reason and the past one
+untouched, a repeat recording silent, deceased patients still findable by
+search — which is correct, since records outlive people. 119 tests.
+
+**Affects.** `apps/patients/services.py`, `apps/icu/services.py`,
+`apps/inpatient/services.py`, `tests/test_invariants.py`.

@@ -2937,3 +2937,111 @@ def test_an_unacknowledged_critical_value_escalates_itself(tenant):
         Notification.all_objects.filter(
             event="critical_value_escalated",
         ).delete()
+
+
+# ---------------------------------------------------------------------------
+# Log 208 - a patient who could not be recorded as having died
+# ---------------------------------------------------------------------------
+
+
+def test_recording_a_death_refuses_the_impossible_and_cancels_the_future(tenant):
+    """`PatientStatus.DECEASED`, `date_of_death` and `cause_of_death` all
+    existed and nothing set any of them.
+
+    Meanwhile emergency, ICU, inpatient and the encounter record each have
+    their own death outcome — so the hospital knew in four places and the
+    patient record did not. Somebody who died in intensive care last week was
+    still `active`: still schedulable, still on the reminder sweeps, still a
+    name a receptionist would offer an appointment to.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.patients.models import Patient, PatientStatus
+    from apps.patients.services import PatientError, record_death
+    from apps.scheduling.models import Appointment, AppointmentStatus
+
+    today = timezone.localdate()
+    patient = (
+        Patient.objects.filter(status=PatientStatus.ACTIVE)
+        .exclude(date_of_birth=None)
+        .first()
+    )
+    if patient is None:
+        pytest.skip("no active patient with a date of birth")
+
+    with pytest.raises(PatientError):
+        record_death(patient, today + timedelta(days=1))
+    with pytest.raises(PatientError):
+        record_death(patient, patient.date_of_birth - timedelta(days=1))
+
+    template = Appointment.objects.filter(patient__isnull=False).first()
+    if template is None:
+        pytest.skip("no appointments to model against")
+
+    future = Appointment.objects.create(
+        patient=patient, facility=template.facility,
+        reference="APT-TEST-FUTURE",
+        scheduled_for=timezone.now() + timedelta(days=7),
+        status=AppointmentStatus.SCHEDULED, duration_minutes=15,
+    )
+    past = Appointment.objects.create(
+        patient=patient, facility=template.facility,
+        reference="APT-TEST-PAST",
+        scheduled_for=timezone.now() - timedelta(days=30),
+        status=AppointmentStatus.COMPLETED, duration_minutes=15,
+    )
+
+    record_death(patient, today, cause="Cardiac arrest", observed_by="test")
+    patient.refresh_from_db()
+    assert patient.status == PatientStatus.DECEASED
+    assert patient.date_of_death == today
+    assert patient.cause_of_death == "Cardiac arrest"
+
+    # The actual harm this prevents: a reminder telephoning a bereaved family
+    # about next Tuesday's clinic.
+    future.refresh_from_db()
+    assert future.status == AppointmentStatus.CANCELLED
+    assert future.cancellation_reason == "Patient deceased"
+
+    # What already happened still happened.
+    past.refresh_from_db()
+    assert past.status == AppointmentStatus.COMPLETED
+
+    # Idempotent: two modules observing the same death must not fight over the
+    # record or write two audit lines for one event.
+    record_death(patient, today, cause="Cardiac arrest")
+    patient.refresh_from_db()
+    assert patient.date_of_death == today
+
+
+def test_a_death_on_the_ward_reaches_the_patient_record(tenant):
+    """The integration is the point, not the setter.
+
+    A death recorded on an admission answers "how did this stay end". It cannot
+    answer "is this person alive", which is what scheduling, the reminder
+    sweeps and the receptionist are all really asking.
+    """
+    from apps.inpatient.models import Admission, AdmissionStatus, IN_HOUSE_STATUSES
+    from apps.inpatient.services import discharge
+    from apps.patients.models import PatientStatus
+
+    admission = (
+        Admission.objects.filter(status__in=IN_HOUSE_STATUSES)
+        .select_related("patient")
+        .first()
+    )
+    if admission is None:
+        pytest.skip("nobody currently admitted")
+
+    patient = admission.patient
+    assert patient.status != PatientStatus.DECEASED
+
+    discharge(admission, outcome=AdmissionStatus.DIED, actor=None)
+
+    patient.refresh_from_db()
+    assert patient.status == PatientStatus.DECEASED, (
+        "a patient died on the ward and their own record still says active"
+    )
+    assert patient.date_of_death is not None

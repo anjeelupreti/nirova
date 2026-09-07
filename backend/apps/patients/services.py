@@ -7,7 +7,7 @@ from django.utils import timezone
 
 # AuditAction / record: patient data is sensitive, so registration, viewing
 # and merging are all written to the tenant audit log.
-from apps.audit.models import AuditAction
+from apps.audit.models import AuditAction, AuditSeverity
 from apps.audit.services import record, record_version
 from apps.catalog.keys import MeterKey, ModuleCode
 from apps.common.exceptions import DomainError
@@ -248,6 +248,132 @@ def record_patient_access(patient, reason: str = "") -> None:
         entity_id=patient.uuid,
         entity_label=f"{patient.full_name} ({patient.mrn})",
         reason=reason,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Death
+# ---------------------------------------------------------------------------
+
+
+@tenant_atomic_method
+def record_death(
+    patient,
+    died_on,
+    cause: str = "",
+    actor=None,
+    observed_by: str = "",
+) -> "Patient":
+    """Record that a patient has died, on the patient record itself.
+
+    `PatientStatus.DECEASED`, `date_of_death` and `cause_of_death` have all
+    been on this model since it was written, and **nothing set any of them.**
+    Meanwhile emergency, ICU, inpatient and the encounter record each have
+    their own death outcome -- so the hospital knew, in four places, and the
+    patient record did not. A person who died in intensive care last week was
+    still `active`: still schedulable, still on the reminder sweeps, still a
+    name a receptionist would offer an appointment to.
+
+    **The patient record is where this fact belongs.** A death recorded on an
+    ICU stay answers "what happened to this admission"; it cannot answer "is
+    this person alive", which is the question every other module is really
+    asking. So the modules that *observe* a death call this, and the fact lives
+    in one place.
+
+    **Recording it does not close anything else.** The admission, the encounter
+    and the ICU stay each end through their own path with their own outcome and
+    their own audit line. Cascading from here would mean a correction to a date
+    of death silently reopening a discharge, which is not a thing anybody wants
+    to explain.
+
+    **Future appointments are cancelled**, because that is the actual harm: a
+    reminder telephoning a bereaved family about next Tuesday's clinic. Past
+    appointments are untouched -- they happened.
+    """
+    from apps.patients.models import PatientStatus
+
+    today = timezone.localdate()
+    if died_on > today:
+        raise PatientError(
+            "A date of death cannot be in the future.",
+            detail={"died_on": str(died_on)},
+        )
+    if patient.date_of_birth and died_on < patient.date_of_birth:
+        raise PatientError(
+            "A date of death cannot precede the date of birth.",
+            detail={"died_on": str(died_on),
+                    "date_of_birth": str(patient.date_of_birth)},
+        )
+    if patient.status == PatientStatus.MERGED:
+        raise PatientError(
+            "That record was merged into another one; record the death "
+            "against the surviving record.",
+        )
+
+    already = patient.date_of_death
+    if already == died_on:
+        # Idempotent on purpose: two modules observing the same death -- the
+        # ICU stay and the encounter, say -- must not fight over the record or
+        # write two audit lines for one event.
+        return patient
+
+    patient.status = PatientStatus.DECEASED
+    patient.date_of_death = died_on
+    patient.cause_of_death = (cause or patient.cause_of_death)[:255]
+    patient.save(
+        update_fields=["status", "date_of_death", "cause_of_death",
+                       "updated_at"],
+    )
+
+    cancelled = _cancel_future_appointments(patient, died_on)
+
+    record_version(
+        entity_type="patients.Patient",
+        entity_id=patient.uuid,
+        snapshot={
+            "status": patient.status,
+            "date_of_death": str(died_on),
+            "cause_of_death": patient.cause_of_death,
+        },
+        reason="Death recorded",
+    )
+    record(
+        AuditAction.UPDATE,
+        entity_type="patients.Patient",
+        entity_id=patient.uuid,
+        entity_label=f"{patient.full_name} ({patient.mrn}) recorded as died "
+                     f"on {died_on}",
+        # Critical, and not because it is dramatic: this is the field that
+        # decides whether a person is contacted again, and a wrong one is both
+        # a clinical error and a cruelty.
+        severity=AuditSeverity.CRITICAL,
+        reason=cause or observed_by,
+        changes={"date_of_death": {"before": str(already or ""),
+                                   "after": str(died_on)}},
+        metadata={"observed_by": observed_by,
+                  "appointments_cancelled": cancelled},
+    )
+    return patient
+
+
+def _cancel_future_appointments(patient, died_on) -> int:
+    """Cancel what has not happened yet. Leave what has.
+
+    Imported here rather than at module level: scheduling imports patients, and
+    hoisting this would make the app registry order load-bearing.
+    """
+    from apps.scheduling.models import Appointment, AppointmentStatus
+
+    upcoming = Appointment.objects.filter(
+        patient=patient,
+        scheduled_for__date__gt=died_on,
+    ).exclude(
+        status__in=[AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED],
+    )
+    return upcoming.update(
+        status=AppointmentStatus.CANCELLED,
+        cancellation_reason="Patient deceased",
+        updated_at=timezone.now(),
     )
 
 

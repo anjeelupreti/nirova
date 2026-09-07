@@ -30,6 +30,7 @@ from apps.audit.models import AuditAction
 # record: an admission is the most contested episode in a hospital — who
 # authorised the bed, who moved the patient, who let them leave owing money.
 from apps.audit.services import record
+from apps.patients.services import record_death
 from apps.billing.models import Charge, ChargeStatus, Invoice, InvoiceStatus, ServiceItem
 from apps.billing.services import capture_charge
 from apps.catalog.keys import ModuleCode
@@ -890,6 +891,14 @@ def discharge(
 
     admission.status = outcome
     admission.discharged_at = timezone.now()
+
+    # Same reason as the ICU path: the ward knows, and the patient record has
+    # to learn, or the person stays schedulable.
+    if outcome == AdmissionStatus.DIED:
+        record_death(
+            admission.patient, admission.discharged_at.date(),
+            actor=actor, observed_by=f"Inpatient {admission.reference}",
+        )
 
     # A day charged on or after the discharge date is a day the bed was free.
     # A backfill run earlier today will have accrued it, so it is reversed

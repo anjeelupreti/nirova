@@ -34,6 +34,7 @@ from apps.audit.models import AuditAction
 # mortality review, by a family, by a court. Who changed the noradrenaline and
 # when is the substance of that reading.
 from apps.audit.services import record
+from apps.patients.services import record_death
 from apps.catalog.keys import ModuleCode
 from apps.common.exceptions import DomainError
 from apps.entitlements.services import require_module
@@ -322,6 +323,19 @@ def discharge_from_icu(
     stay.save(update_fields=[
         "outcome", "discharged_at", "outcome_notes", "updated_at",
     ])
+
+    # The unit knows; the patient record has to learn.
+    #
+    # A death recorded here answers "how did this stay end". It cannot answer
+    # "is this person alive", which is what scheduling, the reminder sweeps and
+    # the receptionist offering next Tuesday are all really asking. Until this
+    # call existed, somebody who died in intensive care stayed `active` on
+    # their own record.
+    if outcome == IcuOutcome.DIED:
+        record_death(
+            stay.patient, timezone.localdate() if at is None else at.date(),
+            cause=notes, actor=actor, observed_by="ICU",
+        )
     record(
         AuditAction.UPDATE,
         entity_type="icu.IcuStay",

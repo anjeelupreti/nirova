@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1182** |
-| **Outstanding** | **99** | **637** |
+| **Done** | **33 of 132** | **1183** |
+| **Outstanding** | **99** | **636** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-637 understates the remaining work: in the later phases some lines group
+636 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -393,8 +393,10 @@ feature wearing a column as a disguise.*
 - [x] `EmploymentContract.ends_on` — no fixed term could run out (§206)
 - [x] `CriticalValueAlert.escalated_at` / `escalation_note` — **a critical
       result nobody acknowledged could never be escalated** (§207)
-- [ ] `Patient.date_of_death` / `cause_of_death` — a patient cannot be
-      recorded as having died, so the system will go on scheduling them
+- [x] `Patient.date_of_death` / `cause_of_death` / `PatientStatus.DECEASED` —
+      recorded by `record_death`, called from the ward and ICU paths that
+      observe a death, cancelling future appointments but not past ones
+      (§208)
 - [ ] `AnaesthesiaRecord.difficult_airway_detail`, `intubation_attempts`,
       `lowest_spo2`, `lowest_systolic`, `adverse_events` — a difficult airway
       not recorded is a risk to the *next* anaesthetic
