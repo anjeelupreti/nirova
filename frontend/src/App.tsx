@@ -37,6 +37,7 @@ import {
   UserCheck,
   ClipboardCheck,
   BarChart3,
+  Tags,
   ShieldAlert,
   Inbox,
   Bell,
@@ -53,6 +54,7 @@ import NotificationsPage from "@/pages/Notifications";
 import PrivacyPage from "@/pages/Privacy";
 import WorkspacePage from "@/pages/Workspace";
 import ReportsPage from "@/pages/Reports";
+import ServicesPage from "@/pages/Services";
 import NurseWorkspacePage from "@/pages/NurseWorkspace";
 import SelfServicePage from "@/pages/SelfService";
 import BillingPage from "@/pages/Billing";
@@ -174,6 +176,10 @@ const NAV_GROUPS: {
       { to: "/billing", label: "Billing", icon: Receipt, needs: "invoice.read", scope: "facility" },
       { to: "/claims", label: "Insurance claims", icon: ShieldCheck, needs: "invoice.read", scope: "facility" },
       { to: "/finance", label: "Finance", icon: Scale, needs: "report.read", scope: "facility" },
+      // What things cost, beside the screens that charge for them. Reading is
+      // `invoice.read` because anybody raising an invoice needs to see prices;
+      // changing them is a different permission the screen checks itself.
+      { to: "/services", label: "Services & prices", icon: Tags, needs: "invoice.read", scope: "facility" },
     ],
   },
   {
@@ -437,6 +443,7 @@ export default function App() {
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/services" element={<ServicesPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />

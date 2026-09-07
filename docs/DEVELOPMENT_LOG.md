@@ -8209,3 +8209,45 @@ a bed both create, and a doctor is refused.
 
 **Affects.** `frontend/src/pages/wards/Setup.tsx` (new),
 `frontend/src/pages/Wards.tsx`, `backend/tests/test_invariants.py`.
+
+---
+
+## 224 - Nothing could set the price of a consultation
+2026-09-08 · Frontend · feature
+
+The third master-data screen, and the one with the clearest consequence: **a
+hospital cannot bill for anything that is not on the service list**, and nothing
+in the console could put something on it.
+
+`/billing/services/` has always listed, created and edited service items. The
+billing screen read that list to fill a dropdown and offered no way to add to
+it — so the price of a consultation could only be set with an HTTP client, and
+a hospital adding a new procedure had to ask an engineer to make it billable.
+
+**Its own screen rather than a tab on Billing.** Billing is a single flow —
+patient, charges, invoice, payment — and wrapping that in tabs to hang a
+catalogue off it would make the daily screen worse to serve the occasional one.
+It sits in Money instead, beside the screens that charge with it.
+
+**The price lists sit beside the services deliberately.** The price on a service
+is the *default*; a price list overrides it per patient category and per payer,
+which is why an insurer and a walk-in pay different figures for the same
+procedure. Showing them side by side makes that relationship visible rather than
+something somebody has to be told.
+
+**"Not priced" rather than a zero.** A service with no price is not free, and a
+bill that silently charges nothing is worse than one that refuses.
+
+**Reading is `invoice.read`, changing is `catalog.manage`.** Anybody raising an
+invoice needs to see what things cost; changing what they cost is a different
+authority, and the two in one pair of hands is the oldest till fraud there is.
+
+**The code is fixed once the service exists**, because charges reference it and
+an issued invoice snapshots it — changing it later would leave old invoices
+pointing at a service that no longer answers to that name.
+
+**Verified**: list, category filter, search, price lists, create (201), edit
+(200), and a counter assistant refused (403).
+
+**Affects.** `frontend/src/pages/Services.tsx` (new), `frontend/src/App.tsx`,
+`frontend/src/types/index.ts`, `backend/tests/test_invariants.py`.

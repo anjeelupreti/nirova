@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1206** |
+| **Done** | **33 of 132** | **1207** |
 | **Outstanding** | **99** | **646** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -553,7 +553,10 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
 - [x] **Wards and beds**, at Wards → Wards & beds: list, view a ward with its
       beds, create a ward, and add beds in a numbered run rather than one at a
       time (§223)
-- [ ] The rest of the master data with no screen: price lists, service items,
+- [x] **Services and prices**, at Money → Services & prices: list, filter by
+      category, search, view, add and edit, with the price lists that override
+      the default shown beside them (§224)
+- [ ] The rest of the master data with no screen: price *list* editing,
       theatres, stock locations, holidays, shifts, positions, tax slabs,
       salary structures, payers
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same

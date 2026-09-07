@@ -3618,3 +3618,62 @@ def test_a_ward_and_its_beds_can_be_set_up(tenant):
         content_type="application/json",
     )
     assert refused.status_code == 403
+
+
+def test_a_service_and_its_price_can_be_set_up(tenant):
+    """A hospital cannot bill for anything not on the service list.
+
+    `/billing/services/` has always listed, created and edited service items —
+    the billing screen read that list to fill a dropdown and offered no way to
+    add to it, so the price of a consultation could only be set by somebody
+    with an HTTP client.
+
+    Reading is `invoice.read`, because anybody raising an invoice needs to see
+    what things cost. Changing is `catalog.manage`: putting the two together is
+    the oldest till fraud there is.
+    """
+    owner = _report_client("owner@manakamana.test", tenant)
+    counter = _report_client("counter@manakamana.test", tenant)
+    if owner is None or counter is None:
+        pytest.skip("missing demo accounts")
+    owner.raise_request_exception = False
+    counter.raise_request_exception = False
+
+    # The screen filters by category and searches by name; both have to work or
+    # a catalogue of hundreds is unusable.
+    assert owner.get("/api/billing/services/").status_code == 200
+    by_category = owner.get("/api/billing/services/?category=consultation")
+    assert by_category.status_code == 200
+    assert json.loads(by_category.content.decode())["count"] >= 1
+    searched = owner.get("/api/billing/services/?search=consult")
+    assert searched.status_code == 200
+
+    # And the price lists shown beside them, which are what override the
+    # default price for a payer or a category of patient.
+    lists = owner.get("/api/billing/price-lists/")
+    assert lists.status_code == 200
+
+    created = owner.post(
+        "/api/billing/services/",
+        data=json.dumps({
+            "code": "TESTSVC", "name": "Test Service",
+            "category": "procedure", "default_price": "250.00",
+        }),
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content[:300]
+
+    uuid = json.loads(created.content.decode())["uuid"]
+    edited = owner.patch(
+        f"/api/billing/services/{uuid}/",
+        data=json.dumps({"default_price": "300.00"}),
+        content_type="application/json",
+    )
+    assert edited.status_code == 200
+
+    refused = counter.post(
+        "/api/billing/services/",
+        data=json.dumps({"code": "NOPE", "name": "Nope", "category": "other"}),
+        content_type="application/json",
+    )
+    assert refused.status_code == 403

@@ -4931,3 +4931,27 @@ export interface MyWorkspace {
     department?: string | null;
   };
 }
+
+/**
+ * A price list: what a category of patient, or a named payer, pays.
+ *
+ * The service item carries a default price; this overrides it. An insurer and
+ * a walk-in pay different figures for the same procedure, and this is where
+ * that difference lives.
+ */
+export interface PriceList {
+  uuid: string;
+  code: string;
+  name: string;
+  patient_category: string;
+  payer_reference: string;
+  effective_from: string | null;
+  effective_to: string | null;
+  is_active: boolean;
+  priority: number;
+  facility?: string | null;
+  facility_name?: string;
+  /** The overridden prices themselves, as the endpoint nests them. */
+  items?: { uuid: string; service: string; price: string;
+            discount_percent?: string }[];
+}
