@@ -85,6 +85,15 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("department.manage", "Manage departments", "Administration"),
     _p("config.read", "View configuration", "Administration"),
     _p("config.update", "Change configuration", "Administration"),
+    # Maintaining a catalogue is not the same authority as changing the
+    # organization's configuration, and conflating them was making the
+    # write guards either useless or absurd: routing the product master
+    # through `config.update` left **only the organization administrator**
+    # able to add a medicine, which a pharmacy manager does weekly. A
+    # permission that nobody appropriate holds is a workflow somebody will
+    # route around.
+    _p("catalog.manage", "Maintain catalogues: products, services, tests",
+       "Administration"),
 
     # -- identity & access ----------------------------------------------
     _p("user.read", "View users", "Access control"),

@@ -3164,13 +3164,18 @@ def test_master_data_refuses_writes_from_people_who_may_only_read_it(tenant):
         ("counter@manakamana.test", "/api/billing/services/"),
         ("counter@manakamana.test", "/api/pharmacy/products/"),
         ("counter@manakamana.test", "/api/insurance/payers/"),
-        ("manager@manakamana.test", "/api/hr/holidays/"),
-        ("manager@manakamana.test", "/api/hr/leave-types/"),
         ("manager@manakamana.test", "/api/payroll/components/"),
         ("pharmacy@manakamana.test", "/api/finance/bank-accounts/"),
         ("doctor@manakamana.test", "/api/diagnostics/tests/"),
         ("doctor@manakamana.test", "/api/ipd/wards/"),
     ]
+    # The holiday calendar and the shift patterns are deliberately **not**
+    # here. They were, briefly, while both sat behind `config.update` -- which
+    # left only the organization administrator able to add a public holiday,
+    # and an HR manager unable to do their own job. They now sit behind
+    # `employee.manage`, which the HR manager holds, so the only account that
+    # can read them can also change them and there is no pair left to test.
+    # A guard that outlives the rule it guarded is worse than no guard.
 
     holes = []
     examined = 0

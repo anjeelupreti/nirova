@@ -347,7 +347,7 @@ class HolidayViewSet(viewsets.ModelViewSet):
     # sending an empty PATCH as eight roles and watching all eight succeed.
     permission_classes = [
         IsAuthenticated,
-        HasPermission.of("attendance.read", write="config.update"),
+        HasPermission.of("attendance.read", write="employee.manage"),
     ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
@@ -580,7 +580,7 @@ class LeaveTypeViewSet(viewsets.ModelViewSet):
     # carry entitlements and whether the leave is paid.
     permission_classes = [
         IsAuthenticated,
-        HasPermission.of("attendance.read", write="config.update"),
+        HasPermission.of("attendance.read", write="employee.manage"),
     ]
     lookup_field = "code"
 

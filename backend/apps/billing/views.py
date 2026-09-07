@@ -56,7 +56,7 @@ class ServiceItemViewSet(viewsets.ModelViewSet):
     """The billable services catalogue."""
 
     serializer_class = ServiceItemSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="config.update")]
+    permission_classes = [IsAuthenticated, HasPermission.of("invoice.read", write="catalog.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         ServiceItem, relations=['department'], fields=['category', 'is_active']

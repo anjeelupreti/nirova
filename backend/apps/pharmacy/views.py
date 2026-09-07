@@ -59,7 +59,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     """The product master."""
 
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("stock.read", write="config.update")]
+    permission_classes = [IsAuthenticated, HasPermission.of("stock.read", write="catalog.manage")]
     lookup_field = "uuid"
     filterset_fields = ["category", "control_schedule", "is_active", "is_formulary"]
     search_fields = ["code", "generic_name", "brand_name", "barcode"]
@@ -92,7 +92,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 class StockLocationViewSet(viewsets.ModelViewSet):
     serializer_class = StockLocationSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("stock.read", write="config.update")]
+    permission_classes = [IsAuthenticated, HasPermission.of("stock.read", write="catalog.manage")]
     lookup_field = "uuid"
     # Filters match on uuid because that is the identifier the API publishes.
     filterset_class = uuid_filterset(

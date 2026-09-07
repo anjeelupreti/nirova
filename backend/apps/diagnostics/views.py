@@ -61,7 +61,7 @@ class TestDefinitionViewSet(viewsets.ModelViewSet):
 
     serializer_class = TestDefinitionSerializer
     permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN,
-                          write="config.update")]
+                          write="catalog.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         TestDefinition, relations=['department'], fields=['modality', 'is_active', 'is_panel']

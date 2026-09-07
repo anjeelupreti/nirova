@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1193** |
+| **Done** | **33 of 132** | **1194** |
 | **Outstanding** | **99** | **638** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -459,6 +459,13 @@ from somebody who should not have one**. See §211.*
       beyond being signed in, and they decide attendance and therefore pay
 - [x] `SupplierViewSet.perform_update` — an auditor could change a supplier's
       bank account number
+- [x] **And who can no longer do their job?** Asked a day late. An HR manager
+      could not add a public holiday and a pharmacy manager could not add a
+      medicine, because both had been routed to `config.update`. Maintaining a
+      catalogue is not the same authority as changing the organization's
+      configuration — `catalog.manage` now covers products, stock locations,
+      service items and diagnostic tests; the HR calendar sits behind
+      `employee.manage`; price lists and payer contracts stay tight (§215)
 - [x] **DELETE measured and clean.** Run inside a test, which rolls back, so a
       sweep that would have destroyed the demo tenant as a script was harmless.
       Eight routes accept a DELETE and every one of them from a role that holds

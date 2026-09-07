@@ -366,6 +366,7 @@ SYSTEM_ROLES = [
         "description": "Dispensing and pharmacy stock.",
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "catalog.manage",
             "facility.read", "patient.read",
             "prescription.dispense", "prescription.approve",
             "stock.read", "stock.adjust", "stock.count", "stock.transfer",
@@ -400,6 +401,7 @@ SYSTEM_ROLES = [
         # also sells can approve their own void, and the till reconciliation
         # stops meaning anything.
         "permissions": [
+            "catalog.manage",
             "facility.read", "department.read", "patient.read",
             "stock.read", "stock.approve_adjustment", "stock.count",
             "sale.read", "sale.void", "sale.return_approve", "till.reconcile",
@@ -435,6 +437,7 @@ SYSTEM_ROLES = [
         "description": "Receiving, storage and issue of stock.",
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "catalog.manage",
             "facility.read", "stock.read", "stock.adjust", "stock.count",
             "stock.transfer", "purchase.read", "purchase.create",
             "supplier.manage",
@@ -446,6 +449,7 @@ SYSTEM_ROLES = [
         "description": "Billing, receivables and payables.",
         "max_scope": Scope.ORGANIZATION,
         "permissions": [
+            "catalog.manage",
             "facility.read", "invoice.read", "invoice.create",
             "payment.record", "refund.create", "purchase.read", "salary.read",
             "report.read", "analytics.read", "subscription.read",
@@ -480,6 +484,7 @@ SYSTEM_ROLES = [
         # the person who records a claimed registration must not be the one
         # who attests it, which is how forged registrations get caught.
         "permissions": [
+            "catalog.manage",
             "organization.read", "facility.read", "department.read",
             "employee.read", "credential.read", "credential.verify",
             "patient.read", "encounter.read", "prescription.approve",

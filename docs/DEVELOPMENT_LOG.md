@@ -7779,3 +7779,57 @@ creates the profile, and a later attempt to reassign the employee is ignored.
 124 tests.
 
 **Affects.** `apps/payroll/api.py`, `tests/test_invariants.py`.
+
+---
+
+## 215 - Checking that the fix did not become the problem
+2026-09-07 · Backend · fix
+
+Entry 211 tightened twenty write endpoints. This is the question I should have
+asked in the same breath and asked a day later instead: **who can no longer do
+their job?**
+
+**A permission fix that breaks a legitimate workflow is not a fix, it is an
+outage with a good excuse** — and worse, it is the kind people route around, by
+handing out the administrator account.
+
+Asked properly — for every pair, which roles hold the read and not the write —
+two answers were plainly wrong.
+
+**An HR manager could no longer add a public holiday.** The calendar had been
+routed to `config.update`, which only the organization administrator holds. The
+HR calendar belongs to HR, so it now sits behind `employee.manage`.
+
+**A pharmacy manager could no longer add a medicine.** The product master had
+gone the same way, leaving one person in the organization able to put a new
+drug on the shelf — something a pharmacy does weekly.
+
+The second one needed a permission that did not exist. Forcing the product
+catalogue under `config.update` was the real mistake: **maintaining a catalogue
+is not the same authority as changing the organization's configuration**, and
+conflating them made the guard either useless or absurd. So `catalog.manage`,
+granted to the six roles that actually maintain catalogues, now covers products,
+stock locations, service items and diagnostic tests.
+
+**Price lists and payer contracts deliberately stay on `config.update`.** The
+item existing and the price it sells at are different decisions, and the second
+one is where the fraud is.
+
+**Two mistakes of my own, caught by checking.** The grant script inserted
+`catalog.manage` into `operations_manager` instead of `organization_admin` —
+because the administrator's spec reads `sorted(PERMISSION_CODES)` with no
+literal bracket, so the search ran past it into the next role. An accidental
+permission grant, in the middle of a session about accidental permission
+grants. Removed; the administrator already holds everything.
+
+And the test from entry 211 then failed — correctly. It asserted an HR manager
+may not edit holidays, which is exactly the authority I had just restored to
+them. **A guard that outlives the rule it guarded is worse than no guard**, so
+that pair is gone and the reason is written where the list is.
+
+**Verified.** Every write now has a plausible holder; removing the catalogue
+guard makes the test name the role and route; 124 tests.
+
+**Affects.** `apps/rbac/permissions.py`, `apps/rbac/services.py`,
+`apps/pharmacy/views.py`, `apps/billing/views.py`, `apps/diagnostics/views.py`,
+`apps/hr/attendance_api.py`, `tests/test_invariants.py`.
