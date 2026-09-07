@@ -9,12 +9,14 @@ from rest_framework.views import APIView
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
+from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
 from apps.entitlements.resolver import resolve_entitlements
 from apps.entitlements.services import facility_quota_summary
-from apps.organization.models import Facility
+from apps.organization.models import Department, Facility
 from apps.organization.serializers import (
     ChangeRequestDecisionInputSerializer,
+    DepartmentSerializer,
     FacilityChangePreviewSerializer,
     FacilityChangeRequestCreateSerializer,
     FacilityChangeRequestSerializer,
@@ -29,6 +31,63 @@ from apps.provisioning.models import (
 )
 from apps.provisioning.services import decide, evaluate_request, submit_request
 from apps.rbac.permissions import Scope
+
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    """Departments, which had no endpoint at all.
+
+    `DepartmentSerializer` has existed since the organization app was written
+    and was only ever used *nested* inside a facility, so departments could be
+    read and never created: no route, no service, no management command. A new
+    facility's departments could only be put there by a seed or by somebody
+    with a Django shell.
+
+    That matters more than it sounds. A department is what `apply_scope_filter`
+    narrows a department-scoped grant to, what clinical work is attributed to,
+    and what a ward and a position both hang off. A facility without them is a
+    facility nothing can be routed inside.
+
+    **Departments are not facilities.** A facility exists only by executing an
+    approved change request, because opening one is a licensing matter. Adding
+    a physiotherapy department inside a hospital that already exists is not,
+    and `department.manage` -- which the catalogue has carried all along, held
+    by the facility manager, the operations manager and the organization
+    administrator -- is the authority for it.
+    """
+
+    serializer_class = DepartmentSerializer
+    permission_classes = [
+        IsAuthenticated,
+        # Read at `own`: a doctor holds `department.read` at *department* scope
+        # and was refused by the facility default, which is the same mismatch
+        # log 219 found across eleven sidebar entries. Everybody who works in a
+        # department may see the list of them; changing one is separate.
+        HasPermission.of(
+            "department.read", scope=Scope.OWN, write="department.manage",
+        ),
+    ]
+    lookup_field = "uuid"
+    # Matched on the facility's uuid, not its integer pk. `filterset_fields`
+    # would have expected the pk -- which is a different row in every tenant
+    # and is never published -- so `?facility=<uuid>` answered 400.
+    filterset_class = uuid_filterset(
+        Department, relations=["facility"], fields=["kind", "is_active"],
+    )
+    search_fields = ["code", "name"]
+    ordering_fields = ["display_order", "name", "code"]
+
+    def get_queryset(self):
+        return (
+            Department.objects.select_related("facility")
+            .prefetch_related("units")
+            .order_by("facility__name", "display_order", "name")
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(created_by_id=self.request.user.uuid)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by_id=self.request.user.uuid)
 
 
 class FacilityViewSet(viewsets.ReadOnlyModelViewSet):

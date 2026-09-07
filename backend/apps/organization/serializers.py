@@ -2,6 +2,8 @@
 
 from rest_framework import serializers
 
+from apps.common.fields import UUIDRelatedField
+
 from apps.organization.models import Department, Facility, Unit
 from apps.provisioning.models import (
     ChangeRequestDecision,
@@ -18,14 +20,36 @@ class UnitSerializer(serializers.ModelSerializer):
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
+    """A department, as the facility detail nests it and its own endpoint
+    returns it.
+
+    **`facility` is writable and was not even a field here.** The serializer
+    was written to be nested inside a facility, where the parent is implied --
+    and then nothing was ever built that created a department, so the omission
+    did not show. There is no other way to make one: no service, no command,
+    only the seeds and the ORM.
+
+    `facility` is fixed once the department exists. Moving a department between
+    facilities would carry its cost centre, its wards and everybody attributed
+    to it along with it, which is a migration rather than an edit.
+    """
+
     units = UnitSerializer(many=True, read_only=True)
+    facility = UUIDRelatedField(queryset=Facility.objects.all())
+    facility_name = serializers.CharField(source="facility.name", read_only=True)
 
     class Meta:
         model = Department
         fields = (
-            "uuid", "code", "name", "kind", "cost_centre_code",
-            "is_revenue_generating", "is_active", "display_order", "units",
+            "uuid", "facility", "facility_name", "code", "name", "kind",
+            "cost_centre_code", "profit_centre_code", "is_revenue_generating",
+            "phone_extension", "location_note", "is_active", "display_order",
+            "units",
         )
+
+    def update(self, instance, validated_data):
+        validated_data.pop("facility", None)
+        return super().update(instance, validated_data)
 
 
 class FacilitySerializer(serializers.ModelSerializer):

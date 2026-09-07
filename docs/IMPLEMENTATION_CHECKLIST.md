@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1211** |
+| **Done** | **33 of 132** | **1212** |
 | **Outstanding** | **99** | **647** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -571,8 +571,11 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
       offers a chooser rather than asking for a pasted UUID
 - [ ] Price *list* editing: the lists are shown beside the services, and the
       per-service overrides inside them are not yet editable
-- [ ] Departments and units. Facilities are read-only by design, but the
-      departments inside one are not, and nothing creates them
+- [x] **Departments** — which had no endpoint at all, not merely no screen.
+      `department.read` and `department.manage` were in the catalogue and
+      granted to roles all along, with nothing to spend them on (§227)
+- [ ] Units, the level below a department. Same shape: nested in the
+      department serializer, no endpoint of their own
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 

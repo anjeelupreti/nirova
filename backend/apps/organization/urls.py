@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from apps.organization.views import (
+    DepartmentViewSet,
     EntitlementView,
     FacilityChangeRequestViewSet,
     FacilityViewSet,
@@ -9,6 +10,7 @@ from apps.organization.views import (
 
 router = DefaultRouter()
 router.register("facilities", FacilityViewSet, basename="facility")
+router.register("departments", DepartmentViewSet, basename="department")
 router.register(
     "facility-requests", FacilityChangeRequestViewSet, basename="facility-request"
 )

@@ -22,6 +22,7 @@
 import { useState } from "react";
 import {
   Building,
+  Network,
   FlaskConical,
   Package,
   Scissors,
@@ -42,6 +43,55 @@ const THEATRE_TYPES = ["general", "orthopaedic", "cardiac", "neuro",
                        "obstetric", "day_care", "minor", "other"];
 const PROVIDER_TYPES = ["hospital", "clinic", "laboratory", "imaging",
                         "specialist", "other"];
+const DEPARTMENT_KINDS = ["clinical", "diagnostic", "support", "administrative",
+                          "nursing", "pharmacy", "other"];
+
+const DEPARTMENTS: MasterSpec = {
+  title: "Departments",
+  description:
+    "What a facility is divided into. A department is what a " +
+    "department-scoped permission narrows to, what clinical work is " +
+    "attributed to, and what a ward and a position both hang off.",
+  noun: "department",
+  endpoint: "/org/departments/",
+  writePermission: "department.manage",
+  writeScope: "facility",
+  searchable: true,
+  sortBy: "name",
+  emptyHint:
+    "A facility with no departments is one nothing can be routed inside.",
+  columns: [
+    { key: "code", label: "Code" },
+    { key: "name", label: "Department" },
+    { key: "facility_name", label: "Facility" },
+    { key: "kind", label: "Kind" },
+    { key: "is_active", label: "Active" },
+  ],
+  fields: [
+    {
+      key: "facility",
+      label: "Facility",
+      kind: "reference",
+      optionsFrom: "/org/facilities/",
+      required: true,
+      help: "Fixed once the department exists — moving one is a migration.",
+    },
+    { key: "code", label: "Code", required: true, fixedAfterCreate: true },
+    { key: "name", label: "Name", required: true },
+    { key: "kind", label: "Kind", kind: "select", options: DEPARTMENT_KINDS },
+    { key: "cost_centre_code", label: "Cost centre", group: "Accounting" },
+    { key: "profit_centre_code", label: "Profit centre", group: "Accounting" },
+    { key: "phone_extension", label: "Extension", group: "Finding it" },
+    { key: "location_note", label: "Where it is", group: "Finding it" },
+    { key: "display_order", label: "Order in lists", kind: "number" },
+    {
+      key: "is_revenue_generating",
+      label: "Generates revenue",
+      kind: "checkbox",
+    },
+    { key: "is_active", label: "Active", kind: "checkbox" },
+  ],
+};
 
 const PAYERS: MasterSpec = {
   title: "Payers",
@@ -301,6 +351,9 @@ const PROVIDERS: MasterSpec = {
 };
 
 const SECTIONS = [
+  // First: a facility with no departments is one nothing can be routed
+  // inside, so it is the first thing a new organization needs.
+  { id: "departments", label: "Departments", icon: Network, spec: DEPARTMENTS },
   { id: "payers", label: "Payers", icon: ShieldCheck, spec: PAYERS },
   { id: "packages", label: "Packages", icon: Building, spec: PACKAGES },
   { id: "locations", label: "Stock locations", icon: Package, spec: LOCATIONS },

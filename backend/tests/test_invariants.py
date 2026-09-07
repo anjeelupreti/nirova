@@ -3847,3 +3847,70 @@ def test_every_configured_list_can_be_created_and_edited(tenant):
 
     assert not problems, chr(10).join(problems)
     assert len(cases) >= 9, "the list of configured lists shrank"
+
+
+def test_a_department_can_be_created(tenant):
+    """Departments had no endpoint at all — not a missing screen, a missing API.
+
+    `DepartmentSerializer` has existed since the organization app was written
+    and was only ever used *nested* inside a facility, so departments could be
+    read and never created: no route, no service, no command. A new facility's
+    departments could only be put there by a seed or a Django shell.
+
+    That matters more than it sounds. A department is what `apply_scope_filter`
+    narrows a department-scoped grant to, what clinical work is attributed to,
+    and what a ward and a position both hang off.
+    """
+    from apps.organization.models import Department, Facility
+
+    owner = _report_client("owner@manakamana.test", tenant)
+    doctor = _report_client("doctor@manakamana.test", tenant)
+    if owner is None or doctor is None:
+        pytest.skip("missing demo accounts")
+    owner.raise_request_exception = False
+    doctor.raise_request_exception = False
+
+    facility = Facility.objects.first()
+    if facility is None:
+        pytest.skip("no facility")
+
+    # Filtered by the facility's **uuid**. `filterset_fields` would have
+    # expected the integer pk — a different row in every tenant, and never
+    # published — so `?facility=<uuid>` answered 400.
+    filtered = owner.get(f"/api/org/departments/?facility={facility.uuid}")
+    assert filtered.status_code == 200, filtered.content[:200]
+
+    # A doctor holds `department.read` at *department* scope. Reading the list
+    # of departments is not a facility-scoped act, and the default said it was.
+    assert doctor.get("/api/org/departments/").status_code == 200
+
+    created = owner.post(
+        "/api/org/departments/",
+        data=json.dumps({
+            "facility": str(facility.uuid), "code": "TESTDEPT",
+            "name": "Test Department", "kind": "clinical",
+        }),
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content[:300]
+    uuid = json.loads(created.content.decode())["uuid"]
+
+    # The facility is fixed once it exists: moving a department would carry its
+    # cost centre, its wards and everybody attributed to it along with it.
+    other = Facility.objects.exclude(pk=facility.pk).first()
+    if other is not None:
+        owner.patch(
+            f"/api/org/departments/{uuid}/",
+            data=json.dumps({"facility": str(other.uuid)}),
+            content_type="application/json",
+        )
+        assert Department.objects.get(uuid=uuid).facility_id == facility.pk
+
+    # Adding a department is the facility manager's, not the doctor's.
+    assert doctor.post(
+        "/api/org/departments/",
+        data=json.dumps({
+            "facility": str(facility.uuid), "code": "NOPE", "name": "Nope",
+        }),
+        content_type="application/json",
+    ).status_code == 403

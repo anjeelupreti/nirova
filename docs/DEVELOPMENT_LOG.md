@@ -8342,3 +8342,57 @@ leave types set in §225 and the reason it is now checked every time.
 `frontend/src/pages/payroll/Setup.tsx` (new),
 `frontend/src/components/MasterData.tsx`, `frontend/src/pages/Payroll.tsx`,
 `frontend/src/App.tsx`, `backend/tests/test_invariants.py`.
+
+---
+
+## 227 - Departments had no API at all
+2026-09-08 · Backend, Frontend · feature, fix
+
+Not a missing screen this time — a missing endpoint.
+
+`DepartmentSerializer` has existed since the organization app was written, and
+was only ever used **nested inside a facility**. There was no viewset, no route,
+no service and no management command. Departments could be read and never
+created: a new facility's departments could only be put there by a seed or by
+somebody with a Django shell.
+
+**That matters more than it sounds.** A department is what `apply_scope_filter`
+narrows a department-scoped grant to, what clinical work is attributed to (log
+193), and what a ward and a position both hang off. A facility without them is
+a facility nothing can be routed inside.
+
+**Departments are not facilities.** A facility exists only by executing an
+approved change request, because opening one is a licensing matter. Adding a
+physiotherapy department inside a hospital that already exists is not — and
+`department.read` and `department.manage` have been in the permission catalogue
+all along, granted to the facility manager, the operations manager and the
+organization administrator. **Permissions with no endpoint**, which is the same
+shape as `EXPORT`, `PRINT` and `DOWNLOAD` in log 200.
+
+**The serializer did not even have a `facility` field.** Written to be nested,
+where the parent is implied, and then never used anywhere else — so the
+omission could not show. Same class as log 218's five uncreatable objects.
+
+**Two things the first version got wrong, both found by trying it.**
+
+`?facility=<uuid>` answered **400**: `filterset_fields` expects the integer
+primary key, which in a database-per-tenant system is a different row in every
+tenant and is never published. It needs `uuid_filterset`, which every other
+viewset here already uses.
+
+And **a doctor was refused the list** despite holding `department.read` — the
+permission class defaults to facility scope and a doctor holds it at
+*department*. The same mismatch log 219 found across eleven sidebar entries,
+met again the moment I wrote a new endpoint without thinking about it. Reading
+the list of departments is not a facility-scoped act.
+
+**The facility is fixed once the department exists.** Moving one would carry
+its cost centre, its wards and everybody attributed to it along with it, which
+is a migration rather than an edit.
+
+**Verified**: filter by facility uuid, a doctor reads and cannot create, an
+owner creates, and a move attempt is ignored.
+
+**Affects.** `apps/organization/serializers.py`, `apps/organization/views.py`,
+`apps/organization/urls.py`, `frontend/src/pages/Configuration.tsx`,
+`backend/tests/test_invariants.py`.
