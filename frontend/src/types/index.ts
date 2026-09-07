@@ -757,6 +757,18 @@ export interface PharmacyProduct {
   requires_prescription: boolean;
   reorder_level: string;
   is_active: boolean;
+  // The rest of what the endpoint has always returned. Absent from this type
+  // until a screen existed that could show or set them.
+  manufacturer?: string;
+  therapeutic_class?: string;
+  category?: string;
+  barcode?: string;
+  pack_size?: number | string;
+  pack_unit?: string;
+  minimum_stock?: string;
+  maximum_stock?: string;
+  lead_time_days?: number;
+  is_formulary?: boolean;
 }
 
 export interface StockLocation {

@@ -8118,3 +8118,53 @@ more is a considered pass; the component and the shape of it exist now.
 
 **Affects.** `frontend/src/components/ui/primitives.tsx`,
 `frontend/src/pages/Facilities.tsx`, `frontend/src/types/index.ts`.
+
+---
+
+## 222 - Nothing in the console could add a medicine
+2026-09-08 · Frontend · feature
+
+The catalogue screen, and the first answer to "the system cannot be set up
+through its own UI".
+
+`/api/pharmacy/products/` has always listed, searched, created and edited
+products. **No screen called any of it.** So a new customer's catalogue could
+only be loaded by somebody with an HTTP client, and a pharmacy that started
+stocking a new drug had nowhere to record it. The pharmacy screen had four tabs
+— dispense, stock, expiry, reorder — every one of which assumes the catalogue
+already exists.
+
+**A fifth tab, deliberately last**, because it is the one visited least: the
+catalogue is set up once and edited when something new arrives, while
+dispensing is every day.
+
+**Reading is `stock.read`; changing is `catalog.manage`** — the permission added
+in §215 precisely because routing the product master through `config.update`
+had left one person in the organization able to put a drug on the shelf.
+Somebody without it sees every product and its details **and no form**, rather
+than a form whose save button returns 403.
+
+**Only `code` and `generic_name` are required**, mirroring the serializer rather
+than inventing a stricter form. A pharmacy entering forty products at go-live
+should not be blocked on a therapeutic class it has not decided on yet. And
+**empty strings are dropped rather than sent**: a blank optional field means
+"not decided", and posting `""` writes that indecision into the record as
+though somebody had chosen it.
+
+**The code is fixed once the product exists.** It is the handle batches,
+dispenses and prescriptions all refer to, so it is shown disabled on edit
+rather than quietly changeable.
+
+**A controlled drug is called out in red**, because the schedule changes who may
+dispense it and what must be recorded — not something to read past in a field.
+
+**An empty state that says what to do next**, which is the first of those in the
+console: "No products yet — add the first one to start dispensing", or, for
+somebody without the permission, who to ask.
+
+**Verified** end to end: list, search, create (201), edit (200), and a counter
+assistant refused (403).
+
+**Affects.** `frontend/src/pages/pharmacy/Catalogue.tsx` (new),
+`frontend/src/pages/Pharmacy.tsx`, `frontend/src/types/index.ts`,
+`backend/tests/test_invariants.py`.

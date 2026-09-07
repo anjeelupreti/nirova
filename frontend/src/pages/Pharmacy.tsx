@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  BookOpen,
   AlertTriangle,
   Boxes,
   CalendarClock,
@@ -19,6 +20,7 @@ import {
   TrendingDown,
 } from "lucide-react";
 
+import Catalogue from "@/pages/pharmacy/Catalogue";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -55,13 +57,16 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 
-type Tab = "dispense" | "stock" | "expiry" | "reorder";
+type Tab = "dispense" | "stock" | "expiry" | "reorder" | "catalogue";
 
 const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
   { id: "dispense", label: "Dispense", icon: Package },
   { id: "stock", label: "Stock", icon: Boxes },
   { id: "expiry", label: "Expiry", icon: CalendarClock },
   { id: "reorder", label: "Reorder", icon: TrendingDown },
+  // Last, because it is the one you visit least: the catalogue is set up once
+  // and then edited when something new arrives. Dispensing is every day.
+  { id: "catalogue", label: "Catalogue", icon: BookOpen },
 ];
 
 /** Colour an expiry bucket by how much time is left to act. */
@@ -760,6 +765,12 @@ export default function PharmacyPage() {
       {tab === "stock" && <StockPanel locationUuid={locationUuid} />}
       {tab === "expiry" && <ExpiryPanel locationUuid={locationUuid} />}
       {tab === "reorder" && <ReorderPanel locationUuid={locationUuid} />}
+      {/*
+        The catalogue is organization-wide rather than per location: a product
+        exists once and is stocked in many places, so it deliberately ignores
+        the location selector above.
+      */}
+      {tab === "catalogue" && <Catalogue />}
     </div>
   );
 }

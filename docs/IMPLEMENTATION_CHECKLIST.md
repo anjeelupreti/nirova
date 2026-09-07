@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1204** |
-| **Outstanding** | **99** | **647** |
+| **Done** | **33 of 132** | **1205** |
+| **Outstanding** | **99** | **646** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-647 understates the remaining work: in the later phases some lines group
+646 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -525,7 +525,8 @@ when somebody happens to notice.*
       and Time
 - [ ] Edit as well as view, where editing is legitimate. Facilities is
       deliberately not — they change only through an approved request
-- [ ] Empty states that say what to do next rather than showing an empty table
+- [~] Empty states that say what to do next rather than showing an empty
+      table. The catalogue has one; the rest do not
 
 ## The console does not know what it may do
 
@@ -547,9 +548,11 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
       schedule each declared their required foreign key read-only, so the
       insert violated a not-null constraint. A hospital could be operated
       through this system but not set up in it (§218)
-- [ ] **Screens for the master-data endpoints that have none.** A product, a
-      price list, a holiday, a ward and a tax slab can each be created only by
-      somebody with an HTTP client
+- [x] **Products**, at Pharmacy → Catalogue: list, search, view, add and edit,
+      with the form hidden from anybody without `catalog.manage` (§222)
+- [ ] The rest of the master data with no screen: price lists, service items,
+      wards, beds, theatres, stock locations, holidays, shifts, positions, tax
+      slabs, salary structures, payers
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 

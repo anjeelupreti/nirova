@@ -3487,3 +3487,68 @@ def test_the_master_data_a_hospital_is_set_up_with_can_be_created(tenant):
         "master data that cannot be created:\n"
         + "\n".join(failures)
     )
+
+
+# ---------------------------------------------------------------------------
+# Log 222 - the catalogue screen the console never had
+# ---------------------------------------------------------------------------
+
+
+def test_a_medicine_can_be_added_and_edited_through_the_api(tenant):
+    """Nothing in the console could add a medicine.
+
+    The endpoint existed, was reachable and was called by no screen — so a new
+    customer's catalogue could only be loaded by somebody with an HTTP client,
+    and a pharmacy that began stocking a new drug had nowhere to record it.
+
+    Reading is `stock.read`; changing it is `catalog.manage`, which is the
+    permission added in §215 precisely because routing the product master
+    through `config.update` had left one person in the organization able to put
+    a drug on the shelf.
+    """
+    from apps.pharmacy.models import Product
+
+    owner = _report_client("owner@manakamana.test", tenant)
+    counter = _report_client("counter@manakamana.test", tenant)
+    if owner is None or counter is None:
+        pytest.skip("missing demo accounts")
+    owner.raise_request_exception = False
+    counter.raise_request_exception = False
+
+    assert owner.get("/api/pharmacy/products/").status_code == 200
+    # The screen searches as you type; a list endpoint that ignores `search`
+    # would leave a pharmacist scrolling a catalogue of thousands.
+    searched = owner.get("/api/pharmacy/products/?search=amox")
+    assert searched.status_code == 200
+    assert json.loads(searched.content.decode())["count"] >= 1
+
+    before = Product.objects.count()
+    created = owner.post(
+        "/api/pharmacy/products/",
+        data=json.dumps({
+            "code": "TESTPROD1",
+            "generic_name": "Test Generic",
+            "category": "medicine",
+        }),
+        content_type="application/json",
+    )
+    assert created.status_code == 201, created.content[:300]
+    assert Product.objects.count() == before + 1
+
+    uuid = json.loads(created.content.decode())["uuid"]
+    edited = owner.patch(
+        f"/api/pharmacy/products/{uuid}/",
+        data=json.dumps({"brand_name": "Testicillin"}),
+        content_type="application/json",
+    )
+    assert edited.status_code == 200
+    assert Product.objects.get(uuid=uuid).brand_name == "Testicillin"
+
+    # And somebody who may only read the catalogue may only read it. The screen
+    # hides the form from them as a courtesy; this is the actual guard.
+    refused = counter.post(
+        "/api/pharmacy/products/",
+        data=json.dumps({"code": "NOPE", "generic_name": "Nope"}),
+        content_type="application/json",
+    )
+    assert refused.status_code == 403
