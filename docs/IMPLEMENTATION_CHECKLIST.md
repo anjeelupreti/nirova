@@ -21,8 +21,8 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1209** |
-| **Outstanding** | **99** | **646** |
+| **Done** | **33 of 132** | **1211** |
+| **Outstanding** | **99** | **647** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
 report library (§105) and global search (§104) landed.*
@@ -31,7 +31,7 @@ Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-646 understates the remaining work: in the later phases some lines group
+647 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -562,9 +562,17 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
 - [x] **Holidays, shift patterns, leave types and positions**, at Time →
       Setup — written as configuration against a shared `MasterData` screen
       rather than a fourth hand-built copy (§225)
-- [ ] The rest of the master data with no screen: price *list* editing,
-      theatres, stock locations, tax slabs, salary structures, contribution
-      schemes, payers, insurance packages, diagnostic tests, referral providers
+- [x] **Payroll setup** (pay components, salary structures, tax slabs,
+      contribution schemes) as a tab on Payroll, and **Configuration**
+      (payers, scheme packages, stock locations, theatres, diagnostic tests,
+      referral providers) as one screen behind one sidebar entry (§226)
+- [x] `MasterData` gained **reference fields**, so a list that belongs to
+      something else — a stock location to a facility, a package to a payer —
+      offers a chooser rather than asking for a pasted UUID
+- [ ] Price *list* editing: the lists are shown beside the services, and the
+      per-service overrides inside them are not yet editable
+- [ ] Departments and units. Facilities are read-only by design, but the
+      departments inside one are not, and nothing creates them
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 

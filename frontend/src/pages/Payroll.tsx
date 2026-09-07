@@ -24,6 +24,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Settings2,
   AlertTriangle,
   BadgeCheck,
   Banknote,
@@ -40,6 +41,7 @@ import {
   Users,
 } from "lucide-react";
 
+import PayrollSetup from "@/pages/payroll/Setup";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -77,12 +79,15 @@ import {
   TableRow,
 } from "@/components/ui/primitives";
 
-type Tab = "runs" | "mine" | "rates";
+type Tab = "runs" | "mine" | "rates" | "setup";
 
 const TABS: { id: Tab; label: string; icon: typeof Users }[] = [
   { id: "runs", label: "Runs", icon: Calculator },
   { id: "mine", label: "My payslips", icon: Receipt },
   { id: "rates", label: "Rates", icon: Percent },
+  // The tables every payslip is computed from. Configured once a
+  // fiscal year and read by every run after it.
+  { id: "setup", label: "Setup", icon: Settings2 },
 ];
 
 const rupees = (value: string | number) =>
@@ -144,6 +149,7 @@ export default function PayrollPage() {
       {tab === "runs" && <Runs onOpen={setOpenRun} />}
       {tab === "mine" && <MyPayslips />}
       {tab === "rates" && <Rates />}
+      {tab === "setup" && <PayrollSetup />}
     </div>
   );
 }

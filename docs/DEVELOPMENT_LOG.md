@@ -8295,3 +8295,50 @@ endpoint uses**, and a doctor is refused all four.
 **Affects.** `frontend/src/components/MasterData.tsx` (new),
 `frontend/src/pages/hr/Setup.tsx` (new), `frontend/src/pages/Time.tsx`,
 `backend/tests/test_invariants.py`.
+
+---
+
+## 226 - Ten more lists, and the hospital can now be set up
+2026-09-08 · Frontend · feature
+
+Pay components, salary structures, tax slabs, contribution schemes, payers,
+scheme packages, stock locations, theatres, diagnostic tests and referral
+providers. Ten lists the daily screens depend on, and **not one of them had a
+screen**.
+
+The consequences were concrete rather than abstract. A hospital could accept an
+insurer's patients only if a seed had already put that insurer in the database.
+It could not add a theatre, a stock location, a diagnostic test or a place to
+refer somebody to. It could not enter this year's tax slabs — which are
+published by the government each fiscal year, and getting them wrong does not
+produce an argument, it produces an under-deduction the hospital owes.
+
+**All ten are configuration, not code.** `MasterData` from §225 took them
+without changing shape; the only thing it needed was a **reference** field, for
+the four that belong to something else — a stock location to a facility, a
+package to a payer. Without it the form would have asked somebody to paste a
+UUID, which is not a form.
+
+**Six of them share one screen and one sidebar entry.** Each is visited rarely
+and by few people, and six more entries would push the daily screens further
+down a list that was already too long — which is the complaint that started
+this pass. Payroll's four went as a tab on payroll, where somebody looking for
+them would look.
+
+**The permissions are per list, not per screen.** Stock locations are
+`catalog.manage`, theatres are `bed.manage`, payers are `config.update` —
+because that is what those endpoints ask for. A screen asking for one blanket
+permission would either lock out somebody entitled or let through somebody who
+is not.
+
+**Three of the ten answer to `code` rather than `uuid`**, and PATCHing by the
+wrong one returns a 404 that reads as a permissions problem. The test asserts
+the lookup field per endpoint rather than assuming it once, which is the trap
+leave types set in §225 and the reason it is now checked every time.
+
+**Verified**: all ten list, create and edit by their own identifier.
+
+**Affects.** `frontend/src/pages/Configuration.tsx` (new),
+`frontend/src/pages/payroll/Setup.tsx` (new),
+`frontend/src/components/MasterData.tsx`, `frontend/src/pages/Payroll.tsx`,
+`frontend/src/App.tsx`, `backend/tests/test_invariants.py`.

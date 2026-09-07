@@ -57,7 +57,9 @@ export type FieldKind =
   | "time"
   | "select"
   | "checkbox"
-  | "textarea";
+  | "textarea"
+  /** A foreign key, chosen from another endpoint's rows. */
+  | "reference";
 
 export interface MasterField {
   key: string;
@@ -71,6 +73,9 @@ export interface MasterField {
   help?: string;
   /** Shown in the detail panel under this heading. */
   group?: string;
+  /** For `reference`: where the options come from, and what to show for each. */
+  optionsFrom?: string;
+  optionLabel?: string;
 }
 
 export interface MasterColumn {
@@ -218,6 +223,27 @@ export default function MasterData({ spec }: { spec: MasterSpec }) {
     return String(row.uuid ?? row.code ?? row.reference ?? "");
   }
 
+  /**
+   * Options for every `reference` field, fetched once.
+   *
+   * A stock location belongs to a facility and a scheme package to a payer;
+   * without this the form would ask somebody to paste a UUID, which is not a
+   * form, it is a punishment.
+   */
+  const [options, setOptions] = useState<Record<string, Row[]>>({});
+  useEffect(() => {
+    for (const field of spec.fields) {
+      if (field.kind !== "reference" || !field.optionsFrom) continue;
+      const source = field.optionsFrom;
+      api
+        .get<Paginated<Row>>(`${source}?page_size=200`)
+        .then((page) =>
+          setOptions((current) => ({ ...current, [field.key]: page.results })),
+        )
+        .catch(() => undefined);
+    }
+  }, [spec.fields]);
+
   const missingRequired = spec.fields.some(
     (field) =>
       field.required && !String((draft ?? {})[field.key] ?? "").trim(),
@@ -249,7 +275,20 @@ export default function MasterData({ spec }: { spec: MasterSpec }) {
           {field.label}
           {field.required ? <span className="text-destructive"> *</span> : null}
         </Label>
-        {field.kind === "select" ? (
+        {field.kind === "reference" ? (
+          <Select
+            id={`f-${field.key}`}
+            value={String(value ?? "")}
+            onChange={(event) => set(event.target.value)}
+          >
+            <option value="">Choose…</option>
+            {(options[field.key] ?? []).map((option) => (
+              <option key={String(option.uuid)} value={String(option.uuid)}>
+                {String(option[field.optionLabel ?? "name"] ?? option.uuid)}
+              </option>
+            ))}
+          </Select>
+        ) : field.kind === "select" ? (
           <Select
             id={`f-${field.key}`}
             value={String(value ?? "")}

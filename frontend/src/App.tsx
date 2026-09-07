@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
   BarChart3,
   Tags,
+  SlidersHorizontal,
   ShieldAlert,
   Inbox,
   Bell,
@@ -54,6 +55,7 @@ import NotificationsPage from "@/pages/Notifications";
 import PrivacyPage from "@/pages/Privacy";
 import WorkspacePage from "@/pages/Workspace";
 import ReportsPage from "@/pages/Reports";
+import ConfigurationPage from "@/pages/Configuration";
 import ServicesPage from "@/pages/Services";
 import NurseWorkspacePage from "@/pages/NurseWorkspace";
 import SelfServicePage from "@/pages/SelfService";
@@ -203,6 +205,9 @@ const NAV_GROUPS: {
       { to: "/facilities", label: "Facilities", icon: Building2, needs: "facility.read", scope: "facility" },
       { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "facility.read", scope: "facility" },
       { to: "/facility-requests", label: "Change requests", icon: ScrollText, needs: "facility.read", scope: "facility" },
+      // Six rarely-visited lists behind one entry rather than six. Reading
+      // needs `config.read`; each list checks its own write permission.
+      { to: "/configuration", label: "Configuration", icon: SlidersHorizontal, needs: "config.read", scope: "facility" },
     ],
   },
   {
@@ -444,6 +449,7 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/configuration" element={<ConfigurationPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/time" element={<TimePage />} />

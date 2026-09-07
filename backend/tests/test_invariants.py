@@ -3761,3 +3761,89 @@ def test_a_leave_type_is_addressed_by_code_not_uuid(tenant):
         f"/api/hr/leave-types/{row['uuid']}/", data=json.dumps({}),
         content_type="application/json",
     ).status_code == 404
+
+
+def test_every_configured_list_can_be_created_and_edited(tenant):
+    """Ten lists the daily screens depend on, none of which had a screen.
+
+    A hospital could accept an insurer's patients only if a seed had already
+    put that insurer in the database; could not add a theatre, a stock
+    location, a diagnostic test or a referral destination; and could not enter
+    this year's tax slabs.
+
+    **Each is edited by the identifier its own endpoint uses.** Three of the
+    ten answer to `code` rather than `uuid`, and PATCHing by the wrong one
+    returns a 404 that reads as a permissions problem — the trap leave types
+    set in §225. That is why the lookup field is asserted here per endpoint
+    rather than assumed once.
+    """
+    from apps.insurance.models import Payer
+    from apps.organization.models import Facility
+
+    owner = _report_client("owner@manakamana.test", tenant)
+    if owner is None:
+        pytest.skip("no owner account")
+    owner.raise_request_exception = False
+
+    facility = Facility.objects.first()
+    payer = Payer.objects.first()
+    if facility is None:
+        pytest.skip("no facility")
+
+    cases = [
+        ("/api/payroll/components/", "code",
+         {"code": "TC1", "name": "Test Component",
+          "component_type": "earning"}),
+        ("/api/payroll/structures/", "code",
+         {"code": "TS1", "name": "Test Structure"}),
+        ("/api/payroll/tax-slabs/", "uuid",
+         {"fiscal_year": "2099/00", "sequence": 1, "lower_bound": "0",
+          "rate_percent": "1"}),
+        ("/api/payroll/schemes/", "uuid",
+         {"code": "TSC1", "name": "Test Scheme", "fiscal_year": "2099/00"}),
+        ("/api/insurance/payers/", "uuid",
+         {"code": "TPAY", "name": "Test Payer", "kind": "insurer"}),
+        ("/api/pharmacy/locations/", "uuid",
+         {"facility": str(facility.uuid), "code": "TLOC2",
+          "name": "Test Store"}),
+        ("/api/ot/theatres/", "uuid",
+         {"facility": str(facility.uuid), "code": "TOT2",
+          "name": "Test Theatre"}),
+        ("/api/diagnostics/tests/", "uuid",
+         {"code": "TTST", "name": "Test Test", "modality": "laboratory"}),
+        ("/api/referrals/providers/", "code",
+         {"code": "TPRV", "name": "Test Provider"}),
+    ]
+    if payer is not None:
+        cases.append((
+            "/api/insurance/packages/", "uuid",
+            {"payer": str(payer.uuid), "code": "TPKG", "name": "Test Package",
+             "package_amount": "5000", "effective_from": "2026-01-01"},
+        ))
+
+    problems = []
+    for endpoint, lookup, body in cases:
+        if owner.get(endpoint).status_code != 200:
+            problems.append(f"{endpoint}: cannot be listed")
+            continue
+        created = owner.post(
+            endpoint, data=json.dumps(body), content_type="application/json",
+        )
+        if created.status_code != 201:
+            problems.append(
+                f"{endpoint}: create -> {created.status_code} "
+                f"{created.content.decode()[:120]}"
+            )
+            continue
+        identifier = json.loads(created.content.decode())[lookup]
+        edited = owner.patch(
+            f"{endpoint}{identifier}/", data=json.dumps({}),
+            content_type="application/json",
+        )
+        if edited.status_code != 200:
+            problems.append(
+                f"{endpoint}: edit by {lookup} -> {edited.status_code}"
+            )
+
+    assert not problems, chr(10).join(problems)
+    assert len(cases) >= 9, "the list of configured lists shrank"
