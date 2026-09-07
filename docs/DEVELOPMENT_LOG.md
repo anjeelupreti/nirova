@@ -7882,3 +7882,42 @@ entry 213 said an assumption is too; this adds the third: **so is a claim about
 what your own change did.**
 
 **Affects.** `frontend/src/pages/Procurement.tsx`.
+
+---
+
+## 217 - Fifty-five candidates, one bug, and a savepoint on the wrong connection
+2026-09-07 · Backend · test
+
+Entry 214's payroll bug had a shape: a serializer field marked read-only whose
+model column is required, on a viewset that accepts POST. A static check for
+that shape found **55 candidates**.
+
+**Fifty-four are false positives** — those viewsets take a separate create
+serializer or override `create()`. Measuring settled in five seconds what
+reading could only guess at, which is the third time in two days a static
+finding has been mostly noise and the empirical version has been decisive.
+
+**The measurement had a blind spot worth naming.** Entry 214's POST sweep used
+four ordinary roles, so any route needing a permission none of them held
+returned 403 and never reached the serializer — a hole exactly where the shape
+predicts bugs. Re-run as the owner, who passes every permission, all 77 create
+routes answer a malformed body with a 400. So the class is genuinely closed,
+and it is now a permanent guard.
+
+**And building that guard walked straight into Log 162 a fifth time.** The
+first version wrapped each request in `transaction.atomic()` with no alias —
+which is the *control plane*. The constraint violations happen on the **tenant**
+database, so nothing was contained, and proving the guard by reintroducing the
+payroll defect made it report **four** crashed routes instead of one: the real
+failure, then three innocent routes that inherited its aborted transaction.
+
+**The savepoint has to be on the connection that faults.** Anything else is
+decoration that looks exactly like protection. In a database-per-tenant system
+`transaction.atomic()` with no argument is almost always the wrong one, and it
+is the spelling that comes to hand first.
+
+**Verified by breaking it**, and this time the proof was checked twice — once
+that it fails, and once that it names *one* route rather than four. **A guard
+that fires is not the same as a guard that is right.**
+
+**Affects.** `tests/test_invariants.py`.

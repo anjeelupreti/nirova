@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1195** |
+| **Done** | **33 of 132** | **1197** |
 | **Outstanding** | **99** | **641** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -522,6 +522,11 @@ nothing else would have, kept here so they are not quietly dropped.*
 - [x] Every console route has a way in, and every menu item has a route —
       `/privacy` and `/notifications` were both routed and unreachable
 - [x] Every workspace source formats a real row, and a broken one is named
+- [x] No create endpoint crashes on a malformed body — all 77 answer an empty
+      POST with a 400, run as the owner so the serializer is actually reached
+- [x] The guard's own savepoint is on the **tenant** connection, not the
+      control plane. Proving it caught that: with the savepoint on the wrong
+      database it reported four crashed routes where there was one (§217)
 - [ ] The same sweep for POST and PATCH. Harder: a write needs a valid body,
       and a sweep that posts nonsense tests the serializer rather than the view
 

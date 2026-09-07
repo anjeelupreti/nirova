@@ -3318,3 +3318,98 @@ def test_a_payroll_profile_can_actually_be_created(tenant):
         assert EmployeePayroll.objects.get(
             uuid=body["uuid"],
         ).employee_id == candidate.pk
+
+
+def test_no_create_endpoint_crashes_on_a_malformed_body(tenant):
+    """A bad request deserves a 400, not a stack trace.
+
+    `EmployeePayrollSerializer` declared its required foreign key read-only, so
+    an empty POST sailed past validation and 500'd at the database. A static
+    check for that shape found **55 candidates** — and every one of the other
+    54 is a false positive, because those viewsets take a separate create
+    serializer or override `create()`. Measuring settled in five seconds what
+    reading could only guess at.
+
+    Run as the owner deliberately: the earlier sweep used four ordinary roles,
+    so any route needing a permission none of them held returned 403 and never
+    reached the serializer — a blind spot exactly where the shape predicts
+    bugs.
+    """
+    import re
+
+    from django.db import transaction
+    from django.urls import get_resolver
+    from django.urls.resolvers import URLPattern, URLResolver
+
+    from apps.tenancy.context import CONTROL_PLANE_ALIAS
+    from apps.tenancy.db import tenant_atomic
+
+    skip = {"/api/auth/login/", "/api/auth/refresh/", "/api/auth/logout/",
+            "/api/auth/switch/", "/api/portal/auth/", "/api/me/auth/"}
+
+    def walk(resolver, prefix=""):
+        for entry in resolver.url_patterns:
+            if isinstance(entry, URLResolver):
+                yield from walk(entry, prefix + str(entry.pattern))
+            elif isinstance(entry, URLPattern):
+                yield prefix + str(entry.pattern), entry
+
+    routes = set()
+    for pattern, entry in walk(get_resolver()):
+        path = "/" + pattern.lstrip("^").replace(chr(92) + ".", ".")
+        path = re.sub(r"\(\?P<([^>]+)>[^)]*\)", r"{\1}", path)
+        path = re.sub(r"<[^:>]+:([^>]+)>", r"{\1}", path)
+        path = re.sub(r"<([^:>]+)>", r"{\1}", path)
+        path = path.rstrip("$").replace("^", "")
+        if not path.startswith("/api/") or "{format}" in path or "{" in path:
+            continue
+        if path in skip:
+            continue
+        actions = getattr(entry.callback, "actions", None) or {}
+        if "post" in actions:
+            routes.add(path)
+
+    assert len(routes) > 50, f"only {len(routes)} create routes found"
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+    client.raise_request_exception = False
+
+    crashed = []
+    for path in sorted(routes):
+        # A savepoint per request. Without one, the first 500 aborts the
+        # transaction and every route after it fails for a reason that has
+        # nothing to do with it -- which is how the first run of this sweep
+        # reported twenty bugs where there was one. Log 162, in the
+        # instrument.
+        try:
+            # A savepoint on **both** connections, and the tenant one is the
+            # part that matters. The first version opened `transaction.atomic()`
+            # with no alias -- which is the control plane -- so a constraint
+            # violation on the *tenant* database was never contained, and the
+            # guard reported four crashes where there was one. The savepoint
+            # has to be on the connection that faults; anything else is
+            # decoration.
+            with tenant_atomic(), transaction.atomic(
+                using=CONTROL_PLANE_ALIAS,
+            ):
+                response = client.post(
+                    path, data="{}", content_type="application/json",
+                )
+                if response.status_code >= 500:
+                    crashed.append(f"{path} -> {response.status_code}")
+                # Roll the savepoint back whatever happened: an empty body
+                # occasionally succeeds, and this test must leave nothing.
+                raise _Rollback
+        except _Rollback:
+            pass
+
+    assert not crashed, (
+        "create endpoints that crash on a bad body:\n"
+        + "\n".join(crashed)
+    )
+
+
+class _Rollback(Exception):
+    """Unwinds a savepoint deliberately. Never escapes the loop above."""
