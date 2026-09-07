@@ -7,6 +7,7 @@ from rest_framework import serializers
 # build a filter out of what it was given -- see apps/common/fields.py.
 from apps.common.fields import UUIDRelatedField
 
+from apps.organization.models import Facility
 from apps.pharmacy.models import (
     Batch,
     BatchStock,
@@ -43,7 +44,11 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class StockLocationSerializer(serializers.ModelSerializer):
-    facility = UUIDRelatedField(read_only=True)
+    # Writable. It was `read_only=True`, and the column is not nullable, so
+    # **this object could not be created at all** -- the serializer discarded
+    # whatever the request supplied and the insert violated a not-null
+    # constraint. Nothing noticed because no screen has ever created one.
+    facility = UUIDRelatedField(queryset=Facility.objects.all())
     department = UUIDRelatedField(read_only=True)
     parent = UUIDRelatedField(read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)

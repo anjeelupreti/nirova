@@ -55,7 +55,11 @@ from apps.rbac.permissions import Scope
 
 
 class BedSerializer(serializers.ModelSerializer):
-    ward = UUIDRelatedField(read_only=True)
+    # Writable. It was `read_only=True`, and the column is not nullable, so
+    # **this object could not be created at all** -- the serializer discarded
+    # whatever the request supplied and the insert violated a not-null
+    # constraint. Nothing noticed because no screen has ever created one.
+    ward = UUIDRelatedField(queryset=Ward.objects.all())
     ward_name = serializers.CharField(source="ward.name", read_only=True)
     ward_type = serializers.CharField(source="ward.ward_type", read_only=True)
     is_occupied = serializers.BooleanField(read_only=True)
@@ -89,7 +93,11 @@ class BedSerializer(serializers.ModelSerializer):
 
 
 class WardSerializer(serializers.ModelSerializer):
-    facility = UUIDRelatedField(read_only=True)
+    # Writable. It was `read_only=True`, and the column is not nullable, so
+    # **this object could not be created at all** -- the serializer discarded
+    # whatever the request supplied and the insert violated a not-null
+    # constraint. Nothing noticed because no screen has ever created one.
+    facility = UUIDRelatedField(queryset=Facility.objects.all())
     department = UUIDRelatedField(read_only=True)
     unit = UUIDRelatedField(read_only=True)
     bed_count = serializers.IntegerField(read_only=True)

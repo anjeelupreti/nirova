@@ -3413,3 +3413,77 @@ def test_no_create_endpoint_crashes_on_a_malformed_body(tenant):
 
 class _Rollback(Exception):
     """Unwinds a savepoint deliberately. Never escapes the loop above."""
+
+
+# ---------------------------------------------------------------------------
+# Log 218 - five objects the system could not create
+# ---------------------------------------------------------------------------
+
+
+def test_the_master_data_a_hospital_is_set_up_with_can_be_created(tenant):
+    """A ward, a bed, a theatre, a stock location and a provider schedule.
+
+    All five declared their required foreign key `read_only`, so the serializer
+    discarded whatever the request supplied and the insert violated a not-null
+    constraint. **None of these objects could be created through the API at
+    all** — a hospital could be operated through this system but not set up in
+    it.
+
+    Missed by the empty-body sweep because an empty body only reaches the
+    database when every *other* required field is optional: `POST /api/ipd/
+    wards/` answers 400 for a missing `code` long before the read-only
+    `facility` can crash it. Supply the code, the name and a valid facility and
+    it returned 500.
+
+    Nothing noticed for the same reason as everything else in this pass: no
+    screen has ever created one of these, so nothing ever called the endpoint.
+    """
+    from apps.inpatient.models import Ward
+    from apps.organization.models import Facility
+
+    client = _report_client("owner@manakamana.test", tenant)
+    if client is None:
+        pytest.skip("no owner account")
+    client.raise_request_exception = False
+
+    facility = Facility.objects.first()
+    ward = Ward.objects.first()
+    if facility is None or ward is None:
+        pytest.skip("no facility or ward to hang the test on")
+
+    cases = [
+        ("/api/ipd/wards/", {
+            "code": "TESTWARD", "name": "Test Ward",
+            "ward_type": "general", "facility": str(facility.uuid),
+        }),
+        ("/api/ipd/beds/", {"code": "TESTBED", "ward": str(ward.uuid)}),
+        ("/api/ot/theatres/", {
+            "code": "TESTOT", "name": "Test Theatre",
+            "facility": str(facility.uuid),
+        }),
+        ("/api/pharmacy/locations/", {
+            "code": "TESTLOC", "name": "Test Store",
+            "facility": str(facility.uuid),
+        }),
+        ("/api/clinical/schedules/", {
+            "facility": str(facility.uuid),
+            "provider_uuid": str(facility.uuid),
+            "provider_name": "Dr Test", "weekday": 1,
+            "start_time": "09:00", "end_time": "12:00",
+        }),
+    ]
+
+    failures = []
+    for path, body in cases:
+        response = client.post(
+            path, data=json.dumps(body), content_type="application/json",
+        )
+        if response.status_code != 201:
+            failures.append(
+                f"{path} -> {response.status_code} "
+                f"{response.content.decode()[:160]}"
+            )
+    assert not failures, (
+        "master data that cannot be created:\n"
+        + "\n".join(failures)
+    )

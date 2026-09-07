@@ -7,6 +7,7 @@ from rest_framework import serializers
 # id 42 is a different row in every tenant -- see apps/common/fields.py.
 from apps.common.fields import UUIDRelatedField
 
+from apps.organization.models import Facility
 from apps.scheduling.models import (
     Appointment,
     AppointmentSource,
@@ -16,7 +17,11 @@ from apps.scheduling.models import (
 
 
 class ProviderScheduleSerializer(serializers.ModelSerializer):
-    facility = UUIDRelatedField(read_only=True)
+    # Writable. It was `read_only=True`, and the column is not nullable, so
+    # **this object could not be created at all** -- the serializer discarded
+    # whatever the request supplied and the insert violated a not-null
+    # constraint. Nothing noticed because no screen has ever created one.
+    facility = UUIDRelatedField(queryset=Facility.objects.all())
     department = UUIDRelatedField(read_only=True)
     department_name = serializers.CharField(
         source="department.name", read_only=True, default=None

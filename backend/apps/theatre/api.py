@@ -63,7 +63,11 @@ from apps.theatre.services import (
 
 
 class TheatreSerializer(serializers.ModelSerializer):
-    facility = UUIDRelatedField(read_only=True)
+    # Writable. It was `read_only=True`, and the column is not nullable, so
+    # **this object could not be created at all** -- the serializer discarded
+    # whatever the request supplied and the insert violated a not-null
+    # constraint. Nothing noticed because no screen has ever created one.
+    facility = UUIDRelatedField(queryset=Facility.objects.all())
     department = UUIDRelatedField(read_only=True)
     stock_location = UUIDRelatedField(read_only=True)
 

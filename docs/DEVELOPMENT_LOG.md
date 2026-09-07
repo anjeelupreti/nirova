@@ -7892,17 +7892,34 @@ Entry 214's payroll bug had a shape: a serializer field marked read-only whose
 model column is required, on a viewset that accepts POST. A static check for
 that shape found **55 candidates**.
 
-**Fifty-four are false positives** — those viewsets take a separate create
-serializer or override `create()`. Measuring settled in five seconds what
-reading could only guess at, which is the third time in two days a static
-finding has been mostly noise and the empirical version has been decisive.
+**I first wrote that fifty-four of them were false positives. That was wrong,
+and the error is instructive enough to leave standing with its correction.**
 
-**The measurement had a blind spot worth naming.** Entry 214's POST sweep used
+The empty-body sweep scored them clean, and the sweep has a blind spot I had not
+thought through: **an empty body only reaches the database when every other
+required field is optional.** `POST /api/ipd/wards/` returns 400 for a missing
+`code` long before the read-only `facility` can crash it. Supply a code, a name
+and a valid facility UUID and it returns **500** — the serializer discards the
+facility and the insert violates a not-null constraint.
+
+Asked accurately — does the serializer this viewset would use for *create*
+declare a required foreign key read-only? — the answer is **sixteen endpoints
+that cannot create their object at all**: wards, beds, stock locations,
+theatres, provider schedules, credentials, batches, counter sessions, goods
+receipts, queue tokens and more. The other seventeen override `create()` or
+`get_serializer_class`, and the empty-body sweep's 400s confirm those are fine.
+
+**So the static check was right and my measurement was wrong**, which is the
+reverse of entries 209, 213 and the first half of this one. The lesson is not
+"trust static checks" — it is that a measurement is only as good as the inputs
+it can reach, and an empty body reaches almost nothing.
+
+**A second blind spot, in the same measurement.** Entry 214's POST sweep used
 four ordinary roles, so any route needing a permission none of them held
-returned 403 and never reached the serializer — a hole exactly where the shape
-predicts bugs. Re-run as the owner, who passes every permission, all 77 create
-routes answer a malformed body with a 400. So the class is genuinely closed,
-and it is now a permanent guard.
+returned 403 and never reached the serializer. Re-run as the owner, all 77
+create routes answer an *empty* body with a 400 rather than a crash, and that
+is worth keeping as a guard — but it is a much weaker claim than the one I
+first made for it, and the sixteen above are the proof.
 
 **And building that guard walked straight into Log 162 a fifth time.** The
 first version wrapped each request in `transaction.atomic()` with no alias —
@@ -7921,3 +7938,46 @@ that it fails, and once that it names *one* route rather than four. **A guard
 that fires is not the same as a guard that is right.**
 
 **Affects.** `tests/test_invariants.py`.
+
+---
+
+## 218 - Five objects the system could not create
+2026-09-07 · Backend · fix
+
+A ward. A bed. A theatre. A stock location. A provider schedule.
+
+All five declared their required foreign key `read_only`, so the serializer
+discarded whatever the request supplied and the insert violated a not-null
+constraint. **None of these objects could be created through the API at all** —
+which means a hospital could be *operated* through this system but not *set up*
+in it.
+
+**How it hid from the sweep that was built to find it.** Entry 217's empty-body
+POST check scored all five clean, because **an empty body only reaches the
+database when every other required field is optional.** `POST /api/ipd/wards/`
+answers 400 for a missing `code` long before the read-only `facility` can crash
+it. Supply the code, the name and a valid facility UUID and it returns 500.
+
+So the static check I had dismissed was right, and the measurement I trusted was
+blind. That is the opposite of entries 209 and 213, and the pair of them make
+the actual rule: **a measurement is only as good as the inputs it can reach.**
+An empty body reaches almost nothing.
+
+**And it hid in production for the same reason as everything else in this
+pass**: no screen has ever created a ward, a bed, a theatre or a stock location,
+so nothing ever called the endpoint. Every finding in the last two days has the
+same shape.
+
+**Narrowed honestly.** The first count was 55 candidates, then 22, then 16, then
+five — each pass discarding a class the previous instrument could not tell
+apart: many-to-many fields, detail routes whose custom POST action made the
+detector read the wrong serializer, and viewsets that override `create()` and
+take a different input serializer entirely. Only the last number was checked by
+actually creating the object.
+
+**Verified by creating all five**, which now returns 201 for each, and the test
+asserts it.
+
+**Affects.** `apps/inpatient/api.py`, `apps/theatre/api.py`,
+`apps/scheduling/serializers.py`, `apps/pharmacy/serializers.py`,
+`tests/test_invariants.py`.

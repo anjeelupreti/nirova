@@ -21,7 +21,7 @@ line here, it is not scoped.**
 | Built to depth 🔷 | 11 | — |
 | Partial `[~]` | 47 | — |
 | Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1197** |
+| **Done** | **33 of 132** | **1198** |
 | **Outstanding** | **99** | **641** |
 
 *Recounted from the file on 6 September 2026, after documents (§122), the
@@ -494,9 +494,14 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
 - [ ] The other twenty-seven screens. A deliberate pass, not something to do
       while passing — hiding a control somebody is actually permitted is worse
       than the honest 403 they get today
-- [ ] **Screens for the twenty-five master-data endpoints that have none.** A
-      product, a price list, a holiday, a ward and a tax slab can each be
-      created only by somebody with an HTTP client
+- [x] **Five of them could not be created at all**, by anybody, through any
+      client: a ward, a bed, a theatre, a stock location and a provider
+      schedule each declared their required foreign key read-only, so the
+      insert violated a not-null constraint. A hospital could be operated
+      through this system but not set up in it (§218)
+- [ ] **Screens for the master-data endpoints that have none.** A product, a
+      price list, a holiday, a ward and a tax slab can each be created only by
+      somebody with an HTTP client
 - [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
       everywhere and a screen that forgets it is visible in review
 
