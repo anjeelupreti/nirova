@@ -9118,3 +9118,95 @@ Type check clean, `tsc -b` exit 0.
 
 **Six of the eight blind screens remain**, and the fifteen partial ones after
 that.
+
+## 241 - A ward in Dubai was reading its drug times an hour and three quarters late
+
+Asked to judge this against real practices, small to multinational, I stopped
+adding detail panels and went looking for what would break on contact with a
+group that operates outside Nepal. Three things, and they are different in kind:
+
+```
+config/settings/base.py:191   TIME_ZONE = "Asia/Kathmandu"
+apps/billing/fiscal.py        fiscal year begins 16 July, labelled 2083/84
+apps/billing/models.py:80     STANDARD_VAT_RATE = Decimal("13.00")
+```
+
+There is no `country` field on `Organization` or `Facility` anywhere. What
+there is instead is `province` and `district` -- Nepal's administrative
+divisions, used as *the* shape of an address.
+
+**The timezone one is the serious one, and it is serious in a quiet way.**
+`USE_TZ` is on and storage is UTC, so the data was always right. What was
+wrong was the clock everybody read it on. Kathmandu is +05:45 and Dubai is
++04:00: a nurse in the Gulf administering a drug at 08:00 local read it back
+as 09:45, on a screen giving no indication that anything was off. A display
+bug that nothing looks wrong about is worse than one that throws.
+
+The fiscal year is a compliance problem rather than a safety one. Invoice
+numbering is gapless **per fiscal year**, so a branch in a January-December
+country numbering against Nepal's July boundary resets its sequence in the
+middle of its own year.
+
+**What was built, and what it deliberately is not.**
+
+`apps/organization/locale.py`, on top of `ConfigSetting` rather than as new
+columns. That mechanism already resolves narrowest-first -- facility, then
+department, then organization -- and already supports **locking** a value at
+organization scope so a branch cannot quietly opt out of a group policy. A
+`Facility.timezone` column would have been a second, weaker copy of something
+that exists, plus a migration to every tenant database in the fleet.
+
+Four fiscal calendars, named by what they are rather than by country, because
+several countries share each and nobody should have to find their flag in a
+list to learn their year starts in April like everyone else's:
+
+| | starts | label |
+|---|---|---|
+| `nepal` | 16 July | `2083/84` |
+| `gregorian` | 1 January | `2026` |
+| `april` | 1 April | `2026/27` |
+| `july` | 1 July | `2026/27` |
+
+A calendar year is one number. `2026/27` for a year ending in December would
+be a lie, and finance teams do not write it that way.
+
+**The defaults are Nepal.** A single clinic in Kathmandu configures nothing
+and notices none of this. That is the whole design constraint: the cost of
+supporting a second country has to fall on the group that has one, not on
+every customer who does not.
+
+**The timezone is activated per request, and released with the tenant token.**
+That placement is the point. `timezone.activate` is thread-local, and a worker
+thread that kept an activation would render the *next* caller's timestamps in
+the previous caller's zone -- a leak that only appears under concurrency,
+which is where it is hardest to see. It is bound after `set_current_tenant`
+because reading the configuration needs the tenant database, and skipped
+entirely when the configured zone equals the default, so the single-country
+case pays nothing.
+
+A misspelled zone falls back to the default and logs. It was already a wrong
+clock before any of this existed; refusing every request because somebody
+typed `Asia/Dubay` would be worse than the problem.
+
+**Proved, not asserted.** `tests/test_locale.py`, eight tests, written from
+the outside in -- a real request with real headers, reading the offset off a
+real timestamp -- because this is a display failure and only an end-to-end
+check can see it. `+05:45` by default, `+04:00` once Dubai is configured.
+
+Both guards proved by reintroducing their defects:
+
+| defect reintroduced | what failed |
+|---|---|
+| middleware stops activating the zone | the end-to-end offset test |
+| `fiscal_year_for` ignores the configured calendar | all three second-country tests |
+
+And the regression that would have mattered most is pinned: Nepal's fiscal
+year is asserted bit-for-bit either side of the 16 July boundary, because a
+changed label renumbers documents that have already been issued.
+
+Suite: **108 fast, 47 seeds.**
+
+**Still Nepal-shaped, and named here so it is not mistaken for done:** the VAT
+rate constant, `province`/`district` as the address, and NMC registration as
+*the* clinical credential. A group in the Gulf has an emirate and a DHA
+licence. Those are the next three.

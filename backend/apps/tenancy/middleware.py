@@ -1,11 +1,18 @@
 """Resolves which organization a request belongs to, before the view runs."""
 
 import logging
+# zoneinfo: the stdlib IANA database, used to turn a configured zone name such
+# as "Asia/Dubai" into something `timezone.activate` accepts. Standard library
+# since 3.9, so no dependency.
+import zoneinfo
 
 # MiddlewareMixin: gives the old-style process_request / process_response /
 # process_exception hooks. Used rather than the plain callable style because
 # this middleware must reset the context on *both* the response path and the
 # exception path -- a single `__call__` wrapper makes that easy to get wrong.
+# settings: compared against the configured zone so the common
+# single-country case skips the activation entirely.
+from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
 
 # JWTAuthentication: this middleware authenticates the bearer token itself.
@@ -118,21 +125,77 @@ class TenantContextMiddleware(MiddlewareMixin):
         request.tenant = context
         request.organization = organization
         request._tenant_token = set_current_tenant(context)
+
+        # **After the tenant is bound, because reading it needs the tenant
+        # database.** See `_activate_timezone`.
+        self._activate_timezone(request, context)
         return None
 
     def process_response(self, request, response):
-        token = getattr(request, "_tenant_token", None)
-        if token is not None:
-            reset_current_tenant(token)
-            request._tenant_token = None
+        self._release(request)
         return response
 
     def process_exception(self, request, exception):
+        self._release(request)
+        return None
+
+    # -- per-request state, bound and released together -------------------
+
+    def _activate_timezone(self, request, context) -> None:
+        """Render this request's timestamps in the facility's own zone.
+
+        `settings.TIME_ZONE` is a single constant -- Asia/Kathmandu -- and
+        Django renders every aware datetime in it. Storage is UTC and so the
+        *data* was always right; the display was wrong for anybody outside
+        Nepal, which is the more dangerous of the two failures because nothing
+        looks broken. A ward in Dubai administering a drug at 08:00 local read
+        it back as 09:45 and had no reason to distrust the clock.
+
+        Activated per request rather than set globally because a group has one
+        set of records and several working days. Released in `_release`
+        alongside the tenant token: `timezone.activate` is thread-local, and a
+        worker thread that kept an activation would render the *next*
+        request's timestamps in the previous caller's zone -- a leak that only
+        appears under concurrency, which is where it is hardest to see.
+        """
+        from django.utils import timezone as django_timezone
+
+        try:
+            from apps.organization.locale import timezone_name
+
+            name = timezone_name(facility=getattr(context, "facility_id", None))
+        except Exception:  # noqa: BLE001
+            # A tenant whose database is mid-migration, or has no config table
+            # yet, gets the default rather than a 500 on every request.
+            return
+
+        if not name or name == settings.TIME_ZONE:
+            # Nothing to do, and skipping the activation means the common
+            # single-country case pays nothing for this at all.
+            return
+
+        try:
+            django_timezone.activate(zoneinfo.ZoneInfo(name))
+        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+            # A typo in a configured zone must not take the tenant down. The
+            # default stands and the mistake shows up as a wrong clock, which
+            # is what it already was.
+            logger.warning("Unknown timezone %r configured; using default", name)
+            return
+        request._timezone_activated = True
+
+    @staticmethod
+    def _release(request) -> None:
         token = getattr(request, "_tenant_token", None)
         if token is not None:
             reset_current_tenant(token)
             request._tenant_token = None
-        return None
+
+        if getattr(request, "_timezone_activated", False):
+            from django.utils import timezone as django_timezone
+
+            django_timezone.deactivate()
+            request._timezone_activated = False
 
     # -- internals -------------------------------------------------------
 

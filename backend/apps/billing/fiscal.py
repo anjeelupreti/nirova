@@ -1,4 +1,4 @@
-"""Nepali fiscal year handling.
+"""Fiscal year handling. Nepal by default; any calendar by configuration.
 
 Nepal's fiscal year runs from Shrawan 1 to Ashadh end in the Bikram Sambat
 calendar — roughly 16 July to 15 July in the Gregorian one. Statutory invoice
@@ -19,6 +19,16 @@ on `Organization`) for customers who need it exact.
 **If this system is used for statutory VAT filing, replace this with a proper
 BS calendar before go-live.** The seam is `fiscal_year_for()`: swap its body,
 and everything downstream follows.
+
+---
+
+**Not every facility is in Nepal.** A group operating in more than one country
+has more than one financial year, and invoice numbering is gapless *per
+fiscal year* -- so a Dubai branch numbering its invoices against Nepal's July
+boundary would reset its sequence in the middle of the year. `fiscal_year_for`
+therefore asks `apps.organization.locale` which calendar applies, and falls
+back to Nepal when nothing has been configured, which is every single-country
+customer.
 """
 
 from datetime import date
@@ -43,7 +53,7 @@ def fiscal_year_start(on_date: date) -> date:
     return date(on_date.year - 1, FISCAL_YEAR_START_MONTH, FISCAL_YEAR_START_DAY)
 
 
-def fiscal_year_for(on_date: date | None = None) -> str:
+def fiscal_year_for(on_date: date | None = None, facility=None) -> str:
     """The fiscal year label for a date, in the form Nepal writes it: 2082/83.
 
     Worked example. 2 September 2026 falls after 16 July 2026, so the fiscal
@@ -51,6 +61,23 @@ def fiscal_year_for(on_date: date | None = None) -> str:
     BS year is 2026 + 57 = 2083, and the label is "2083/84".
     """
     on_date = on_date or date.today()
+
+    # Imported here rather than at module scope: `apps.organization` is a
+    # tenant app and this module is imported by code that runs before a tenant
+    # is bound. A module-level import would make that a startup failure.
+    from apps.organization.locale import (
+        FiscalCalendar,
+        fiscal_calendar,
+        fiscal_year_label_for,
+        fiscal_year_start_for,
+    )
+
+    calendar = fiscal_calendar(facility=facility)
+    if calendar != FiscalCalendar.NEPAL:
+        return fiscal_year_label_for(
+            calendar, fiscal_year_start_for(calendar, on_date),
+        )
+
     start = fiscal_year_start(on_date)
     bs_year = start.year + BS_OFFSET_AFTER_NEW_YEAR
     return f"{bs_year}/{(bs_year + 1) % 100:02d}"
