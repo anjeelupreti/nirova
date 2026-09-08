@@ -546,10 +546,31 @@ def seed_system_roles() -> int:
     return created
 
 
+def _widest_scope(authorization) -> str:
+    """The widest scope this person holds anything at.
+
+    Used to stop somebody delegating further than they can reach themselves. A
+    facility-scoped manager may hand a role to somebody at their facility; they
+    may not hand out an organization-wide one.
+    """
+    widest = Scope.OWN
+    for granted in authorization.permissions.values():
+        if Scope.covers(granted.scope, widest):
+            widest = granted.scope
+    return widest
+
+
 def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
                 facility=None, department=None, assigned_by=None,
-                reason: str = "") -> RoleAssignment:
-    """Give a user a role in the active tenant."""
+                reason: str = "", assigner_authorization=None) -> RoleAssignment:
+    """Give a user a role in the active tenant.
+
+    `assigner_authorization` is the resolved authority of whoever is doing the
+    assigning, and passing it turns on the escalation check below. It is
+    optional because the seeds and `provision_login` create the first
+    administrator, and there is nobody to check them against; **every path a
+    human can reach must pass it.**
+    """
     role = Role.objects.filter(code=role_code, is_active=True).first()
     if role is None:
         raise PermissionDeniedError(
@@ -582,6 +603,39 @@ def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
             "appear to hold the role while seeing none of it.",
             detail={"role": role_code, "scope": scope},
         )
+
+    # **Nobody may grant an authority they do not hold.**
+    #
+    # The oldest hole in role administration: somebody with permission to
+    # assign roles gives themselves, or a friend, a role carrying permissions
+    # they were never granted -- and every check downstream passes, because by
+    # then the permission is genuinely held. `role.assign` is the authority to
+    # *delegate*, not to *invent*.
+    #
+    # The organization owner is exempt because they already hold everything;
+    # checking them against themselves would be theatre.
+    if assigner_authorization is not None and not getattr(
+        assigner_authorization, "is_organization_owner", False,
+    ):
+        held = set(assigner_authorization.permissions)
+        granting = set(role.permissions or [])
+        beyond = sorted(granting - held)
+        if beyond:
+            raise PermissionDeniedError(
+                f"'{role.name}' carries permissions you do not hold yourself, "
+                f"so you may not grant it: {', '.join(beyond[:5])}"
+                + (f" and {len(beyond) - 5} more" if len(beyond) > 5 else "")
+                + ".",
+                detail={"role": role_code, "beyond_your_authority": beyond},
+            )
+        # And not wider than their own reach. Somebody who holds a role at one
+        # facility may pass it on there, not across the organization.
+        if not Scope.covers(_widest_scope(assigner_authorization), scope):
+            raise PermissionDeniedError(
+                f"You may not grant a role at {scope} scope; your own "
+                f"authority does not reach that far.",
+                detail={"role": role_code, "requested_scope": scope},
+            )
 
     assignment, _ = RoleAssignment.objects.update_or_create(
         user_id=user.uuid,

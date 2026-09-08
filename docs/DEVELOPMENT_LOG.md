@@ -8396,3 +8396,40 @@ owner creates, and a move attempt is ignored.
 **Affects.** `apps/organization/serializers.py`, `apps/organization/views.py`,
 `apps/organization/urls.py`, `frontend/src/pages/Configuration.tsx`,
 `backend/tests/test_invariants.py`.
+
+## 228 - Nobody may grant an authority they do not hold
+
+**What was wrong.** `assign_role` checked that the *role* was assignable and
+that the *scope* was legal for that role. It never checked the person doing the
+assigning. Anybody holding `role.assign` could hand out `organization_admin` --
+to a colleague, or to themselves -- and every permission check downstream would
+then pass honestly, because by that point the permission really is held. This is
+the oldest hole in role administration: `role.assign` is the authority to
+*delegate* what you have, not to *invent* what you do not.
+
+**What the guard does.** `assign_role` gained an optional
+`assigner_authorization` argument. When it is passed, two things must hold:
+
+1. Every permission the role carries must already be held by the assigner.
+   The failure names the first five offending codes, so the message is
+   actionable rather than a flat refusal.
+2. The requested scope must be one the assigner's own authority covers.
+   `_widest_scope()` walks their granted permissions and returns the widest
+   scope any of them carries; a facility manager may pass a role on at their
+   facility, not across the organization.
+
+The organization owner is exempt -- they hold everything, so checking them
+against themselves would be theatre.
+
+**Why the argument is optional.** The seeds and `provision_login` create the
+first administrator of a tenant, and there is nobody to check them against. An
+argument that defaults to `None` lets those paths through without a special
+case. The cost is that the guard is only as good as the callers: **it is inert
+until a caller passes it**, and today no API layer does, because there is no
+user-and-role-management API yet (see the outstanding work below). It is
+written now so that the API cannot be written without it -- the argument is
+there in the signature, waiting.
+
+**Verified.** Full suite: 125 passed. The guard changes no existing behaviour
+because no existing caller passes the new argument, which is exactly the
+property that makes it safe to land ahead of its consumer.
