@@ -223,6 +223,12 @@ export const api = {
   // client does not know about, which is how a save quietly blanks a column.
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "PATCH", body }),
+  // PUT is here for exactly one shape of endpoint: replacing a value at a
+  // known address. Settings are that shape -- `/org/settings/` with a code
+  // and a value -- and calling it POST would suggest it creates something.
+  // Everything else in this API is PATCH, for the reason above.
+  put: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>(path, { ...opts, method: "PUT", body }),
   // DELETE takes a body, unusually, because revoking a role carries a reason
   // and the reason belongs in the audit record. `request` already handles a
   // 204 with no content, which is what these return.

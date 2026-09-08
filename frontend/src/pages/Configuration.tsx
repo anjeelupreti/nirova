@@ -28,9 +28,11 @@ import {
   Scissors,
   Send,
   ShieldCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import MasterData, { type MasterSpec } from "@/components/MasterData";
+import SystemSettings from "@/components/SystemSettings";
 import { cn } from "@/lib/utils";
 
 const PAYER_KINDS = ["insurer", "government", "corporate", "ngo", "self_pay",
@@ -351,6 +353,11 @@ const PROVIDERS: MasterSpec = {
 };
 
 const SECTIONS = [
+  // First, and not a master-data list: everything below is a list the daily
+  // screens read, and this is the handful of decisions that change how the
+  // system behaves. A group opening a second facility abroad needs it before
+  // it needs a referral provider.
+  { id: "system", label: "System", icon: SlidersHorizontal, spec: null },
   // First: a facility with no departments is one nothing can be routed
   // inside, so it is the first thing a new organization needs.
   { id: "departments", label: "Departments", icon: Network, spec: DEPARTMENTS },
@@ -395,7 +402,11 @@ export default function ConfigurationPage() {
         ))}
       </div>
 
-      <MasterData key={active.id} spec={active.spec} />
+      {active.spec === null ? (
+        <SystemSettings />
+      ) : (
+        <MasterData key={active.id} spec={active.spec} />
+      )}
     </div>
   );
 }

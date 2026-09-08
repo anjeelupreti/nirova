@@ -9329,3 +9329,44 @@ gets, and those are different facts when deciding whether to change it.
 | `coerce` returns the raw value unvalidated | all five bad-value cases |
 
 Whole suite: **170 passed, 9 skipped.**
+
+## 244 - The screen for it
+
+`src/components/SystemSettings.tsx`, as the first section of Configuration —
+first because everything else on that screen is a list the daily screens read,
+and these are the handful of decisions that change how the system behaves. A
+group opening a second facility abroad needs the financial year before it needs
+a referral provider.
+
+**Rendered from the server's registry.** The API publishes each setting's kind,
+choices, default and caution, so this file contains no copy of the fiscal
+calendars — and a second copy is always the one that gets forgotten.
+
+Three details that came out of the API's shape:
+
+* **`default` is shown as a badge, not as a value.** "13.00" does not say
+  whether somebody chose it. An inherited number read as a decision is how a
+  group ends up believing it configured something it never touched.
+* **`caution` appears before the change.** A warning shown after you save is a
+  receipt.
+* **A boolean saves on the click**, with no separate save button. A toggle that
+  looks on but is not yet saved is the wrong thing to be wrong about when the
+  toggle is a privacy control.
+
+`api.put` was added — the client had no PUT, because nothing had ever replaced
+a value at a known address before.
+
+**Verified through the running stack**, not in a unit test:
+
+```
+PUT locale.timezone = Asia/Dubai
+GET /api/auth/session/  ->  last_active_at 2026-09-08T21:54:07+04:00
+```
+
+And the thing worth having confirmed rather than assumed: with the calendar
+switched to `gregorian`, an **existing invoice still reads `2083/84`**.
+`fiscal_year` is stored on the row, not recomputed on read, so changing the
+setting does not retroactively renumber documents that have already been
+issued. That is the correct behaviour and it is now a checked fact.
+
+Frontend build clean; Configuration is a 14 kB route chunk.
