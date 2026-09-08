@@ -3042,6 +3042,44 @@ because three modules were already working around its absence.*
 
 ---
 
+# Staff administration `[~]`
+
+*Added 8 September 2026 (logs 235, 236). Seven catalogue permissions were
+granted by four roles and checked by no endpoint: the product could not onboard
+a second member of staff.*
+
+- [x] `GET/POST /api/admin/staff/` — list with roles, invite, optionally
+      granting a role in the same act
+- [x] `GET/PATCH /api/admin/staff/<uuid>/`, and `deactivate/` with `?undo=1`
+- [x] `GET /api/admin/roles/` — annotated with whether *you* may grant each,
+      and what puts the others out of reach
+- [x] `POST/DELETE /api/admin/staff/<uuid>/roles/…` — grant and revoke
+- [x] `revoke_role`, which did not exist — nothing could take a role away,
+      which is why `RoleAssignment.revoked_at` had never been written to
+- [x] Revoked, never deleted: "who could approve this in March?" stays
+      answerable
+- [x] Deactivating revokes every role; reactivating restores **none** of them,
+      because authority held a year ago is not authority reviewed today
+- [x] The escalation guard is live — every grant passes
+      `assigner_authorization`, which nothing had done since it was written
+- [x] Delegation is stated, not inferred (`Role.grantable_roles`). The strict
+      "you may not grant what you do not hold" rule let a facility manager
+      grant exactly one role: their own
+- [x] **You may not grant a role to yourself**, owner included — without it,
+      delegation is escalation with an extra step
+- [x] `src/pages/Staff.tsx`, with the three acts kept apart because their
+      permissions are held by different people
+- [x] 18 tests, both security guards proved by reintroducing their defects
+- [ ] Transferring organization ownership (the owner cannot be deactivated and
+      there is no way to hand the role over)
+- [ ] Sending the invitation. The account is created and cannot sign in until a
+      password is set; nothing emails the person yet
+- [ ] `role.manage` — creating and editing custom roles. Assignment works;
+      authoring a role does not
+- [ ] Per-user permission overrides (`PermissionOverride` exists, no endpoint)
+
+---
+
 # Packaging and local operation `[x]`
 
 *Added 8 September 2026, on the ask: "we need frontend, backend everything, so
@@ -3119,6 +3157,12 @@ remembered to run them twice by hand.*
       whatever the runner happens to have. Four tests were passing vacuously
       because the demo doctor held no role and a user who sees nothing
       satisfies every assertion about not seeing too much (log 231)
+- [x] 65 of 76 catalogue permissions are now enforced at an endpoint, up from
+      59. The seven staff-administration codes were the largest single block
+      (log 235); 11 remain unreachable: `analytics.read`, `audit.export`,
+      `organization.read/update`, `patient.safety.read`,
+      `prescription.approve`, `refund.create`, `report.build`, `role.manage`,
+      `stock.transfer`, `subscription.read`
 - [ ] Coverage measurement
 - [ ] A hermetic unit layer for the pure calculations (NEWS2, tax slabs,
       ageing buckets) that needs no database
