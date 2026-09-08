@@ -31,7 +31,9 @@ weaker version of a mechanism that exists. It also means no migration, and no
 schema change to a table every tenant database has a copy of.
 """
 
+from contextvars import ContextVar
 from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
 
@@ -40,6 +42,27 @@ LOCALE_NAMESPACE = "locale"
 TIMEZONE_KEY = "timezone"
 FISCAL_CALENDAR_KEY = "fiscal_calendar"
 CURRENCY_KEY = "currency"
+TAX_RATE_KEY = "standard_tax_rate"
+
+#: Locale values already resolved during this request, keyed by (key,
+#: facility_id).
+#:
+#: `ServiceItem.effective_tax_rate` is a model *property* -- it has no request
+#: to hang a memo on, and it is evaluated once per row when a service
+#: catalogue is serialised. Without this, opening a 50-item price list would
+#: run fifty configuration queries to answer the same question fifty times.
+#:
+#: A `ContextVar` rather than a module dict, matching how the tenant context
+#: itself is carried: module state is shared across threads and would leak one
+#: tenant's locale into another's request. Cleared by the tenant middleware
+#: alongside the tenant token, so nothing survives the request that set it and
+#: a configuration change is visible on the very next one.
+_resolved: ContextVar[dict | None] = ContextVar("nirova_locale", default=None)
+
+
+def clear_cache() -> None:
+    """Forget everything resolved for this request. Called by the middleware."""
+    _resolved.set(None)
 
 
 class FiscalCalendar:
@@ -85,11 +108,15 @@ DEFAULTS = {
     TIMEZONE_KEY: settings.TIME_ZONE,
     FISCAL_CALENDAR_KEY: FiscalCalendar.NEPAL,
     CURRENCY_KEY: "NPR",
+    # Nepal's standard VAT. The UAE charges 5, the UK 20, India varies by
+    # GST slab -- so this is the *fallback* for a service that names no rate
+    # of its own, not a claim about what healthcare is taxed at anywhere.
+    TAX_RATE_KEY: "13.00",
 }
 
 
 def _value(key, facility=None, department=None):
-    """One locale value, resolved for this facility.
+    """One locale value, resolved for this facility, once per request.
 
     Swallows a missing configuration table on purpose. This is called from
     request middleware, which runs before anything has confirmed the tenant
@@ -98,13 +125,28 @@ def _value(key, facility=None, department=None):
     """
     from apps.organization.config import config_value
 
+    facility_id = getattr(facility, "id", facility)
+    memo_key = (key, facility_id, getattr(department, "id", department))
+    memo = _resolved.get()
+    if memo is not None and memo_key in memo:
+        return memo[memo_key]
+
     try:
-        return config_value(
+        value = config_value(
             LOCALE_NAMESPACE, key, default=DEFAULTS[key],
             facility=facility, department=department,
         )
     except Exception:  # noqa: BLE001 - see the docstring
+        # Not memoised. A failure here usually means the tenant database is
+        # not ready, and caching that answer would keep serving the default
+        # after it became ready.
         return DEFAULTS[key]
+
+    if memo is None:
+        memo = {}
+        _resolved.set(memo)
+    memo[memo_key] = value
+    return value
 
 
 def timezone_name(facility=None) -> str:
@@ -132,6 +174,20 @@ def fiscal_calendar(facility=None) -> str:
 
 def currency(facility=None) -> str:
     return _value(CURRENCY_KEY, facility=facility)
+
+
+def standard_tax_rate(facility=None) -> Decimal:
+    """The rate a standard-rated service is charged at, when it names none.
+
+    A `Decimal`, never a float: this multiplies money. `Decimal(str(...))`
+    rather than `Decimal(...)` because a value that arrived from JSON
+    configuration may be a float, and `Decimal(0.05)` is not 0.05.
+    """
+    raw = _value(TAX_RATE_KEY, facility=facility)
+    try:
+        return Decimal(str(raw))
+    except (ArithmeticError, TypeError, ValueError):
+        return Decimal(DEFAULTS[TAX_RATE_KEY])
 
 
 def fiscal_year_start_for(calendar: str, on_date: date) -> date:

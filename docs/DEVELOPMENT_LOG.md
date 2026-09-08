@@ -9210,3 +9210,57 @@ Suite: **108 fast, 47 seeds.**
 rate constant, `province`/`district` as the address, and NMC registration as
 *the* clinical credential. A group in the Gulf has an emirate and a DHA
 licence. Those are the next three.
+
+## 242 - A Gulf branch was charging Nepal's VAT, and the invoice looked fine
+
+The third of the three assumptions named at the end of log 241.
+`STANDARD_VAT_RATE = Decimal("13.00")` was the fallback for any standard-rated
+service that named no rate of its own. The UAE charges 5%, the UK 20%, India
+varies by GST slab. A branch outside Nepal charged 13% and **nothing said so** —
+the invoice was arithmetically consistent, internally explicable, and wrong.
+That is the hardest kind of wrong to notice, because every check you would run
+on it passes.
+
+`effective_tax_rate` now falls back to the tenant's configured rate. Two rules
+had to survive and are pinned by tests, because they are exactly what a change
+like this breaks quietly: **a service naming its own rate still wins**, and
+**exempt stays exempt** whatever the tenant's standard rate is.
+
+**A wrong assumption, caught before it shipped.** I wrote
+`standard_tax_rate(facility=self.facility_id)`. `ServiceItem` has no facility —
+it has a department. The catalogue is organization-wide, so the rate resolves
+there, and the consequence is worth stating rather than leaving to be
+discovered from an invoice: **a group trading in two tax jurisdictions needs a
+price list per jurisdiction**, which `PriceList` already provides. One
+catalogue taxed two ways is not a thing this models.
+
+**The memo, and the bug it introduced.** `effective_tax_rate` is a model
+property evaluated once per row when a price list is serialised, so a
+configuration query per row would turn a 50-item catalogue into fifty
+lookups of the same answer. It is memoised in a `ContextVar` — not a module
+dict, which is shared across threads and would leak one tenant's locale into
+another's request — cleared by the tenant middleware alongside the timezone
+activation.
+
+Which introduced a real staleness bug immediately: writing a value and reading
+it back in the same request returned the old one. The fiscal tests failed the
+moment the memo landed, which is the useful kind of test failure. `set_config_
+value` now invalidates the memo when it writes to the locale namespace, so an
+administrator saving a tax rate sees the new one. The tests were then stripped
+of their manual `clear_cache()` calls **on purpose**: a test that clears by
+hand cannot tell whether the write invalidates.
+
+**Three guards, each proved by reintroducing its defect:**
+
+| defect reintroduced | what failed |
+|---|---|
+| middleware stops activating the timezone | the end-to-end offset test |
+| `fiscal_year_for` ignores the configured calendar | all three second-country tests |
+| `set_config_value` stops invalidating the memo | both tax-rate tests |
+
+Whole suite, fast and seeds together: **157 passed, 9 skipped.**
+
+**What is still Nepal-shaped**, named so it is not mistaken for finished:
+`province`/`district` as the shape of every address, `name_nepali` on
+`ServiceItem` as *the* second language, and NMC registration as *the* clinical
+credential. A group in the Gulf has an emirate, Arabic, and a DHA licence.

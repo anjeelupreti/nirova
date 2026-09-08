@@ -197,6 +197,17 @@ class TenantContextMiddleware(MiddlewareMixin):
             django_timezone.deactivate()
             request._timezone_activated = False
 
+        # The locale memo lives for one request only. Left in place it would
+        # serve a stale timezone or tax rate to the next caller on this
+        # thread, for as long as the thread lived -- which is the same class
+        # of leak as the timezone activation above and is released with it.
+        try:
+            from apps.organization.locale import clear_cache
+
+            clear_cache()
+        except Exception:  # noqa: BLE001
+            pass
+
     # -- internals -------------------------------------------------------
 
     @staticmethod

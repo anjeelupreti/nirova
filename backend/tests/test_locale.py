@@ -39,10 +39,18 @@ def _client(email, tenant):
 
 
 def _clear_locale():
-    from apps.organization.locale import LOCALE_NAMESPACE
+    """Delete the rows *and* the memo.
+
+    Deleting goes straight to the queryset and so does not pass through
+    `set_config_value`, which is what invalidates the cache. A fixture that
+    dropped the rows and left the memo would leave the next test reading a
+    country that no longer has any configuration.
+    """
+    from apps.organization.locale import LOCALE_NAMESPACE, clear_cache
     from apps.organization.models import ConfigSetting
 
     ConfigSetting.all_objects.filter(namespace=LOCALE_NAMESPACE).delete()
+    clear_cache()
 
 
 @pytest.fixture
@@ -267,3 +275,88 @@ def test_a_nonsense_timezone_does_not_take_the_tenant_down(tenant, locale_reset)
     assert response.status_code == 200, (
         "a misspelled timezone brought the whole tenant down"
     )
+
+
+# ---------------------------------------------------------------------------
+# The rate that multiplies money
+# ---------------------------------------------------------------------------
+
+
+def test_the_standard_rate_follows_the_tenant_not_nepal(tenant, locale_reset):
+    """`STANDARD_VAT_RATE` was the fallback for any standard-rated service
+    that named no rate of its own.
+
+    A UAE branch charges 5%. Before this it charged 13% and nothing said so:
+    the invoice was arithmetically consistent, internally explicable, and
+    wrong. Built on unsaved instances so the tenant's real catalogue is not
+    touched -- `effective_tax_rate` reads no database row of its own.
+    """
+    from decimal import Decimal
+
+    from apps.billing.models import ServiceItem, TaxTreatment
+    from apps.organization.config import set_config_value
+    from apps.organization.locale import (
+        LOCALE_NAMESPACE,
+        TAX_RATE_KEY,
+        clear_cache,
+    )
+
+    standard = ServiceItem(
+        code="T1", name="Test", tax_treatment=TaxTreatment.STANDARD,
+        tax_rate=None,
+    )
+    assert standard.effective_tax_rate == Decimal("13.00")
+
+    # No manual cache clear. `set_config_value` invalidates the memo itself,
+    # and a test that cleared by hand could not tell whether it does.
+    set_config_value(LOCALE_NAMESPACE, TAX_RATE_KEY, "5.00")
+    assert standard.effective_tax_rate == Decimal("5.00"), (
+        "a Gulf branch was still being charged Nepal's VAT"
+    )
+
+    # The two rules that must survive the change.
+    exempt = ServiceItem(
+        code="T2", name="Test", tax_treatment=TaxTreatment.EXEMPT, tax_rate=None,
+    )
+    assert exempt.effective_tax_rate == Decimal("0"), (
+        "exempt must stay exempt whatever the tenant's standard rate is"
+    )
+    its_own = ServiceItem(
+        code="T3", name="Test", tax_treatment=TaxTreatment.STANDARD,
+        tax_rate=Decimal("7.50"),
+    )
+    assert its_own.effective_tax_rate == Decimal("7.50"), (
+        "the per-service override must still beat the tenant default"
+    )
+
+
+def test_the_locale_memo_does_not_outlive_a_configuration_change(
+    tenant, locale_reset,
+):
+    """The risk the per-request cache introduces, tested rather than assumed.
+
+    `effective_tax_rate` is a model property evaluated once per row when a
+    price list is serialised, so the lookup is memoised. A memo that survived
+    a write would serve the old rate until the process restarted -- which is
+    exactly the kind of bug that looks like "it worked when I tried it
+    later".
+    """
+    from decimal import Decimal
+
+    from apps.billing.models import ServiceItem, TaxTreatment
+    from apps.organization.config import set_config_value
+    from apps.organization.locale import (
+        LOCALE_NAMESPACE,
+        TAX_RATE_KEY,
+        clear_cache,
+        standard_tax_rate,
+    )
+
+    item = ServiceItem(
+        code="T4", name="Test", tax_treatment=TaxTreatment.STANDARD,
+        tax_rate=None,
+    )
+    assert item.effective_tax_rate == Decimal("13.00")   # memo now populated
+
+    set_config_value(LOCALE_NAMESPACE, TAX_RATE_KEY, "20.00")
+    assert standard_tax_rate() == Decimal("20.00")

@@ -130,4 +130,18 @@ def set_config_value(
             "is_locked": is_locked,
         },
     )
+    # **Writing a locale value must drop the memo that caches it.**
+    #
+    # `apps.organization.locale` resolves once per request and remembers, so
+    # `ServiceItem.effective_tax_rate` does not run a configuration query per
+    # row of a price list. Without this line, an administrator saving a new
+    # tax rate would read the old one back in the same request -- and the
+    # tests that write a calendar and then ask for it found exactly that.
+    #
+    # Imported here, not at module scope: locale imports this module.
+    if namespace == "locale":
+        from apps.organization.locale import clear_cache
+
+        clear_cache()
+
     return setting

@@ -74,7 +74,12 @@ class TaxTreatment(models.TextChoices):
     STANDARD = "standard", "Standard rate"
 
 
-#: Nepal's standard VAT rate. A single constant rather than a hard-coded 13
+#: Nepal's standard VAT rate, and the default a tenant gets if it configures
+#: nothing. `apps.organization.locale.standard_tax_rate` is what actually
+#: answers the question now; this stays as the value that module falls back to
+#: and as the number the seeds and tests refer to.
+#:
+#: A single constant rather than a hard-coded 13
 #: scattered through the code, so a rate change is one edit -- and so the
 #: number is findable when someone asks where it came from.
 STANDARD_VAT_RATE = Decimal("13.00")
@@ -148,10 +153,34 @@ class ServiceItem(BaseModel):
 
     @property
     def effective_tax_rate(self) -> Decimal:
-        """The rate actually applied. Exempt and zero-rated both yield zero."""
+        """The rate actually applied. Exempt and zero-rated both yield zero.
+
+        The fallback is the *tenant's* standard rate, not Nepal's. A service
+        that names its own rate still wins -- that is the per-service override
+        this has always had -- but a UAE branch that leaves the field blank
+        should charge 5%, not 13%, and before this it charged 13% silently.
+
+        The lookup is memoised per request in `apps.organization.locale`,
+        because this property is evaluated once per row when a price list is
+        serialised.
+        """
         if self.tax_treatment != TaxTreatment.STANDARD:
             return ZERO
-        return self.tax_rate or STANDARD_VAT_RATE
+        if self.tax_rate:
+            return self.tax_rate
+
+        # Organization level, not facility: a `ServiceItem` has no facility.
+        # The catalogue is shared across the tenant and scoped by department,
+        # so there is no facility here to ask about -- and a per-facility rate
+        # on a shared catalogue would be incoherent anyway.
+        #
+        # **A group trading in two tax jurisdictions therefore needs a price
+        # list per jurisdiction**, which `PriceList` already provides, rather
+        # than one catalogue taxed two ways. Stated here because the
+        # alternative is somebody discovering it from a wrong invoice.
+        from apps.organization.locale import standard_tax_rate
+
+        return standard_tax_rate()
 
 
 class PriceList(BaseModel):
