@@ -77,6 +77,13 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import {
+  RecordPanel,
+  dateTime,
+  money,
+  status,
+  useRecordPanel,
+} from "@/components/RecordPanel";
 
 /** One line in the basket, before it is anything the server knows about. */
 interface BasketItem {
@@ -1207,6 +1214,12 @@ function ReceiptPanel({ sale, onNext }: { sale: Sale; onNext: () => void }) {
 /* -------------------------------------------------------------------------- */
 
 function SalesView({ session }: { session: CounterSession }) {
+  // Opening a sale. The row carries the lines, the tax and discount breakdown,
+  // who served the customer, their phone and PAN, the prescription it was
+  // dispensed against and the void reason -- and shows the reference, the
+  // customer, the invoice number and a total. A counter assistant asked "what
+  // was on that bill?" had to reprint it to find out.
+  const panel = useRecordPanel<Sale>();
   const [sales, setSales] = useState<Sale[]>([]);
   const [summary, setSummary] = useState<SalesSummary | null>(null);
   const [returning, setReturning] = useState<Sale | null>(null);
@@ -1288,7 +1301,7 @@ function SalesView({ session }: { session: CounterSession }) {
             </TableHeader>
             <TableBody>
               {sales.map((sale) => (
-                <TableRow key={sale.uuid}>
+                <TableRow key={sale.uuid} {...panel.rowProps(sale)}>
                   <TableCell className="font-medium">
                     {sale.reference}
                     <span className="block text-xs text-muted-foreground">
@@ -1313,7 +1326,7 @@ function SalesView({ session }: { session: CounterSession }) {
                       {sale.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell {...panel.stopProps}>
                     {["completed", "partially_returned"].includes(
                       sale.status,
                     ) && (
@@ -1351,6 +1364,109 @@ function SalesView({ session }: { session: CounterSession }) {
           }}
         />
       )}
+
+      <RecordPanel
+        row={panel.open}
+        onClose={panel.close}
+        spec={{
+          title: (sale) => sale.reference,
+          subtitle: (sale) =>
+            `${sale.customer_label || "Walk-in"} · ${dateTime(sale.sold_at)}`,
+          sections: [
+            {
+              heading: "The sale",
+              fields: [
+                { label: "Status", value: (s) => status(s.status) },
+                { label: "Served by", value: (s) => s.sold_by_name },
+                { label: "Invoice", value: (s) => s.invoice_number },
+                {
+                  label: "Against prescription",
+                  value: (s) => s.prescription_reference,
+                  when: (s) => Boolean(s.prescription_reference),
+                },
+                {
+                  label: "Voided because",
+                  value: (s) => s.void_reason,
+                  when: (s) => Boolean(s.void_reason),
+                },
+                {
+                  label: "Note",
+                  value: (s) => s.notes,
+                  when: (s) => Boolean(s.notes),
+                },
+              ],
+            },
+            {
+              heading: "Customer",
+              // Hidden entirely for a walk-in with no details, rather than
+              // three em dashes under a heading that promises something.
+              when: (s) =>
+                Boolean(s.customer_name || s.customer_phone || s.customer_pan),
+              fields: [
+                { label: "Name", value: (s) => s.customer_name },
+                { label: "Phone", value: (s) => s.customer_phone },
+                { label: "PAN", value: (s) => s.customer_pan },
+              ],
+            },
+            {
+              heading: "What was sold",
+              fields: [],
+              render: (sale) => (
+                <div className="space-y-1">
+                  {sale.lines.map((line) => (
+                    <div
+                      key={line.uuid}
+                      className="flex items-baseline justify-between gap-3 border-b py-1.5 text-sm last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <div>{line.product_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {line.quantity} x {money(line.unit_price)}
+                          {line.batch_number && ` · batch ${line.batch_number}`}
+                          {Number(line.returned_quantity) > 0 &&
+                            ` · ${line.returned_quantity} returned`}
+                        </div>
+                      </div>
+                      <span className="shrink-0 tabular-nums">
+                        {money(line.total)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+            {
+              heading: "Totals",
+              fields: [
+                { label: "Subtotal", value: (s) => money(s.subtotal) },
+                {
+                  label: "Discount",
+                  value: (s) => money(s.discount_total),
+                  when: (s) => Number(s.discount_total) !== 0,
+                },
+                {
+                  label: "Tax",
+                  value: (s) => money(s.tax_total),
+                  when: (s) => Number(s.tax_total) !== 0,
+                },
+                {
+                  // Nepali cash rounding. Shown only when it happened,
+                  // because a zero adjustment is a fact about nothing.
+                  label: "Rounding",
+                  value: (s) => money(s.rounding_adjustment),
+                  when: (s) => Number(s.rounding_adjustment) !== 0,
+                },
+                {
+                  label: "Total",
+                  value: (s) => (
+                    <span className="font-semibold">{money(s.total)}</span>
+                  ),
+                },
+              ],
+            },
+          ],
+        }}
+      />
     </div>
   );
 }
