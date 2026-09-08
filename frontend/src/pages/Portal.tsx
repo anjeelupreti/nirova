@@ -72,6 +72,12 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import {
+  RecordPanel,
+  dateTime,
+  status,
+  useRecordPanel,
+} from "@/components/RecordPanel";
 
 type Tab = "accounts" | "proxies" | "messages" | "corrections" | "adoption";
 
@@ -194,6 +200,10 @@ export default function PortalPage() {
 /* -------------------------------------------------------------------------- */
 
 function Accounts() {
+  // Opening an account. `locked_until` and the notification preferences come
+  // back on every list request and are shown nowhere -- and "why can this
+  // patient not sign in" is answered by the first of them.
+  const panel = useRecordPanel<PortalAccount>();
   const [rows, setRows] = useState<PortalAccount[]>([]);
   const [inviting, setInviting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -252,7 +262,7 @@ function Accounts() {
             </TableHeader>
             <TableBody>
               {rows.map((account) => (
-                <TableRow key={account.uuid}>
+                <TableRow key={account.uuid} {...panel.rowProps(account)}>
                   <TableCell>
                     {account.patient_name}
                     <span className="block text-xs text-muted-foreground">
@@ -284,7 +294,7 @@ function Accounts() {
                   </TableCell>
                   <TableCell>{day(account.registered_at)}</TableCell>
                   <TableCell>{day(account.last_login_at)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" {...panel.stopProps}>
                     {account.is_locked && (
                       <Button
                         size="sm"
@@ -328,6 +338,52 @@ function Accounts() {
           }}
         />
       )}
+
+      <RecordPanel
+        row={panel.open}
+        onClose={panel.close}
+        spec={{
+          title: (a) => a.patient_name,
+          subtitle: (a) => `${a.patient_mrn} · ${a.login_identifier}`,
+          sections: [
+            {
+              heading: "The account",
+              fields: [
+                { label: "Login", value: (a) => a.login_identifier },
+                { label: "Email", value: (a) => a.email },
+                { label: "Status", value: (a) => status(a.status) },
+                { label: "Registered", value: (a) => dateTime(a.registered_at) },
+                {
+                  label: "Last signed in",
+                  value: (a) => dateTime(a.last_login_at),
+                },
+                {
+                  // Only when locked, and it answers the question the row
+                  // raises rather than restating it: "locked" is on the badge,
+                  // "until when" is nowhere.
+                  label: "Locked until",
+                  value: (a) => dateTime(a.locked_until),
+                  when: (a) => a.is_locked,
+                },
+              ],
+            },
+            {
+              heading: "What they agreed to receive",
+              fields: [
+                {
+                  label: "Appointment reminders",
+                  value: (a) => (a.wants_appointment_reminders ? "Yes" : "No"),
+                },
+                {
+                  label: "Result notifications",
+                  value: (a) => (a.wants_result_notifications ? "Yes" : "No"),
+                },
+                { label: "Language", value: (a) => a.preferred_language },
+              ],
+            },
+          ],
+        }}
+      />
     </div>
   );
 }
