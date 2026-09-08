@@ -56,6 +56,11 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import {
+  RecordPanel,
+  dateTime,
+  useRecordPanel,
+} from "@/components/RecordPanel";
 
 type Tab = "dispense" | "stock" | "expiry" | "reorder" | "catalogue";
 
@@ -409,6 +414,11 @@ function DispensePanel({
 /* -------------------------------------------------------------------------- */
 
 function StockPanel({ locationUuid }: { locationUuid: string }) {
+  // Opening a batch. The table shows the quantity; the row also carries what
+  // is *reserved* against it and what is therefore actually available, which
+  // is the difference between "we have forty" and "we can dispense
+  // twenty-eight".
+  const panel = useRecordPanel<StockLevel>();
   const [levels, setLevels] = useState<StockLevel[]>([]);
 
   useEffect(() => {
@@ -445,7 +455,7 @@ function StockPanel({ locationUuid }: { locationUuid: string }) {
             </TableHeader>
             <TableBody>
               {levels.map((level) => (
-                <TableRow key={level.uuid}>
+                <TableRow key={level.uuid} {...panel.rowProps(level)}>
                   <TableCell>{level.product_name}</TableCell>
                   <TableCell className="font-mono text-xs">
                     {level.batch_number}
@@ -471,6 +481,65 @@ function StockPanel({ locationUuid }: { locationUuid: string }) {
           </Table>
         )}
       </CardContent>
+
+      <RecordPanel
+        row={panel.open}
+        onClose={panel.close}
+        spec={{
+          title: (level) => level.product_name,
+          subtitle: (level) =>
+            level.batch_number ? `Batch ${level.batch_number}` : undefined,
+          sections: [
+            {
+              heading: "This batch",
+              fields: [
+                { label: "Location", value: (l) => l.location_code },
+                { label: "Expires", value: (l) => l.expires_on },
+                {
+                  // "Nothing has moved for eight months" is how a dead batch
+                  // announces itself before it expires.
+                  label: "Last movement",
+                  value: (l) => dateTime(l.last_movement_at),
+                },
+                {
+                  label: "Days to expiry",
+                  value: (l) => (
+                    <span
+                      className={cn(
+                        l.days_to_expiry < 30 && "text-destructive font-medium",
+                        l.days_to_expiry >= 30 &&
+                          l.days_to_expiry < 90 &&
+                          "text-amber-700 dark:text-amber-400",
+                      )}
+                    >
+                      {l.days_to_expiry}
+                    </span>
+                  ),
+                },
+              ],
+            },
+            {
+              heading: "Quantity",
+              fields: [
+                { label: "On the shelf", value: (l) => Number(l.quantity) },
+                {
+                  // The reason this panel exists. Reserved stock is counted in
+                  // the quantity and cannot be dispensed, so a shelf figure on
+                  // its own answers the wrong question.
+                  label: "Reserved",
+                  value: (l) => Number(l.reserved),
+                },
+                {
+                  label: "Available to dispense",
+                  value: (l) => (
+                    <span className="font-semibold">{Number(l.available)}</span>
+                  ),
+                },
+              ],
+            },
+          ],
+        }}
+      />
     </Card>
   );
 }

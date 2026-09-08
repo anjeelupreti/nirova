@@ -792,6 +792,12 @@ export interface StockLevel {
   quantity: string;
   reserved: string;
   available: string;
+  /**
+   * When stock last moved in or out of this batch. Sent by
+   * `StockLevelSerializer` and missing from this interface until the stock
+   * panel was written, so nothing could render it.
+   */
+  last_movement_at: string | null;
 }
 
 /** A FEFO allocation preview — what would leave the shelf, before committing. */
