@@ -122,7 +122,7 @@ export default function SelfServicePage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get<ESSMeSummary>("/api/hr/me/summary/");
+      const res = await api.get<ESSMeSummary>("/hr/me/summary/");
       setSummary(res);
 
       if (res?.employee) {
@@ -147,22 +147,22 @@ export default function SelfServicePage() {
   const loadTabData = useCallback(async (tab: Tab) => {
     try {
       if (tab === "time") {
-        const attRes = await api.get<Paginated<AttendanceRecord>>("/api/hr/attendance/?mine=true");
+        const attRes = await api.get<Paginated<AttendanceRecord>>("/hr/attendance/?mine=true");
         setAttendanceRecords(attRes.results || []);
       } else if (tab === "leave") {
         const [reqRes, typeRes] = await Promise.all([
-          api.get<Paginated<LeaveRequest>>("/api/hr/leave/?mine=true"),
-          api.get<Paginated<LeaveType>>("/api/hr/leave-types/"),
+          api.get<Paginated<LeaveRequest>>("/hr/leave/?mine=true"),
+          api.get<Paginated<LeaveType>>("/hr/leave-types/"),
         ]);
         setLeaveRequests(reqRes.results || []);
         setLeaveTypes(typeRes.results || []);
       } else if (tab === "pay") {
-        const payRes = await api.get<PayslipSummary[]>("/api/payroll/payslips/mine/");
+        const payRes = await api.get<PayslipSummary[]>("/payroll/payslips/mine/");
         setPayslips(payRes || []);
       } else if (tab === "swaps") {
-        const swapRes = await api.get<Paginated<ShiftSwapRow>>("/api/hr/shift-swaps/mine/");
+        const swapRes = await api.get<Paginated<ShiftSwapRow>>("/hr/shift-swaps/mine/");
         setSwaps(swapRes.results || []);
-        const empRes = await api.get<Paginated<any>>("/api/hr/employees/");
+        const empRes = await api.get<Paginated<any>>("/hr/employees/");
         setColleagues(
           (empRes.results || []).map((e: any) => ({
             uuid: e.uuid,
@@ -171,10 +171,10 @@ export default function SelfServicePage() {
           }))
         );
       } else if (tab === "profile") {
-        const corrRes = await api.get<Paginated<ProfileCorrectionRow>>("/api/hr/profile-corrections/");
+        const corrRes = await api.get<Paginated<ProfileCorrectionRow>>("/hr/profile-corrections/");
         setCorrections(corrRes.results || []);
       } else if (tab === "manager") {
-        const mgrRes = await api.get<ManagerQueueResponse>("/api/hr/manager-queue/");
+        const mgrRes = await api.get<ManagerQueueResponse>("/hr/manager-queue/");
         setManagerQueue(mgrRes);
       }
     } catch (err: any) {
@@ -197,7 +197,7 @@ export default function SelfServicePage() {
     try {
       setClocking(true);
       setError(null);
-      const url = action === "in" ? "/api/hr/attendance/check-in/" : "/api/hr/attendance/check-out/";
+      const url = action === "in" ? "/hr/attendance/check-in/" : "/hr/attendance/check-out/";
       await api.post(url, { source: "web" });
       setSuccess(`Successfully marked attendance: checked ${action}.`);
       await loadSummary();
@@ -214,7 +214,7 @@ export default function SelfServicePage() {
     e.preventDefault();
     try {
       setError(null);
-      await api.post("/api/hr/profile-corrections/", {
+      await api.post("/hr/profile-corrections/", {
         fields_payload: {
           phone: corrPhone,
           personal_email: corrEmail,
@@ -239,7 +239,7 @@ export default function SelfServicePage() {
     e.preventDefault();
     try {
       setError(null);
-      await api.post("/api/hr/leave/", {
+      await api.post("/hr/leave/", {
         leave_type: leaveType,
         starts_on: leaveStarts,
         ends_on: leaveEnds,
@@ -260,7 +260,7 @@ export default function SelfServicePage() {
     e.preventDefault();
     try {
       setError(null);
-      await api.post("/api/hr/shift-swaps/", {
+      await api.post("/hr/shift-swaps/", {
         requester_entry: swapEntry,
         target_employee: swapTargetEmp,
         reason: swapReason,
@@ -279,7 +279,7 @@ export default function SelfServicePage() {
   const handlePeerDecide = async (uuid: string, accept: boolean) => {
     try {
       setError(null);
-      await api.post(`/api/hr/shift-swaps/${uuid}/peer-decide/`, { accept });
+      await api.post(`/hr/shift-swaps/${uuid}/peer-decide/`, { accept });
       setSuccess(`Swap proposal ${accept ? "accepted and sent to manager" : "declined"}.`);
       loadTabData("swaps");
       loadSummary();
@@ -294,7 +294,7 @@ export default function SelfServicePage() {
     if (!regModal) return;
     try {
       setError(null);
-      await api.post(`/api/hr/attendance/${regModal}/regularise/`, {
+      await api.post(`/hr/attendance/${regModal}/regularise/`, {
         checked_in_at: regInTime || null,
         checked_out_at: regOutTime || null,
         reason: regReason,
@@ -313,22 +313,22 @@ export default function SelfServicePage() {
     try {
       setError(null);
       if (item.type === "leave") {
-        await api.post(`/api/hr/leave/${item.reference}/decide/`, {
+        await api.post(`/hr/leave/${item.reference}/decide/`, {
           approve,
           notes: approve ? "Approved by manager" : "Declined by manager",
         });
       } else if (item.type === "regularisation") {
-        await api.post(`/api/hr/regularisations/${item.id}/decide/`, {
+        await api.post(`/hr/regularisations/${item.id}/decide/`, {
           approve,
           notes: approve ? "Approved by manager" : "Declined by manager",
         });
       } else if (item.type === "swap") {
-        await api.post(`/api/hr/shift-swaps/${item.id}/manager-decide/`, {
+        await api.post(`/hr/shift-swaps/${item.id}/manager-decide/`, {
           approve,
           notes: approve ? "Approved by manager" : "Declined by manager",
         });
       } else if (item.type === "correction") {
-        await api.post(`/api/hr/profile-corrections/${item.id}/decide/`, {
+        await api.post(`/hr/profile-corrections/${item.id}/decide/`, {
           approve,
           notes: approve ? "Approved by manager" : "Declined by manager",
         });
@@ -344,7 +344,7 @@ export default function SelfServicePage() {
   // View payslip details
   const viewPayslip = async (reference: string) => {
     try {
-      const doc = await api.get(`/api/payroll/payslips/${reference}/document/`);
+      const doc = await api.get(`/payroll/payslips/${reference}/document/`);
       setPayslipModal(doc);
     } catch (err: any) {
       setError(err instanceof ApiError ? err.message : "Could not load payslip document.");

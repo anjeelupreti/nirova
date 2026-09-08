@@ -8991,3 +8991,75 @@ tested directly at the service layer against a role built for the purpose.
 `max_users` counted every active membership regardless. A contractor or a
 read-only auditor admitted without a seat was silently billed one. One line in
 `apps/entitlements/services.py`.
+
+## 236 - The screen for it, and the five screens nobody was checking
+
+`src/pages/Staff.tsx`, wired into the Organization group as "Staff access" --
+under Organization rather than People deliberately, because `/people` is the
+employee directory (hiring, transfers, credentials) and says nothing about who
+can sign in. Different questions, asked by different people.
+
+The screen keeps the three acts apart because their permissions are:
+`user.invite` to add somebody, `user.update` to correct their details,
+`role.assign` to change what they may do. An HR manager holds the first and not
+the third, so the invite button appears and the grant form does not. Roles the
+caller may **not** grant are listed too, with what puts each out of reach --
+"why can't I give somebody this role?" is otherwise a support ticket, and the
+server already computes the answer.
+
+`api.del` was added; the client had no DELETE verb, because nothing had ever
+needed to remove anything.
+
+---
+
+**Then the nav test found five screens it had never opened.**
+
+`test_every_visible_screen_opens_for_the_role_that_sees_it` looks up each route
+in a `PROBE` map and, finding nothing, **`continue`s**. So adding `/staff` made
+the whole test pass without once opening the new screen. A silent skip inside a
+test whose entire job is to catch silent breakage.
+
+The guard: every navigation route must appear in `PROBE`. It fired immediately
+on five more that had been in the sidebar for weeks and never been checked --
+`/configuration`, `/notifications`, `/self-service`, `/services`, `/workspace`.
+Proved by removing `/staff` from the map again; the test fails naming it.
+
+`None` is now a legal value, meaning "deliberately not probed", and is not the
+same as absent: the guard forces a decision and the decision is written down.
+`/configuration` is the only one -- it aggregates eight master-data lists with
+eight permissions, and probing one of them reported the screen as
+under-protected when what it had actually found was that a doctor may read the
+list of departments, which is correct.
+
+**And the reason those five mattered.** Mapping `/self-service` to
+`/api/hr/me/summary/` exposed this:
+
+```tsx
+const res = await api.get<ESSMeSummary>("/api/hr/me/summary/");
+```
+
+`request()` builds `fetch(\`/api${path}\`)`. Every one of the **19** API calls
+in `SelfService.tsx` was prefixed `/api` a second time, so every request went
+to `/api/api/...`. Measured rather than reasoned:
+
+```
+/api/hr/me/summary/       200
+/api/api/hr/me/summary/   404
+```
+
+**The employee self-service screen has never worked.** Attendance, leave
+balances, payslips, shift swaps, profile corrections -- nineteen calls, zero
+correct, and no test opened the screen because it was not in the probe map.
+Swept both applications afterwards: nowhere else does it.
+
+The same theme as logs 231 and 234 in a third place. The bug was not hidden in
+difficult code; it was in a screen nothing had ever opened, protected by a test
+that skipped what it did not recognise.
+
+**Also corrected:** the probe treated only `200` as "opens", and
+`/api/hr/me/summary/` answers **204** to somebody with a login but no employee
+record -- a counter assistant. That is a successful answer to a reasonable
+question, not a refusal, and the test now reads any 2xx as open.
+
+Frontend builds clean; `Staff` is its own 13 kB route chunk. Suite: **100 fast,
+47 seeds.**

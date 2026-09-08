@@ -223,6 +223,11 @@ export const api = {
   // client does not know about, which is how a save quietly blanks a column.
   patch: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
     request<T>(path, { ...opts, method: "PATCH", body }),
+  // DELETE takes a body, unusually, because revoking a role carries a reason
+  // and the reason belongs in the audit record. `request` already handles a
+  // 204 with no content, which is what these return.
+  del: <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+    request<T>(path, { ...opts, method: "DELETE", body }),
   download,
   openPrintable,
 };

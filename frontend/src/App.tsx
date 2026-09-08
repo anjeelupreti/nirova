@@ -90,6 +90,7 @@ const QueuePage = lazy(() => import("@/pages/Queue"));
 const ReferralsPage = lazy(() => import("@/pages/Referrals"));
 const ReportsPage = lazy(() => import("@/pages/Reports"));
 const SelfServicePage = lazy(() => import("@/pages/SelfService"));
+const StaffPage = lazy(() => import("@/pages/Staff"));
 const ServicesPage = lazy(() => import("@/pages/Services"));
 const TheatrePage = lazy(() => import("@/pages/Theatre"));
 const TimePage = lazy(() => import("@/pages/Time"));
@@ -222,6 +223,13 @@ const NAV_GROUPS: {
       { to: "/facilities", label: "Facilities", icon: Building2, needs: "facility.read", scope: "facility" },
       { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "facility.read", scope: "facility" },
       { to: "/facility-requests", label: "Change requests", icon: ScrollText, needs: "facility.read", scope: "facility" },
+      // Under Organization rather than People on purpose: /people is the
+      // employee directory -- hiring, transfers, credentials -- and says
+      // nothing about who can sign in. Those are different questions asked by
+      // different people, and putting them side by side taught nobody which
+      // was which. `user.read` at `own`, because seeing your colleagues is not
+      // an administrative act; inviting one is, and that is checked on POST.
+      { to: "/staff", label: "Staff access", icon: KeyRound, needs: "user.read", scope: "own" },
       // Six rarely-visited lists behind one entry rather than six. Reading
       // needs `config.read`; each list checks its own write permission.
       { to: "/configuration", label: "Configuration", icon: SlidersHorizontal, needs: "config.read", scope: "facility" },
@@ -476,6 +484,7 @@ export default function App() {
           <Route path="/configuration" element={<ConfigurationPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
+          <Route path="/staff" element={<StaffPage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />

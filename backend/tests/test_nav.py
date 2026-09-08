@@ -48,6 +48,23 @@ PROBE = {
     "/facilities": "/api/org/facilities/",
     "/capacity": "/api/org/facilities/capacity/",
     "/facility-requests": "/api/org/facility-requests/",
+    "/staff": "/api/admin/staff/",
+    # Added when the "every route needs a probe" guard below was written. All
+    # five had been in the navigation for weeks and none had ever been opened
+    # by this test, because a route missing from this map was silently
+    # skipped rather than reported.
+    # `None` means "deliberately not probed", and it is not the same as being
+    # absent: the guard below requires every route to appear here, so a
+    # decision has to be made and written down. Configuration is an aggregate
+    # of eight master-data lists with eight different permissions, and no
+    # single endpoint represents it -- probing `/org/departments/` reported
+    # the screen as under-protected when what it had actually found was that
+    # a doctor may read the list of departments, which is correct.
+    "/configuration": None,
+    "/services": "/api/billing/services/",
+    "/workspace": "/api/me/workspace/",
+    "/notifications": "/api/notifications/summary/",
+    "/self-service": "/api/hr/me/summary/",
 }
 
 
@@ -84,6 +101,22 @@ def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
         f"only {len(items)} navigation items parsed out of App.tsx; the "
         "pattern has stopped matching and this test checks nothing"
     )
+
+    # **Every nav route needs a probe.**
+    #
+    # The loop below does `probe = PROBE.get(route)` and `continue`s when
+    # there is none, so a screen missing from the map is not checked and the
+    # test still passes. That is what happened when `/staff` was added: the
+    # whole test went green without ever opening the new screen. A silent skip
+    # in a test whose job is to catch silent breakage is worse than no test.
+    unmapped = sorted(
+        route for route, _, _ in items
+        if route not in PROBE and not route.startswith("/platform")
+    )
+    assert not unmapped, (
+        "these navigation entries have no endpoint to probe, so nobody is "
+        f"checking that they open: {', '.join(unmapped)}"
+    )
     problems = []
 
     for email in ("doctor@manakamana.test", "counter@manakamana.test",
@@ -119,7 +152,13 @@ def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
             if probe is None:
                 continue
             code = client.get(probe).status_code
-            opens = code == 200
+            # Any 2xx, not just 200. `/api/hr/me/summary/` answers **204** to
+            # somebody who has no employee record -- a counter assistant hired
+            # as a user but not as staff -- and that is a successful answer to
+            # a reasonable question, not a refusal. The question this test asks
+            # is "does it open or is the caller turned away", and 204 is not
+            # being turned away.
+            opens = 200 <= code < 300
             if visible:
                 shown.append(route)
                 if not opens:
