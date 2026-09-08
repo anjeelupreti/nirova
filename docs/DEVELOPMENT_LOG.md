@@ -8433,3 +8433,62 @@ there in the signature, waiting.
 **Verified.** Full suite: 125 passed. The guard changes no existing behaviour
 because no existing caller passes the new argument, which is exactly the
 property that makes it safe to land ahead of its consumer.
+
+## 229 - A receptionist was downloading the payroll engine
+
+**The measurement first.** Every frontend build this session ended with the
+same warning, and I had been ignoring it:
+
+```
+dist/assets/index-Y4yTYqsS.js   943.45 kB │ gzip: 229.23 kB
+(!) Some chunks are larger than 500 kB after minification.
+```
+
+One chunk. All 33 pages were static imports in `App.tsx`, so opening the
+patient queue downloaded the payroll engine, the theatre scheduler, the ICU
+charting and the platform console -- screens that receptionist cannot see,
+because the sidebar filtering added in log 220 removes them.
+
+**Three changes, in the order they were made.**
+
+*Route-level splitting.* Every page import except `Login` became
+`lazy(() => import(...))`, with a `<Suspense>` around `<Routes>` whose fallback
+is the same spinner the pages themselves use while loading. Login stays eager
+deliberately: it is what a logged-out visitor renders first, and putting a
+spinner in front of the login form to save a few kilobytes is a bad trade.
+
+*Vendor chunking.* `manualChunks` splits React and the router, the Radix
+primitives, and `lucide-react` into their own chunks. The grouping is by **how
+often each changes**, not by size -- React changes on an upgrade, the UI
+primitives when the design does, pages daily -- so a deployment that touches
+only application code leaves every vendor chunk's hash untouched and the
+browser cache intact. `lucide-react` gets its own chunk because it is ~1400
+icon modules imported from twenty different pages; unsplit, the same icons are
+duplicated into every route chunk.
+
+*A dead dependency, found by accident.* The `vendor-query` chunk built to
+**1 kB**. `@tanstack/react-query` was in `package.json`, was never imported
+anywhere in either application, and had been installed on every `npm ci` since
+the project started. Removed. This is the same lesson as everything else this
+session, in a new place: the chunk was small because nothing used the code, and
+nothing had ever measured it.
+
+**The result.**
+
+| | before | after |
+|---|---|---|
+| first load (entry + vendors + CSS) | 984 kB / 237 kB gz | **314 kB / 90 kB gz** |
+| + opening the queue | (included) | +6 kB / +2 kB gz |
+| largest single chunk | 943 kB | 162 kB (the React runtime) |
+| `vite build` | ~15 s | **8.5 s** |
+| assets emitted | 2 | 39 |
+
+**62% less on first paint, gzipped**, and the part that dominates what remains
+is the React runtime, which cannot be split further and now survives every
+deployment in cache.
+
+**What was left alone, and why.** The patient application builds to 208 kB
+total. It is one page with no router; splitting it would trade a single request
+for two and gain nothing. `chunkSizeWarningLimit` was raised from Vite's 500 kB
+to 700 kB -- high enough that the React runtime stops crying wolf, low enough
+that a route chunk growing to that size is still reported.

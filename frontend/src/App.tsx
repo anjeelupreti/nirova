@@ -6,6 +6,7 @@
  * against a different database — no screen contains tenant-specific code.
  */
 
+import { Suspense, lazy } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import {
   Activity,
@@ -42,44 +43,60 @@ import {
   ShieldAlert,
   Inbox,
   Bell,
+  Loader2,
 } from "lucide-react";
 
 import GlobalSearch from "@/components/GlobalSearch";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
-import CapacityPage from "@/pages/Capacity";
-import FacilitiesPage from "@/pages/Facilities";
-import FacilityRequestsPage from "@/pages/FacilityRequests";
+
+/*
+  Route-level code splitting.
+
+  Every page used to be a static import, which produced one 943 kB bundle that
+  a receptionist downloaded in full to open the queue -- including the payroll
+  engine, the theatre scheduler and the platform console, none of which they
+  can even see. `lazy()` turns each page into its own chunk fetched on first
+  navigation.
+
+  Login stays eager on purpose: it is the first thing a logged-out visitor
+  renders, and putting a spinner in front of the login form to save a few
+  kilobytes is a bad trade.
+*/
+const BillingPage = lazy(() => import("@/pages/Billing"));
+const BloodPage = lazy(() => import("@/pages/Blood"));
+const CapacityPage = lazy(() => import("@/pages/Capacity"));
+const ClaimsPage = lazy(() => import("@/pages/Claims"));
+const ConfigurationPage = lazy(() => import("@/pages/Configuration"));
+const ConsultationPage = lazy(() => import("@/pages/Consultation"));
+const CounterPage = lazy(() => import("@/pages/Counter"));
+const DiagnosticsPage = lazy(() => import("@/pages/Diagnostics"));
+const EmergencyPage = lazy(() => import("@/pages/Emergency"));
+const FacilitiesPage = lazy(() => import("@/pages/Facilities"));
+const FacilityRequestsPage = lazy(() => import("@/pages/FacilityRequests"));
+const FinancePage = lazy(() => import("@/pages/Finance"));
+const IcuPage = lazy(() => import("@/pages/Icu"));
+const NotificationsPage = lazy(() => import("@/pages/Notifications"));
+const NurseWorkspacePage = lazy(() => import("@/pages/NurseWorkspace"));
+const PatientsPage = lazy(() => import("@/pages/Patients"));
+const PayrollPage = lazy(() => import("@/pages/Payroll"));
+const PeoplePage = lazy(() => import("@/pages/People"));
+const PharmacyPage = lazy(() => import("@/pages/Pharmacy"));
+const PlatformPage = lazy(() => import("@/pages/Platform"));
+const PortalPage = lazy(() => import("@/pages/Portal"));
+const PrivacyPage = lazy(() => import("@/pages/Privacy"));
+const ProcurementPage = lazy(() => import("@/pages/Procurement"));
+const QueuePage = lazy(() => import("@/pages/Queue"));
+const ReferralsPage = lazy(() => import("@/pages/Referrals"));
+const ReportsPage = lazy(() => import("@/pages/Reports"));
+const SelfServicePage = lazy(() => import("@/pages/SelfService"));
+const ServicesPage = lazy(() => import("@/pages/Services"));
+const TheatrePage = lazy(() => import("@/pages/Theatre"));
+const TimePage = lazy(() => import("@/pages/Time"));
+const WardsPage = lazy(() => import("@/pages/Wards"));
+const WorkspacePage = lazy(() => import("@/pages/Workspace"));
+
 import LoginPage from "@/pages/Login";
-import NotificationsPage from "@/pages/Notifications";
-import PrivacyPage from "@/pages/Privacy";
-import WorkspacePage from "@/pages/Workspace";
-import ReportsPage from "@/pages/Reports";
-import ConfigurationPage from "@/pages/Configuration";
-import ServicesPage from "@/pages/Services";
-import NurseWorkspacePage from "@/pages/NurseWorkspace";
-import SelfServicePage from "@/pages/SelfService";
-import BillingPage from "@/pages/Billing";
-import ConsultationPage from "@/pages/Consultation";
-import CounterPage from "@/pages/Counter";
-import DiagnosticsPage from "@/pages/Diagnostics";
-import EmergencyPage from "@/pages/Emergency";
-import PatientsPage from "@/pages/Patients";
-import PlatformPage from "@/pages/Platform";
-import PeoplePage from "@/pages/People";
-import PayrollPage from "@/pages/Payroll";
-import TimePage from "@/pages/Time";
-import WardsPage from "@/pages/Wards";
-import PharmacyPage from "@/pages/Pharmacy";
-import ProcurementPage from "@/pages/Procurement";
-import QueuePage from "@/pages/Queue";
-import BloodPage from "@/pages/Blood";
-import ReferralsPage from "@/pages/Referrals";
-import PortalPage from "@/pages/Portal";
-import ClaimsPage from "@/pages/Claims";
-import FinancePage from "@/pages/Finance";
-import IcuPage from "@/pages/Icu";
-import TheatrePage from "@/pages/Theatre";
 import {
   Alert,
   AlertDescription,
@@ -419,6 +436,13 @@ export default function App() {
           </Alert>
         )}
 
+        <Suspense
+          fallback={
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              <Loader2 className="inline h-4 w-4 animate-spin" />
+            </p>
+          }
+        >
         <Routes>
           {/*
             Platform staff have no memberships, so every tenant screen would
@@ -460,6 +484,7 @@ export default function App() {
           <Route path="/platform" element={<PlatformPage />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
+        </Suspense>
       </main>
       </div>
     </div>
