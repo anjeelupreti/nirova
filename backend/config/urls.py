@@ -33,6 +33,10 @@ urlpatterns = [
     path("api/portal/", include("apps.portal.urls")),
     path("api/notifications/", include("apps.notifications.urls")),
     path("api/privacy/", include("apps.rbac.urls")),
+    # Staff administration. Deliberately not under /api/privacy/:
+    # administering colleagues and reviewing emergency access are
+    # different jobs done by different people.
+    path("api/admin/", include("apps.rbac.admin_urls")),
     path("api/documents/", include("apps.documents.urls")),
     path("api/reports/", include("apps.reporting.urls")),
     path("api/search/", include("apps.search.urls")),

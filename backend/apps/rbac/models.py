@@ -48,6 +48,26 @@ class Role(BaseModel):
 
     #: Assigning this role needs approval -- for roles that can move money or
     #: change clinical records.
+    #: Role codes a holder of *this* role may grant to somebody else.
+    #:
+    #: Delegation is a separate question from what a role can do, and treating
+    #: them as one made `role.assign` almost useless. The first rule written
+    #: was "nobody may grant an authority they do not hold", which reads well
+    #: and, measured against the seeded roles, let a facility manager grant
+    #: exactly one role -- their own. They could not give a nurse a nurse's
+    #: access, because a manager does not personally hold `encounter.create`,
+    #: which is the entire reason they are a manager and not a nurse.
+    #:
+    #: So delegation is stated rather than inferred. An empty list falls back
+    #: to the strict subset rule, so a custom role a customer writes cannot
+    #: silently delegate anything; it has to be said.
+    #:
+    #: Escalation is still closed, by two other rules in `assign_role`: you
+    #: may not grant at a scope wider than your own reach, and **you may not
+    #: grant to yourself** -- without which a manager could delegate a
+    #: clinical role to their own account and acquire what they may not hold.
+    grantable_roles = models.JSONField(default=list, blank=True)
+
     requires_approval_to_assign = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveSmallIntegerField(default=100)

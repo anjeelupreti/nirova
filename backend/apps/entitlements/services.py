@@ -162,8 +162,17 @@ def _facility_type_usage(organization, key: str) -> int:
 def _user_usage(organization, key: str) -> int:
     from apps.identity.models import Membership, MembershipStatus
 
+    # **`consumes_seat=False` means it does not consume a seat.**
+    #
+    # This counted every active membership regardless, so the field was
+    # decorative: `provision_login(consumes_seat=False)` wrote `False` and the
+    # membership still counted against `max_users`. Nothing read the column
+    # anywhere in the codebase. A contractor or a read-only auditor admitted
+    # without a seat was silently billed one.
     return Membership.objects.filter(
-        organization=organization, status=MembershipStatus.ACTIVE
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+        consumes_seat=True,
     ).count()
 
 

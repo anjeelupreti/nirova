@@ -8886,3 +8886,108 @@ guard for this is `test_nav.py::test_every_visible_screen_opens_for_the_role_
 that_sees_it`, which now runs in the container too (log 231) and passes.
 
 Full suite: **129 passed, 8 skipped.**
+
+## 235 - A hospital could not hire its second member of staff
+
+Seven permissions -- `user.read`, `user.invite`, `user.update`,
+`user.deactivate`, `role.read`, `role.assign`, `role.manage` -- were defined in
+the catalogue, granted by four seeded roles, and **checked by no endpoint
+anywhere**. Every account in every Nirova database was created by a seed
+script. `provision_login` exists, requires an `Employee`, and is reachable only
+from `manage.py`. A customer who bought this could onboard nobody.
+
+It is also what the privilege-escalation guard from log 228 had been waiting
+for. That guard takes an `assigner_authorization` and refuses to grant
+authority the assigner does not hold; it had been inert since it was written,
+because nothing passed the argument.
+
+**What was built.**
+
+| | |
+|---|---|
+| `GET /api/admin/staff/` | members with their roles; `?status=all`, `?q=` |
+| `POST /api/admin/staff/` | invite, optionally granting a role in the same act |
+| `GET`/`PATCH /api/admin/staff/<uuid>/` | one person |
+| `POST /api/admin/staff/<uuid>/deactivate/` | end access; `?undo=1` restores |
+| `GET /api/admin/roles/` | roles, annotated with whether *you* may grant each |
+| `POST`/`DELETE /api/admin/staff/<uuid>/roles/…` | grant and revoke |
+
+Plus the services underneath: `apps/identity/services.py` (`invite_user`,
+`update_user`, `deactivate_membership`, `reactivate_membership`) and
+`revoke_role`, which did not exist -- nothing could take a role away, which is
+why `RoleAssignment.revoked_at` had never been written to.
+
+**The join no query can express.** `User` and `Membership` are control-plane
+rows; `Role` and `RoleAssignment` are tenant rows. "Staff with their roles" is
+two queries stitched in Python -- two, not one per person. There is a test
+asserting the control-plane query count stays below the number of people,
+because the obvious implementation looks fine on a demo tenant of nine and
+ruinous on a hospital of four hundred.
+
+---
+
+**The finding that changed the design.** With the guard finally live, I
+measured what a `facility_manager` could actually grant:
+
+```
+accountant       refused    catalog.manage, invoice.create
+doctor           refused    encounter.create, patient.clinical.read
+nurse            refused    encounter.create, patient.clinical.read
+receptionist     refused    invoice.create, patient.create
+facility_manager grantable
+...
+```
+
+**One role. Their own.** The rule "nobody may grant an authority they do not
+hold" reads well and is unusable: a facility manager cannot give a nurse a
+nurse's access, because a manager does not personally hold `encounter.create`
+-- which is the entire reason they are a manager and not a nurse. `role.assign`
+was useful to the organization administrator and to nobody else.
+
+So delegation is now **stated rather than inferred**. `Role.grantable_roles`
+lists the codes a holder may pass on; `organization_admin` carries `["*"]`, a
+`facility_manager` carries the seven clinical and front-desk roles, a
+`medical_director` the four clinical ones. An empty list falls back to the old
+subset rule, so a custom role a customer writes cannot silently delegate
+anything -- it has to be said.
+
+**Delegation opens an escalation path, and it is closed explicitly.** A
+facility manager may grant `doctor`; without a further rule they could grant it
+to *themselves* and acquire clinical permissions they may not hold. So: **you
+may not grant a role to yourself**, owner included. If you need a role,
+somebody else gives it to you, and the audit record names two people instead of
+one.
+
+Three rules now, all of which must hold: delegable-or-subset, not wider than
+your own reach, and not to yourself.
+
+**And the same mistake as last time.** My scripted edit put `["*"]` on
+`operations_manager` instead of `organization_admin` -- because
+`organization_admin`'s spec reads `"permissions": sorted(PERMISSION_CODES)`
+with no literal `[`, so an index-based insertion finds the next role's list.
+That is *exactly* the accident that granted `catalog.manage` to the same role
+earlier in this project. Caught by printing what landed rather than trusting
+the edit; it would have given the operations manager the right to grant
+anything to anyone.
+
+**Proved, not asserted.** 18 tests in `tests/test_staff_admin.py`, and the two
+security guards proved by reintroducing their defects:
+
+| defect reintroduced | what failed |
+|---|---|
+| API stops passing `assigner_authorization` | the escalation *and* self-grant tests |
+| self-grant rule deleted | the self-grant test |
+
+Restored, and 18 pass again. Suite: **100 fast, 47 seeds.**
+
+**One thing measured and left alone.** The reach rule -- "not wider than your
+own" -- cannot be reached over HTTP with the seeded catalogue, because every
+role a facility manager may delegate caps at facility scope and the role's own
+`max_scope` refuses first. Rather than leave a branch nothing executes, it is
+tested directly at the service layer against a role built for the purpose.
+
+**A bug found on the way.** `Membership.consumes_seat` was written by
+`provision_login` and **read by nothing**: the usage counter behind
+`max_users` counted every active membership regardless. A contractor or a
+read-only auditor admitted without a seat was silently billed one. One line in
+`apps/entitlements/services.py`.

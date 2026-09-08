@@ -37,6 +37,14 @@ from apps.rbac.permissions import (
     conflicting_permissions,
 )
 
+# AuditAction / AuditSeverity / record: revoking a role is a security event
+# and has to appear in the log at that severity, next to the grant it undoes.
+# Imported at module scope rather than inside `revoke_role` because
+# `apps.audit` is a tenant app like this one -- no control-plane seam to keep
+# lazy, unlike the identity imports elsewhere in this file.
+from apps.audit.models import AuditAction, AuditSeverity
+from apps.audit.services import record
+
 logger = logging.getLogger("nirova.rbac")
 
 
@@ -300,6 +308,12 @@ SYSTEM_ROLES = [
         "is_superuser_role": True,
         "max_scope": Scope.ORGANIZATION,
         "permissions": sorted(PERMISSION_CODES),
+        # "*" -- may delegate any role. Consistent rather than special-cased:
+        # this role already holds every permission, so the strict subset rule
+        # would let it grant anything regardless. Saying so explicitly means
+        # `_may_delegate` has one path instead of an `is_superuser_role`
+        # exception nobody would think to test.
+        "grantable_roles": ["*"],
     },
     {
         "code": "operations_manager",
@@ -334,6 +348,8 @@ SYSTEM_ROLES = [
             "discount.approve", "employee.read", "attendance.read",
             "leave.approve", "report.read", "analytics.read", "audit.read",
         ],
+        "grantable_roles": ["doctor", "nurse", "receptionist", "lab_technician",
+            "pharmacy_counter", "store_keeper", "staff",],
     },
     {
         "code": "doctor",
@@ -516,6 +532,7 @@ SYSTEM_ROLES = [
             "report.read", "analytics.read", "audit.read",
                     "patient.safety.read", "patient.clinical.read", "privacy.review",
         ],
+        "grantable_roles": ["doctor", "nurse", "lab_technician", "staff",],
     },
     {
         "code": "auditor",
@@ -561,6 +578,7 @@ def seed_system_roles() -> int:
                 "is_system": True,
                 "is_superuser_role": spec.get("is_superuser_role", False),
                 "permissions": sorted(spec["permissions"]),
+                "grantable_roles": spec.get("grantable_roles", []),
                 "max_scope": spec.get("max_scope", Scope.FACILITY),
                 "is_active": True,
             },
@@ -583,6 +601,105 @@ def _widest_scope(authorization) -> str:
         if Scope.covers(granted.scope, widest):
             widest = granted.scope
     return widest
+
+
+def _assert_may_grant(authorization, role, scope, target_user) -> None:
+    """Refuse a grant the assigner is not entitled to make.
+
+    **Rule 1 -- delegation.** A role may be granted if it is named in the
+    `grantable_roles` of a role the assigner holds, or if the assigner holds
+    every permission it carries. The second half is the original rule and is
+    kept as a fallback so a custom role with no delegation list still cannot
+    be used to invent authority; the first half exists because the original
+    rule alone was unusable. Measured against the seeded roles, it let a
+    facility manager grant exactly one role -- their own -- because a manager
+    does not personally hold `encounter.create`, which is the whole reason
+    they are a manager and not a nurse.
+
+    **Rule 2 -- reach.** The scope asked for may not exceed the widest scope
+    the assigner holds anything at. Somebody who manages one facility may pass
+    a role on there, not across the organization.
+
+    **Rule 3 -- not to yourself.** Delegation without this is an escalation
+    path with an extra step: a facility manager may grant `doctor`, so without
+    this rule they could grant it to their own account and acquire clinical
+    permissions they are not entitled to. Granting is for other people; if you
+    need a role yourself, somebody else gives it to you, and the audit log
+    then names two people instead of one.
+
+    The organization owner is exempt from rules 1 and 2 -- they already hold
+    everything, and checking them against themselves would be theatre -- but
+    **not from rule 3**, because "the owner cannot self-grant" costs nothing
+    and removes the only case where the log would show one name.
+    """
+    is_owner = bool(getattr(authorization, "is_organization_owner", False))
+    assigner_id = getattr(authorization, "user_id", None)
+
+    if assigner_id is not None and str(assigner_id) == str(
+        getattr(target_user, "uuid", ""),
+    ):
+        raise PermissionDeniedError(
+            "You cannot grant a role to yourself. Ask a colleague with the "
+            "same authority to do it, so the record names two people.",
+            detail={"role": role.code},
+        )
+
+    if is_owner:
+        return
+
+    if not _may_delegate(authorization, role):
+        held = set(authorization.permissions)
+        beyond = sorted(set(role.permissions or []) - held)
+        raise PermissionDeniedError(
+            f"You may not grant '{role.name}'. It is not one of the roles "
+            "your own roles allow you to delegate"
+            + (
+                f", and it carries permissions you do not hold: "
+                f"{', '.join(beyond[:5])}"
+                + (f" and {len(beyond) - 5} more" if len(beyond) > 5 else "")
+                if beyond else ""
+            )
+            + ".",
+            detail={"role": role.code, "beyond_your_authority": beyond},
+        )
+
+    if not Scope.covers(_widest_scope(authorization), scope):
+        raise PermissionDeniedError(
+            f"You may not grant a role at {scope} scope; your own authority "
+            "does not reach that far.",
+            detail={"role": role.code, "requested_scope": scope},
+        )
+
+
+def _may_delegate(authorization, role) -> bool:
+    """Whether any role this person holds permits delegating `role`.
+
+    Reads the delegation lists off the assigner's *own* active assignments --
+    one query, joined to `Role`. It deliberately does not read
+    `authorization.permissions`, which is flattened to permission codes by the
+    time it reaches here and has lost which role each came from; delegation is
+    a property of the role, not of the permissions it happens to carry.
+    """
+    delegable = set()
+    rows = (
+        RoleAssignment.objects.filter(
+            user_id=authorization.user_id, status=AssignmentStatus.ACTIVE,
+        )
+        .select_related("role")
+        .filter(role__is_active=True)
+    )
+    for assignment in rows:
+        entries = assignment.role.grantable_roles or []
+        if "*" in entries:
+            return True
+        delegable.update(entries)
+    if role.code in delegable:
+        return True
+
+    # Fallback: the original strict rule. Holding everything a role carries is
+    # sufficient on its own, and is what lets a tenant that has never
+    # configured delegation still work.
+    return set(role.permissions or []).issubset(set(authorization.permissions))
 
 
 def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
@@ -629,38 +746,18 @@ def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
             detail={"role": role_code, "scope": scope},
         )
 
-    # **Nobody may grant an authority they do not hold.**
-    #
-    # The oldest hole in role administration: somebody with permission to
-    # assign roles gives themselves, or a friend, a role carrying permissions
-    # they were never granted -- and every check downstream passes, because by
-    # then the permission is genuinely held. `role.assign` is the authority to
-    # *delegate*, not to *invent*.
-    #
-    # The organization owner is exempt because they already hold everything;
-    # checking them against themselves would be theatre.
-    if assigner_authorization is not None and not getattr(
-        assigner_authorization, "is_organization_owner", False,
-    ):
-        held = set(assigner_authorization.permissions)
-        granting = set(role.permissions or [])
-        beyond = sorted(granting - held)
-        if beyond:
-            raise PermissionDeniedError(
-                f"'{role.name}' carries permissions you do not hold yourself, "
-                f"so you may not grant it: {', '.join(beyond[:5])}"
-                + (f" and {len(beyond) - 5} more" if len(beyond) > 5 else "")
-                + ".",
-                detail={"role": role_code, "beyond_your_authority": beyond},
-            )
-        # And not wider than their own reach. Somebody who holds a role at one
-        # facility may pass it on there, not across the organization.
-        if not Scope.covers(_widest_scope(assigner_authorization), scope):
-            raise PermissionDeniedError(
-                f"You may not grant a role at {scope} scope; your own "
-                f"authority does not reach that far.",
-                detail={"role": role_code, "requested_scope": scope},
-            )
+    # ---------------------------------------------------------------
+    # May this person grant this role?
+    # ---------------------------------------------------------------
+    # Three rules, and all three have to hold. Skipped entirely when no
+    # `assigner_authorization` is passed, which is how the seeds and
+    # `provision_login` create the first administrator of a tenant -- there is
+    # nobody to check them against. **Every path a human can reach must pass
+    # it**; `apps/rbac/admin_api.py` does.
+    if assigner_authorization is not None:
+        _assert_may_grant(
+            assigner_authorization, role, scope, target_user=user,
+        )
 
     assignment, _ = RoleAssignment.objects.update_or_create(
         user_id=user.uuid,
@@ -679,6 +776,50 @@ def assign_role(user, role_code: str, scope: str = Scope.ORGANIZATION,
             "assigned_by_id": getattr(assigned_by, "uuid", None),
             "reason": reason,
             "valid_from": timezone.now(),
+        },
+    )
+    return assignment
+
+
+def revoke_role(assignment, actor=None, reason: str = "") -> "RoleAssignment":
+    """Take a role away.
+
+    **Revoked, not deleted.** Who could do what, and until when, has to stay
+    answerable after somebody has left -- an audit that can only report the
+    present tense cannot answer "who could have approved this in March?".
+    `RoleAssignment` already carries `revoked_at` for exactly this; nothing
+    was setting it, because until now nothing could take a role away at all.
+
+    Idempotent: revoking an already-revoked assignment returns it unchanged
+    rather than raising. Two administrators clicking the same button a second
+    apart is not an error, and making it one turns a race into a support
+    ticket.
+    """
+    if assignment.status == AssignmentStatus.REVOKED:
+        return assignment
+
+    assignment.status = AssignmentStatus.REVOKED
+    assignment.revoked_at = timezone.now()
+    if reason:
+        assignment.reason = reason
+    assignment.save(
+        update_fields=["status", "revoked_at", "reason", "updated_at"]
+    )
+
+    record(
+        AuditAction.UPDATE,
+        entity_type="rbac.RoleAssignment",
+        entity_id=assignment.uuid,
+        entity_label=f"{assignment.role.name} revoked from "
+                     f"{assignment.user_email}",
+        reason=reason,
+        # SENSITIVE, because losing a role and gaining one are the same
+        # class of event to whoever reads this log later.
+        severity=AuditSeverity.SENSITIVE,
+        metadata={
+            "role": assignment.role.code,
+            "scope": assignment.scope,
+            "revoked_by": str(getattr(actor, "uuid", "")),
         },
     )
     return assignment
