@@ -9063,3 +9063,58 @@ question, not a refusal, and the test now reads any 2xx as open.
 
 Frontend builds clean; `Staff` is its own 13 kB route chunk. Suite: **100 fast,
 47 seeds.**
+
+## 237 - Opening a row, described rather than written out
+
+**Measured first, and it corrected my own earlier number.** I had been saying
+"23 screens are view-only". Counting properly — screens with a `TableBody` and
+no row-selection state at all — gives **eight** that are completely blind:
+Queue, Billing, Pharmacy, Time, Counter, Portal, Reports, FacilityRequests. The
+other fifteen have partial affordances of their own. The smaller number is the
+honest one.
+
+`src/components/RecordPanel.tsx` is the lever. Six screens had panels written
+by hand and had already started to diverge; a seventh hand-written one would
+have made that worse. A screen now supplies a `RecordSpec` — title, subtitle,
+sections of labelled facts — in about twenty lines, and the twenty-first screen
+behaves exactly like the first.
+
+Three details that matter:
+
+*The detail fetch.* Most list rows in this API are summaries, and a panel that
+re-displays what was already on screen is a slide-over that tells you nothing.
+`detailPath` fetches the fuller record on open and the spec renders the merge —
+summary immediately, detail when it arrives. It carries the same sequence guard
+`GlobalSearch` uses: opening one row and then another faster than the first
+request returns would otherwise render the first row's detail under the second
+row's heading, which looks like a data leak.
+
+*`when` on a field, not a dash.* A discharge date on a patient still in the
+ward is not a missing value, it is a question with no answer yet, and an em
+dash invites somebody to go looking for it.
+
+*`stopProps` on the action cell.* Several of these tables have buttons in the
+last column. Without it, pressing "Start" starts the consultation **and** opens
+a panel behind the click.
+
+**Two screens wired so far.**
+
+*Queue.* The row already carries the MRN, the chief complaint, the priority,
+the waiting time, how many times they have been called and at which counter.
+The table shows three of those. The panel shows the rest, with no second
+request.
+
+*FacilityRequests.* Every field in the panel was **already in the list
+response** and simply never rendered: the justification somebody typed, why the
+request escalated, and who decided what and when. An approval queue you cannot
+read the case for is a queue that gets approved by reflex. Verified against the
+live payload rather than the TypeScript interface — all thirty row fields
+present — and the nested decision fields checked against
+`ChangeRequestDecisionSerializer`, which is where `decided_by_email` came from;
+a decision history that does not say who decided cannot answer the only
+question anybody asks it afterwards.
+
+Type check clean, `tsc -b` exit 0.
+
+**Six of the eight blind screens remain**, and the fifteen partial ones after
+that.

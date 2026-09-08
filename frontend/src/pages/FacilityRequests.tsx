@@ -45,6 +45,13 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import {
+  RecordPanel,
+  dateTime,
+  status,
+  useRecordPanel,
+  words,
+} from "@/components/RecordPanel";
 
 const FACILITY_TYPES = [
   ["clinic", "Clinic"],
@@ -130,6 +137,11 @@ function PreviewPanel({ preview }: { preview: ChangePreview }) {
 }
 
 export default function FacilityRequestsPage() {
+  // Opening a request. Every field below is **already in the list response**
+  // and was simply never rendered: the justification somebody typed, why the
+  // request escalated, and who decided what. A queue of approvals you cannot
+  // read the case for is a queue you approve by reflex.
+  const panel = useRecordPanel<FacilityChangeRequest>();
   const [requests, setRequests] = useState<FacilityChangeRequest[]>([]);
   const [facilityType, setFacilityType] = useState("clinic");
   const [name, setName] = useState("");
@@ -335,7 +347,7 @@ export default function FacilityRequestsPage() {
                 </TableHeader>
                 <TableBody>
                   {requests.map((request) => (
-                    <TableRow key={request.uuid}>
+                    <TableRow key={request.uuid} {...panel.rowProps(request)}>
                       <TableCell className="font-mono text-xs">
                         {request.reference}
                       </TableCell>
@@ -374,6 +386,108 @@ export default function FacilityRequestsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <RecordPanel
+        row={panel.open}
+        onClose={panel.close}
+        spec={{
+          title: (r) => r.proposed_name || r.reference,
+          subtitle: (r) => `${r.reference} · ${words(r.request_type)}`,
+          sections: [
+            {
+              heading: "The request",
+              fields: [
+                { label: "Type", value: (r) => words(r.facility_type) },
+                { label: "Proposed code", value: (r) => r.proposed_code },
+                { label: "Status", value: (r) => status(r.status) },
+                { label: "Approval level", value: (r) => words(r.approval_level) },
+                { label: "Raised by", value: (r) => r.requested_by_email },
+                { label: "Submitted", value: (r) => dateTime(r.submitted_at) },
+                {
+                  label: "Open for",
+                  value: (r) => `${r.age_in_days} days`,
+                  when: (r) => r.is_open,
+                },
+                { label: "Decided", value: (r) => dateTime(r.decided_at) },
+                { label: "Executed", value: (r) => dateTime(r.executed_at) },
+                {
+                  // Only when there is one. An execution error is the single
+                  // most important thing on this record when it exists and
+                  // noise on every request where it does not.
+                  label: "Execution error",
+                  value: (r) => r.execution_error,
+                  when: (r) => Boolean(r.execution_error),
+                },
+                {
+                  label: "Needs capacity purchase",
+                  value: () => "Yes",
+                  when: (r) => r.requires_capacity_purchase,
+                },
+              ],
+            },
+            {
+              heading: "Justification",
+              fields: [],
+              render: (r) => (
+                <p className="whitespace-pre-wrap text-sm">
+                  {r.justification || (
+                    <span className="text-muted-foreground">
+                      Nothing was written.
+                    </span>
+                  )}
+                </p>
+              ),
+            },
+            {
+              heading: "Why it escalated",
+              when: (r) => (r.escalation_reasons ?? []).length > 0,
+              fields: [],
+              render: (r) => (
+                <ul className="list-disc space-y-1 pl-4 text-sm">
+                  {r.escalation_reasons.map((reason, index) => (
+                    <li key={`${reason.code}-${index}`}>{reason.message}</li>
+                  ))}
+                </ul>
+              ),
+            },
+            {
+              heading: "Decisions",
+              when: (r) => (r.decisions ?? []).length > 0,
+              fields: [],
+              render: (r) => (
+                <div className="space-y-2">
+                  {r.decisions.map((decision, index) => (
+                    <div
+                      key={`${decision.level}-${index}`}
+                      className="rounded-md border p-2 text-sm"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium capitalize">
+                          {words(decision.decision)} · {words(decision.level)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {dateTime(decision.decided_at)}
+                        </span>
+                      </div>
+                      {/* Who decided, not just what was decided. An approval
+                          queue whose history is anonymous cannot answer the
+                          only question anybody asks it afterwards. */}
+                      <p className="text-xs text-muted-foreground">
+                        {decision.decided_by_email}
+                      </p>
+                      {decision.comment && (
+                        <p className="mt-1 text-muted-foreground">
+                          {decision.comment}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+          ],
+        }}
+      />
     </div>
   );
 }

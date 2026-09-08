@@ -45,6 +45,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import {
+  RecordPanel,
+  status,
+  useRecordPanel,
+} from "@/components/RecordPanel";
 
 const REFRESH_MS = 15000;
 
@@ -93,6 +98,11 @@ function StatTile({
 }
 
 export default function QueuePage() {
+  // Opening a token. The list row already carries the MRN, the chief
+  // complaint, the priority, how long they have waited and how many times
+  // they have been called -- the table shows three of those and this shows
+  // the rest, without a second request.
+  const panel = useRecordPanel<QueueTokenRow>();
   const navigate = useNavigate();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityUuid, setFacilityUuid] = useState("");
@@ -268,7 +278,10 @@ export default function QueuePage() {
                   {queue.queue.map((token) => (
                     <TableRow
                       key={token.uuid}
-                      className={token.is_emergency ? "bg-destructive/5" : undefined}
+                      {...panel.rowProps(
+                        token,
+                        token.is_emergency ? "bg-destructive/5" : undefined,
+                      )}
                     >
                       <TableCell className="font-mono font-medium">
                         {token.token_number}
@@ -296,7 +309,9 @@ export default function QueuePage() {
                       >
                         {token.waiting_minutes}m
                       </TableCell>
-                      <TableCell className="text-right">
+                      {/* The action cell stops the click: pressing Start
+                          should start, not also open a panel behind it. */}
+                      <TableCell className="text-right" {...panel.stopProps}>
                         {token.status === "called" && (
                           <Button
                             size="sm"
@@ -384,6 +399,54 @@ export default function QueuePage() {
           </CardContent>
         </Card>
       </div>
+
+      <RecordPanel
+        row={panel.open}
+        onClose={panel.close}
+        spec={{
+          title: (token) => token.patient_name,
+          subtitle: (token) =>
+            `Token ${token.token_number} · ${token.patient_mrn}`,
+          sections: [
+            {
+              heading: "In the queue",
+              fields: [
+                { label: "Status", value: (t) => status(t.status) },
+                { label: "Waited", value: (t) => `${t.waiting_minutes} min` },
+                {
+                  label: "Called",
+                  value: (t) =>
+                    t.call_count === 1 ? "Once" : `${t.call_count} times`,
+                  // Hidden rather than dashed when nobody has called them:
+                  // "0 times" is noise on the row that matters least.
+                  when: (t) => t.call_count > 0,
+                },
+                { label: "Counter", value: (t) => t.counter },
+                {
+                  label: "Priority",
+                  value: (t) => (t.is_emergency ? "Emergency" : String(t.priority)),
+                },
+              ],
+            },
+            {
+              heading: "Why they came",
+              fields: [
+                {
+                  label: "Chief complaint",
+                  value: (t) => t.chief_complaint ?? "",
+                },
+              ],
+            },
+          ],
+          actions: (token) =>
+            token.status === "in_service" ? (
+              <Button className="w-full" onClick={() => void openConsultation(token)}>
+                <Stethoscope className="mr-2 h-4 w-4" />
+                Open consultation
+              </Button>
+            ) : null,
+        }}
+      />
     </div>
   );
 }
