@@ -83,11 +83,48 @@ facility, and grows into a chain without restructuring anything.
 > steps and then shows what to look at as each role — which accounts exist,
 > what each one can and cannot reach, and how to turn the access controls on.
 
-**Requirements:** Docker, Python 3.12+, Node 20+.
+**Requirements:** Docker. (Python 3.12+ and Node 20+ only if you want to run
+things on the host as well.)
+
+### The whole system, one command
 
 ```bash
-# 1. Databases
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up
+```
+
+That is everything: Postgres, Redis, the API, a Celery worker and scheduler,
+and both React applications behind their own nginx. On a first run it also
+migrates the control plane, seeds the plan catalogue, provisions a demo tenant
+and fills it with a working hospital — about three and a half minutes from a
+machine with no images and no volumes, and seconds on every start after that.
+
+| | |
+|---|---|
+| staff console | http://localhost:5173 |
+| patient application | http://localhost:5174 |
+| API, admin and OpenAPI | http://localhost:8000 |
+
+Sign in as `owner@manakamana.test` with the password `NirovaDemo!2026`. Other
+demo accounts (`doctor@`, `counter@`, `manager@`, `pharmacy@`) share it, and
+each sees a different application — which is the point.
+
+`docker compose -f infra/docker-compose.yml down -v` removes the data and the
+next `up` rebuilds the demo from nothing.
+
+### Developing in Docker, with hot reload
+
+```bash
+docker compose -f infra/docker-compose.yml                -f infra/docker-compose.dev.yml up
+```
+
+The override runs Vite's dev server and Django's `runserver` against bind
+mounts, so **nothing is built** and a source change is on screen immediately.
+
+### On the host instead
+
+```bash
+# 1. Databases only
+docker compose -f infra/docker-compose.yml up -d postgres redis
 
 # 2. Backend
 cd backend
@@ -96,28 +133,15 @@ python -m venv .venv
 # source .venv/bin/activate && pip install -r requirements.txt  # macOS / Linux
 cp .env.example .env
 
-.venv/Scripts/python.exe manage.py migrate               # control plane
-.venv/Scripts/python.exe manage.py seed_catalog          # plans, modules, add-ons
-.venv/Scripts/python.exe manage.py seed_demo             # a demo tenant, end to end
-.venv/Scripts/python.exe manage.py seed_clinical_demo    # patients, clinics, a queue
-.venv/Scripts/python.exe manage.py seed_consultation_demo # three consultations
-.venv/Scripts/python.exe manage.py seed_billing_demo     # prices, invoices, a refund
-.venv/Scripts/python.exe manage.py seed_diagnostics_demo # lab orders, a critical result
-.venv/Scripts/python.exe manage.py seed_pharmacy_demo    # stock, FEFO, a recall
-.venv/Scripts/python.exe manage.py seed_procurement_demo # order to goods receipt
-.venv/Scripts/python.exe manage.py seed_pos_demo         # a shift at the counter
-.venv/Scripts/python.exe manage.py seed_hr_demo          # a workforce, and its rules
-.venv/Scripts/python.exe manage.py seed_attendance_demo  # a rostered week and leave
-.venv/Scripts/python.exe manage.py seed_payroll_demo     # a run, checked by hand
-.venv/Scripts/python.exe manage.py seed_inpatient_demo   # admit, move, charge, discharge
-.venv/Scripts/python.exe manage.py seed_emergency_demo   # a shift in the department
+# One command for what used to be fifteen. Idempotent: it asks the database
+# whether a populated demo tenant already exists rather than trusting a marker.
+.venv/Scripts/python.exe manage.py bootstrap
 .venv/Scripts/python.exe manage.py runserver
 
 # Tests. Needs the stack above running: the suite drives the real router and
 # the real tenant database rather than a throwaway one, because every defect
 # it exists to catch is a disagreement between two layers that a mock removes.
-.venv/Scripts/python.exe -m pytest -q            # 55 tests, ~45s
-
+.venv/Scripts/python.exe -m pytest -q                  # 127 tests
 .venv/Scripts/python.exe -m pytest -q -m "not seeds"   # skip the slow half
 
 # 3. Frontend
@@ -130,6 +154,12 @@ cd ../patient
 npm install
 npm run dev          # http://localhost:5174
 ```
+
+`manage.py bootstrap` runs the whole sequence in the order
+`apps/tenancy/seeding.py` records — an order that was **measured**, by running
+it against an empty database until it completed, rather than reasoned about.
+The individual seeds still exist and can be run one at a time; see
+`manage.py help`.
 
 `seed_demo` builds a working customer by running the real code paths — it
 raises facility change requests and approves them rather than inserting rows,

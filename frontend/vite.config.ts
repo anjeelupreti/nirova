@@ -58,12 +58,21 @@ export default defineConfig({
   },
 
   server: {
+    // 0.0.0.0 when asked, so the dev server is reachable from outside a
+    // container. Harmless on a host: Vite still prints the localhost URL.
+    host: true,
     port: 5173,
     // Proxy /api to Django in development. Keeps the browser on one origin,
     // so CORS and cookie behaviour in dev match production behind a reverse
     // proxy rather than being a special case that hides problems.
     proxy: {
-      "/api": { target: "http://localhost:8000", changeOrigin: true },
+      "/api": {
+        // Configurable because "localhost" means something different
+        // inside a container: it is the container. The dev compose
+        // override sets this to the backend service name.
+        target: process.env.VITE_API_PROXY ?? "http://localhost:8000",
+        changeOrigin: true,
+      },
     },
   },
 })

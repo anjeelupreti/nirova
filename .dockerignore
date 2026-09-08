@@ -1,0 +1,41 @@
+# The build context for the two web images is the repository root, because
+# they share infra/nginx/app.conf.template. Without this file that context is
+# gigabytes -- three node_modules trees, a Windows virtualenv, and the whole
+# git history -- and every build pays for it before the first instruction runs.
+#
+# The backend image builds from ./backend and reads backend/.dockerignore
+# instead; this file does not apply to it.
+
+node_modules/
+**/node_modules/
+.venv/
+**/.venv/
+
+# Host build output. The image produces its own; copying a stale one in risks
+# shipping a bundle nothing in the image can account for.
+dist/
+**/dist/
+**/*.tsbuildinfo
+staticfiles/
+**/staticfiles/
+
+__pycache__/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+
+# Secrets and local state.
+.env
+**/.env
+
+.git/
+*.log
+**/*.log
+docs/
+
+# Backend-specific. The virtualenv is built for Windows: every shebang and
+# every compiled extension in it is wrong inside a Linux image, and the image
+# builds its own anyway.
+backend/.venv/
+backend/media/

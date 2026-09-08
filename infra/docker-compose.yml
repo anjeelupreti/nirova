@@ -1,4 +1,72 @@
+# The whole system, one command:
+#
+#     docker compose -f infra/docker-compose.yml up
+#
+# Brings up Postgres, Redis, the Django API, a Celery worker and scheduler,
+# and both React applications -- and, on a first run, migrates the control
+# plane, seeds the plan catalogue, provisions a demo tenant and fills it with
+# a working hospital. Nothing else needs to be typed.
+#
+#   staff console        http://localhost:5173
+#   patient application  http://localhost:5174
+#   API and admin        http://localhost:8000
+#
+# Sign in with the credentials `manage.py seed_demo` prints; the demo password
+# is in apps/tenancy/management/commands/seed_demo.py.
+#
+# For development with hot reload and no build wait, add the override:
+#
+#     docker compose -f infra/docker-compose.yml \
+#                    -f infra/docker-compose.dev.yml up
+#
+# --------------------------------------------------------------------------
+# On the shape of this file
+# --------------------------------------------------------------------------
+# Every service that something else waits on has a healthcheck, and every
+# dependant uses `condition: service_healthy` rather than a bare `depends_on`
+# list. The difference matters: plain `depends_on` waits for the container to
+# *start*, which for Postgres is several seconds before it will accept a
+# connection. That gap is the commonest reason a stack works on the second try.
+
+x-backend-build: &backend-build
+  context: ..
+  dockerfile: backend/Dockerfile
+
+# Settings every backend container shares. Anchored rather than repeated, so
+# the worker cannot drift from the API whose code it is supposed to be running
+# -- a worker pointed at a different database is a bug that surfaces days later
+# as missing data.
+x-backend-env: &backend-env
+  DJANGO_SETTINGS_MODULE: config.settings.prod
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-change-me}
+  DJANGO_DEBUG: "False"
+  # `backend` and `localhost` both appear: the first is how nginx reaches the
+  # API inside the compose network, the second is how a developer reaches it
+  # through the published port.
+  DJANGO_ALLOWED_HOSTS: backend,localhost,127.0.0.1,frontend,patient
+  # This stack serves plain HTTP on localhost. With TLS assumed, the prod
+  # settings 301-redirect every request to https, and nothing here terminates
+  # TLS -- so the stack would answer every URL with a redirect to a port that
+  # is not listening. See config/settings/prod.py; the default there is True.
+  DJANGO_BEHIND_TLS: "False"
+  CONTROL_DATABASE_URL: postgres://nirova:nirova@postgres:5432/nirova_control
+  # Tenant databases are provisioned on the same server. `postgres`, not
+  # `localhost`, because localhost inside a container is the container.
+  TENANT_DB_HOST: postgres
+  TENANT_DB_PORT: "5432"
+  TENANT_DB_USER: nirova
+  TENANT_DB_PASSWORD: nirova
+  TENANT_DB_NAME_PREFIX: nirova_tenant_
+  REDIS_URL: redis://redis:6379/0
+  # Both applications are served same-origin through their own nginx, so CORS
+  # is unused in this stack. Listed for the case where a developer runs
+  # `npm run dev` on the host against this backend.
+  CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:5174
+
 services:
+  # -----------------------------------------------------------------------
+  # Data
+  # -----------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: nirova-postgres
@@ -11,10 +79,24 @@ services:
     volumes:
       - nirova_pgdata:/var/lib/postgresql/data
     healthcheck:
+      # `-d nirova_control` matters. `pg_isready` without a database reports
+      # ready during the initdb phase, when the server is up but the database
+      # this application needs does not exist yet.
       test: ["CMD-SHELL", "pg_isready -U nirova -d nirova_control"]
       interval: 5s
       timeout: 5s
       retries: 20
+    # Tuned for a laptop running the whole stack, not for production. The
+    # default 128 MB shared_buffers is small for a database-per-tenant design
+    # where every seeded tenant is another working set, and the connection
+    # ceiling has to cover gunicorn threads plus Celery plus every tenant
+    # connection each of them holds open.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=200
 
   redis:
     image: redis:7-alpine
@@ -27,5 +109,131 @@ services:
       timeout: 3s
       retries: 20
 
+  # -----------------------------------------------------------------------
+  # Application
+  # -----------------------------------------------------------------------
+  backend:
+    build: *backend-build
+    image: nirova-backend
+    container_name: nirova-backend
+    environment:
+      <<: *backend-env
+      # The one container that bootstraps. The worker and the scheduler run
+      # the same image and would otherwise race it into the same database.
+      NIROVA_BOOTSTRAP: ${NIROVA_BOOTSTRAP:-full}
+      NIROVA_COLLECTSTATIC: "1"
+    ports:
+      - "8000:8000"
+    volumes:
+      # Uploaded documents outlive the container. A named volume rather than a
+      # bind mount, so it behaves the same on every host OS.
+      - nirova_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # An endpoint requiring no authentication and no tenant. Anything behind
+      # the permission classes would report unhealthy for a perfectly healthy
+      # server that had simply refused an anonymous caller.
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      # Long, because the first start runs the full bootstrap and the API is
+      # genuinely not up until that finishes. 60 x 10s is ten minutes.
+      retries: 60
+      start_period: 20s
+    restart: unless-stopped
+
+  worker:
+    build: *backend-build
+    image: nirova-backend
+    container_name: nirova-worker
+    environment:
+      <<: *backend-env
+      # Emphatically empty: the API bootstraps, this waits for it.
+      NIROVA_BOOTSTRAP: ""
+    command:
+      - celery
+      - -A
+      - config.celery
+      - worker
+      - --loglevel=info
+      # Two, not the CPU count. Each worker holds a connection to the control
+      # plane *and* to every tenant it touches, so concurrency here multiplies
+      # Postgres connections faster than it multiplies throughput.
+      - --concurrency=2
+    volumes:
+      - nirova_media:/app/media
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build: *backend-build
+    image: nirova-backend
+    container_name: nirova-scheduler
+    environment:
+      <<: *backend-env
+      NIROVA_BOOTSTRAP: ""
+    command:
+      - celery
+      - -A
+      - config.celery
+      - beat
+      - --loglevel=info
+      # The schedule file goes somewhere the non-root user can write. Beat
+      # defaults to the working directory, which the image owns but grants
+      # write on only for media and staticfiles.
+      - --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------
+  # Web
+  # -----------------------------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        APP: frontend
+    image: nirova-frontend
+    container_name: nirova-frontend
+    environment:
+      NGINX_PORT: "80"
+      API_UPSTREAM: backend:8000
+    ports:
+      # 5173 outside, so the URL matches the one `npm run dev` serves and no
+      # bookmark or habit changes between the two ways of running this.
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  patient:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.web
+      args:
+        APP: patient
+    image: nirova-patient
+    container_name: nirova-patient
+    environment:
+      NGINX_PORT: "80"
+      API_UPSTREAM: backend:8000
+    ports:
+      - "5174:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   nirova_pgdata:
+  nirova_media:

@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+#
+# One image definition for both React applications.
+#
+# The staff console and the patient application build identically -- same
+# toolchain, same `tsc -b && vite build`, same nginx serving the same shaped
+# output -- and differ only in which directory they come from and which port
+# they listen on. `ARG APP` is that difference. Two files that were 95% the
+# same would drift, and the half that drifted would be whichever one nobody
+# had rebuilt lately.
+#
+# Build context is the repository root, because the nginx config lives in
+# infra/ and is shared. See infra/.dockerignore-note in the compose file.
+#
+#   docker build -f infra/Dockerfile.web --build-arg APP=frontend .
+#   docker build -f infra/Dockerfile.web --build-arg APP=patient  .
+
+# ---------------------------------------------------------------------------
+# Stage 1: build
+# ---------------------------------------------------------------------------
+FROM node:22-alpine AS builder
+
+# Redeclared inside the stage: an ARG before the first FROM is global and
+# invisible to stages that do not ask for it again. This is the single most
+# common way a parameterised Dockerfile silently builds the wrong thing.
+ARG APP
+WORKDIR /app
+
+# The manifests alone, before the source. `npm ci` is by far the slowest step
+# here, and keying its layer on the lockfile means editing a React component
+# does not reinstall 400 packages.
+COPY ${APP}/package.json ${APP}/package-lock.json ./
+
+# `npm ci` rather than `npm install`: it installs exactly the lockfile, fails
+# if package.json and the lock disagree, and updates nothing silently -- so
+# the image is reproducible. The cache mount keeps npm's download cache across
+# builds without baking it into a layer.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --no-audit --no-fund
+
+COPY ${APP}/ ./
+
+# `npm run build` is `tsc -b && vite build`. Type errors fail the image build,
+# deliberately: a type error that first shows up in a container is a type
+# error that was found too late.
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2: serve
+# ---------------------------------------------------------------------------
+FROM nginx:1.27-alpine AS runtime
+
+# nginx:alpine runs envsubst over everything in /etc/nginx/templates at
+# container start and writes the result into /etc/nginx/conf.d. That is how
+# one config file serves both applications, on different ports, against the
+# same API container.
+# **Delete the stock config first.**
+#
+# `nginx:alpine` ships /etc/nginx/conf.d/default.conf with `server_name
+# localhost`, and that is an *exact* name match for a browser asking for
+# http://localhost:5173. Our config says `server_name _`, which matches no
+# name at all -- it only wins as the fallback when nothing else matches. So
+# with both present nginx served the stock config: `/` returned the built
+# index.html because the document root happened to be the same, while
+# `/queue` 404ed and `/api/` was never proxied. Both symptoms of a config
+# that was generated correctly and then never used.
+RUN rm -f /etc/nginx/conf.d/default.conf
+
+COPY infra/nginx/app.conf.template /etc/nginx/templates/app.conf.template
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Defaults so `docker run` without compose still yields a working container.
+ENV NGINX_PORT=80 \
+    API_UPSTREAM=backend:8000
+
+EXPOSE 80
+
+# Proves nginx is serving the application, not merely that the process is up.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=6 \
+    CMD wget -qO- "http://127.0.0.1:${NGINX_PORT}/index.html" >/dev/null || exit 1

@@ -8492,3 +8492,269 @@ total. It is one page with no router; splitting it would trade a single request
 for two and gain nothing. `chunkSizeWarningLimit` was raised from Vite's 500 kB
 to 700 kB -- high enough that the React runtime stops crying wolf, low enough
 that a route chunk growing to that size is still reported.
+
+## 230 - The whole system in one command
+
+**The ask.** "Why is only redis and postgres included in the docker service, we
+need frontend, backend everything, so that one click can make system up."
+
+Fair. `infra/docker-compose.yml` had two services, both of them databases, and
+the rest of the system was fifteen README lines that had to be pasted in the
+right order. There were no Dockerfiles anywhere in the repository.
+
+**What is there now.** `docker compose -f infra/docker-compose.yml up` brings up
+seven services -- Postgres, Redis, the Django API, a Celery worker, a Celery
+scheduler, and both React applications behind their own nginx -- and on a first
+run migrates the control plane, seeds the plan catalogue, provisions a demo
+tenant and fills it with a working hospital. Nothing else is typed.
+
+```
+staff console        http://localhost:5173
+patient application  http://localhost:5174
+API and admin        http://localhost:8000
+```
+
+Measured, cold, with no images and no volumes: **3 minutes 26 seconds** to all
+seven healthy.
+
+**The pieces, and why each is shaped the way it is.**
+
+*`backend/Dockerfile`* is two stages. The first builds a virtualenv; the second
+copies it into a clean runtime. The dependency layer is keyed only on
+`requirements.txt`, so editing Python rebuilds in seconds rather than
+reinstalling Django, and pip's downloads live in a BuildKit cache mount instead
+of a layer. Runs as a non-root user. No compiler is installed because every
+dependency ships manylinux wheels.
+
+*`infra/Dockerfile.web`* is **one** file for both React applications,
+parameterised by `ARG APP`. They build identically and differ only in which
+directory they come from, and two files that were 95% the same would drift --
+the half that drifted being whichever nobody had rebuilt lately. Node builds the
+bundle; nginx serves it, so the 400 MB toolchain never ships.
+
+*`infra/nginx/app.conf.template`* is likewise one file, expanded by
+`envsubst` at container start. It proxies `/api` rather than calling it
+cross-origin, so the container stack sees one origin exactly as the Vite dev
+proxy does -- CORS and cookie behaviour are then the same in both instead of
+production being a special case that only reveals its problems on deploy.
+Hashed assets get a year of immutable caching, which is correct rather than
+merely aggressive because Vite fingerprints every filename; `index.html` gets
+`no-cache`, because it is the one unhashed file and a cached copy pins a
+browser to a deployment that no longer exists.
+
+*`manage.py bootstrap`* is the fifteen README lines, in order, idempotent. It
+decides "already done" by **asking the database** -- does the demo organization
+exist, and does its tenant database contain patients -- rather than leaving a
+marker file. A marker has to live in a volume, and a volume can outlive the
+database it describes: delete the Postgres volume, keep the state volume, and
+the marker cheerfully reports that an empty database is fully seeded. Reading
+the estate cannot desync from the truth, because it *is* the truth.
+
+*`config/settings/prod.py`* was rewritten around one flag. Everything in it
+assumed TLS terminates in front, which is true in production and false on
+localhost; `SECURE_SSL_REDIRECT` alone would have answered every URL in this
+stack with a 301 to a port nothing is listening on. `DJANGO_BEHIND_TLS`
+defaults to **True**, so the safe configuration is the one you get by saying
+nothing, and compose sets it False with a comment saying why. HSTS is tied to
+the same flag for a reason worth stating: it is remembered per host, not per
+port, so setting it while developing on localhost poisons localhost for every
+other project on the machine.
+
+*`.gitattributes`* forces LF on shell scripts and Dockerfiles. A CRLF
+entrypoint fails inside a container as `exec format error` -- a confusing
+failure whose cause is invisible in a diff.
+
+**Three defects the containers found, none of which any test could have.**
+
+1. **The patient app imported a package it never declared.**
+   `@radix-ui/react-slot` was used by `patient/src/components/primitives.tsx`
+   and named in neither `package.json` nor the lockfile. It built on the host
+   because `patient/node_modules` still held a whole Radix tree from some
+   earlier install. A clean checkout would have failed exactly as the container
+   did.
+
+2. **The lockfile omitted every non-Windows platform.** `npm ci` inside Alpine
+   failed on `@rollup/rollup-linux-x64-musl`. The lockfile listed the *names*
+   in rollup's `optionalDependencies` but carried no resolved package entries
+   for them, because a Windows `npm install` prunes foreign platforms.
+   `--package-lock-only` does not fix it -- **only a full `npm install`
+   records every platform**, so the lockfile was regenerated by running one in
+   a scratch directory inside `node:22-alpine` and copying just the lockfile
+   back. Both `musl` and `win32` entries are present now, so the host and the
+   container both work.
+
+3. **nginx served the stock config, not ours.** `nginx:alpine` ships
+   `default.conf` with `server_name localhost`, which is an *exact* name match
+   for a browser asking for `http://localhost:5173`. Ours says `server_name _`,
+   which matches no name at all and only wins as the fallback. Both listened on
+   80, and the stock one won: `/` returned the built `index.html` because the
+   document root happened to coincide, while `/queue` 404ed and `/api/` was
+   never proxied. A config generated perfectly and then never used. `RUN rm -f
+   /etc/nginx/conf.d/default.conf` fixes it.
+
+**Verified**, not assumed, after the fix:
+
+| | |
+|---|---|
+| `/`, `/queue`, `/consultation/abc-123` | 200 (SPA fallback) |
+| `/api/health/` through both proxies | 200 `{"status":"ok"}` |
+| POST `/api/auth/login/` through nginx | 200, real JWT pair |
+| `/assets/index-*.js` | `public, immutable`, `max-age=31536000`, gzip |
+| `/index.html` | `no-cache, must-revalidate` |
+| worker / scheduler | `celery@... ready`, `beat: Starting...` |
+
+**`infra/docker-compose.dev.yml`** is the answer to the other half of the ask,
+"the app build should not make me wait": layered on top, both React apps run
+Vite's dev server against a bind mount and the backend runs `runserver`, so in
+that mode **there is no build at all**. An anonymous volume masks
+`node_modules` so the container installs Linux binaries rather than having the
+host's Windows ones mounted over them, which is the same platform trap as the
+lockfile above wearing a different hat.
+
+## 231 - Nothing had ever run the seeds against an empty tenant
+
+The container was the first thing in this project's life to build the demo
+estate from nothing. Every previous run -- every developer's, every one of the
+125 passing tests -- ran against a `manakamana` database that already existed
+and had been accumulating rows since the project started. Six defects were
+sitting in that gap. This entry is what a cold start found.
+
+**1. The dependency order was not one.** `tests/test_seeds.py` held a list
+captioned "dependency order" that ran `seed_billing_demo` first and
+`seed_clinical_demo` thirteenth. It passed for a year because the
+`organization` fixture does not build a tenant -- it attaches to whichever one
+the developer already has, patients included. On an empty tenant the first seed
+died on `patient.full_name` where `patient` was `None`. The order now lives in
+`apps/tenancy/seeding.py`, imported by both the tests and `bootstrap`, and it
+was **established by running the sequence from empty until it completed**
+rather than by reasoning about it.
+
+**2. `seed_hr_demo` was in no list at all.** Written, committed, documented in
+the README, and never run by anything. When the container finally ran it, it
+raised `NameError: name 'history' is not defined` -- line 356, in committed
+code, in a branch nothing had ever reached. `_show_history` had been extracted
+and the caller left reading a name that now only existed inside it.
+
+New guard: `tests/test_seed_registry.py` asks the filesystem which
+`seed_*_demo` commands exist and asserts every one is in `TENANT_SEEDS`. No
+database, 0.07s, runs in the fast half. **Proved by reintroducing both
+defects** -- commenting out `seed_hr_demo` fails with "these seed commands
+exist but no test or bootstrap ever runs them"; adding a name that does not
+exist fails the other way.
+
+**3. Nine seeds required a hospital the demo does not have.** They opened with
+`Facility.objects.filter(facility_type="hospital").first()` and used the result
+without checking it. The demo organization has **no hospital by design**:
+`seed_demo` requests one, the Professional plan excludes the hospital module,
+and the request escalates to the platform instead of proceeding -- which is
+precisely what that part of the seed demonstrates. Three of the nine had
+already grown a local `or ...clinic...` fallback. That fallback is now
+`apps/organization/demo.py::demo_facility()`, written once and used by all
+nine.
+
+**4. And the demo tenant could not admit a patient.** With the facility problem
+fixed, `seed_inpatient_demo` was refused by `EntitlementError: The 'hospital'
+module is not included in this subscription` -- the entitlement rule doing its
+job. `bootstrap` therefore provisions the demo on **enterprise** rather than
+`seed_demo`'s own default of professional, so wards, theatre and ICU are
+demonstrable; `manage.py seed_demo --plan professional` still shows the
+escalation.
+
+**5. The one seed that goes through HTTP was measuring nothing.**
+`seed_access_demo` drives Django's test client, which sends `Host: testserver`.
+Under the development settings `ALLOWED_HOSTS` is `["*"]` and this is
+invisible; under the production settings the container runs, **every request
+was rejected by CommonMiddleware before reaching any permission class**. The
+seed read 400 where it expected 403 and reported "counter is not refused
+prescriptions" as a failure -- not because the clerk got in, but because nobody
+did and the check could not tell the difference. A guard that cannot
+distinguish "refused" from "never asked" is not a guard. It now runs inside
+`override_settings(ALLOWED_HOSTS=[*settings.ALLOWED_HOSTS, "testserver"])` --
+added to, never replacing, so a seed cannot quietly widen a real host list.
+
+**6. The demo doctor had no role, and never had.** This is the big one.
+
+`provision_login` ended with:
+
+```python
+assign_role(
+    user, role_code, scope=scope,
+    facility=employee.facility if scope == "facility" else None,
+    ...
+)
+```
+
+`seed_hr_demo` onboards the consultant at **department** scope. A
+department-scoped assignment names neither a facility nor a department under
+that expression, so `assign_role` refused it -- correctly; a scope that names
+nothing reaches nothing, and that guard was added deliberately. The refusal was
+caught by `except Exception`, printed as a line of yellow text, and the seed
+carried on. So on every run since, `doctor@manakamana.test` has held nothing
+but the generic `staff` role at `own` scope, and been 403 on all six clinical
+endpoints. `seed_access_demo` printed that row of 403s under the heading "the
+doctor narrows to the patients they are treating" and asserted it as a pass.
+
+Both halves are fixed: `provision_login` now names the employee's facility for
+every narrow scope and their department for the two scopes that are *about* a
+department (handing a department to a FACILITY assignment would narrow it below
+what was asked -- the opposite failure, and a quieter one); and the seed
+catches `HrError` only, which is what a re-run raises, so anything else stops
+it.
+
+**What fixing the doctor then exposed.** Four tests that had been passing
+vacuously started failing, because a user who can see nothing satisfies every
+assertion about not seeing too much.
+
+- *The search browse test* asserted relationship narrowing while the switch
+  that enables it was **off**, and passed only because the doctor -- the sole
+  restricted account -- contributed no hits, leaving `checked > 0` to be
+  satisfied by the other three. It now runs inside `_privacy_switch(True)` and
+  restores it afterwards. **A correction to something I said mid-session:** I
+  reported this as a real leak in the search sources. It was not. My re-run had
+  used a stale image built before the test edit; search narrowing works. Proved
+  properly afterwards by breaking `narrow_to_related_patients` to return the
+  queryset untouched -- the test fails -- and restoring it.
+
+- *Encounters recorded nobody.* `seed_consultation_demo` used the organization
+  **owner** as its actor and passed no `provider_uuid` at all, so four of
+  thirteen encounters said nobody had seen the patient. It now runs as the
+  doctor and records them. `seed_nurse_demo` wrote three inpatient encounters
+  with neither provider nor department -- the only episodes in the tenant no
+  scoped user could reach, since `related_patient_ids` reads `provider_uuid`
+  and department scope reads `department_id`. Both are set now, with a backfill
+  branch, because `get_or_create` guarantees the row and not its contents and a
+  tenant seeded before the fix would keep the empty columns for ever.
+
+- *Four of eight workspace formatters had never executed.* A fresh tenant has
+  pending rows for exactly **one** approval source. The test manufactured
+  pending rows for three more and required six, and reached six only on a
+  developer's long-lived database. It now covers all eight -- including
+  `break_glass`, which has no rows in any tenant because emergency access is
+  correctly not something a seed performs, so that one row is manufactured and
+  deleted again. The bar was raised to 8, not lowered.
+
+- *`test_nav.py` crashed rather than skipped* when the frontend source was not
+  beside it, which it never is inside the backend image. A red result nobody
+  can act on is worse than an honest skip.
+
+**And one assertion that was measuring the data, not the system.**
+`seed_access_demo` asserted that enforcement strictly *reduces* what the doctor
+sees. Once the consultation seed started recording the doctor as provider, they
+are legitimately related to every patient in a one-clinician demo, so
+enforcement correctly changes nothing and the strict inequality fails on a
+working system. It now asserts the rule instead: enforcement never widens any
+column, and the treating clinician keeps a view while the dispensing counter
+loses one. That contrast is the actual point of relationship-based access, and
+unlike a decrease it stays true however the demo data falls.
+
+**Result.** `manage.py bootstrap` from an empty database: rc=0, 184s, every one
+of its 23 seeds and every self-check passing. Suite in the container: **80
+passed / 10 skipped** fast, **47 passed** seeds.
+
+**The theme, again.** Every one of these six had been in committed code for
+months, and not one was findable by reading it. They were found by running the
+system somewhere it had never run -- which is the same lesson as the endpoints
+with no screen, the payslip with eight wrong field names, and the reporting
+routes nobody had called. *The bugs are in the code nobody has ever executed*,
+and a test fixture that attaches to a database somebody already built is a way
+of never executing it.

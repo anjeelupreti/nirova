@@ -1,0 +1,91 @@
+# Serving one built React application.
+#
+# This is a template rather than a finished config: `nginx:alpine` runs
+# everything in /etc/nginx/templates through `envsubst` at container start, so
+# the staff console and the patient application share one file and differ only
+# by the environment they are given. Two near-identical configs would drift.
+#
+# Variables:
+#   NGINX_PORT      the port to listen on
+#   API_UPSTREAM    host:port of the Django container
+
+server {
+    listen ${NGINX_PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Fail fast and loudly rather than serving a half-truth.
+    absolute_redirect off;
+
+    # ---------------------------------------------------------------
+    # The API
+    # ---------------------------------------------------------------
+    # Proxied rather than called cross-origin, which makes the browser see one
+    # origin in the container stack exactly as the Vite dev proxy does in
+    # development. That is the point: CORS and cookie behaviour are then the
+    # same in both, instead of production being a special case that only
+    # reveals its problems on deploy.
+    location /api/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        # Django's SECURE_PROXY_SSL_HEADER reads this. It is set from the
+        # scheme nginx actually served, never from anything the client sent,
+        # because a client-supplied value would let a caller claim TLS it does
+        # not have.
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Reporting endpoints aggregate across a tenant and a cold one can be
+        # slow. Shorter than gunicorn's 120s so nginx is not the thing that
+        # gives up first and hides the real error.
+        proxy_read_timeout 110s;
+    }
+
+    # The Django admin and DRF's browsable API, for the same reason.
+    location ~ ^/(admin|static|media)/ {
+        proxy_pass http://${API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ---------------------------------------------------------------
+    # Static assets
+    # ---------------------------------------------------------------
+    # Vite fingerprints every asset filename with a content hash, so a file
+    # under /assets/ can never change without its name changing. That makes a
+    # year of immutable caching correct rather than merely aggressive: the
+    # browser never revalidates, and a deploy is picked up because index.html
+    # points at new names.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # index.html is the opposite case: it is the only unhashed file, it is what
+    # names all the hashed ones, and a cached copy of it pins a browser to a
+    # deployment that no longer exists.
+    location = /index.html {
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
+    # Single-page application fallback. Any path that is not a real file is the
+    # router's business, so /queue and /consultation/<uuid> must serve
+    # index.html rather than 404 on a page refresh.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json
+               image/svg+xml;
+}

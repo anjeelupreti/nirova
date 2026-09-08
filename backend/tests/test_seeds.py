@@ -31,44 +31,18 @@ nursing seed runs after the clinical seeds.
 import pytest
 from django.core.management import call_command
 
+from apps.tenancy.seeding import TENANT_SEEDS
+
 pytestmark = [
     pytest.mark.django_db(databases="__all__"),
     pytest.mark.seeds,
 ]
 
 
-#: Dependency order. Not alphabetical: the clinical seeds must run before the
-#: modules that read encounters, and the notification seed last because it
-#: reads what everything else raised.
-SEEDS = [
-    "seed_billing_demo",
-    "seed_bloodbank_demo",
-    "seed_diagnostics_demo",
-    "seed_emergency_demo",
-    "seed_consultation_demo",
-    "seed_finance_demo",
-    "seed_attendance_demo",
-    "seed_ess_demo",
-    "seed_icu_demo",
-    "seed_inpatient_demo",
-    "seed_nurse_demo",
-    "seed_insurance_demo",
-    "seed_clinical_demo",
-    "seed_payroll_demo",
-    "seed_pharmacy_demo",
-    "seed_portal_demo",
-    "seed_pos_demo",
-    "seed_procurement_demo",
-    "seed_referrals_demo",
-    "seed_theatre_demo",
-    "seed_notifications_demo",
-    # Last, and the only one that goes through HTTP. Every other seed runs at
-    # the service layer, *below* the permission classes -- so the suite proved
-    # enforcement did not break the domain logic and proved nothing about who
-    # can open what. On its first run this found that diagnostic orders were
-    # narrowed on retrieve and not on list.
-    "seed_access_demo",
-]
+#: Dependency order, imported rather than restated -- `bootstrap` builds the
+#: same estate outside pytest and the two must not drift. See the module for
+#: why the order is what it is.
+SEEDS = TENANT_SEEDS
 
 
 @pytest.mark.parametrize("command", SEEDS)

@@ -1,0 +1,95 @@
+# Development override. Layer it on top of the main file:
+#
+#     docker compose -f infra/docker-compose.yml \
+#                    -f infra/docker-compose.dev.yml up
+#
+# What changes, and why:
+#
+#   * The two React applications run Vite's dev server against a bind mount
+#     instead of being built into nginx. A code change is on screen in
+#     milliseconds. This is the direct answer to "the app build should not
+#     make me wait": in this mode there is no build at all.
+#
+#   * The backend runs `runserver` against a bind mount, so Python changes
+#     reload without rebuilding the image, and switches to the dev settings
+#     so tracebacks are readable.
+#
+#   * Nothing is rebuilt to pick up a source change in any of the three.
+#
+# The trade is that the containers now depend on the host's node_modules and
+# on the image's virtualenv rather than being self-contained, so this file is
+# for developing in, and the main file is what you demo and deploy.
+
+services:
+  backend:
+    environment:
+      # Readable tracebacks and ALLOWED_HOSTS = ["*"], which matters because
+      # in this mode requests arrive from the Vite dev server's proxy under
+      # whatever hostname the developer used.
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_DEBUG: "True"
+      NIROVA_COLLECTSTATIC: "0"
+    volumes:
+      # The source, live. `:ro` would be wrong -- Django writes migrations
+      # here when somebody runs makemigrations inside the container.
+      - ../backend:/app
+      - nirova_media:/app/media
+    command:
+      - python
+      - manage.py
+      - runserver
+      - 0.0.0.0:8000
+
+  worker:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_DEBUG: "True"
+    volumes:
+      - ../backend:/app
+      - nirova_media:/app/media
+    command:
+      - celery
+      - -A
+      - config.celery
+      - worker
+      - --loglevel=info
+      - --concurrency=2
+  scheduler:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DJANGO_DEBUG: "True"
+    volumes:
+      - ../backend:/app
+
+  frontend:
+    # A plain node image, not the built web image: there is nothing to build.
+    image: node:22-alpine
+    build: !reset null
+    working_dir: /app
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
+    environment:
+      # localhost inside a container is the container. Vite reads this and
+      # proxies /api to the backend service instead of to itself.
+      VITE_API_PROXY: http://backend:8000
+    volumes:
+      - ../frontend:/app
+      # An anonymous volume over node_modules, so the container installs Linux
+      # binaries into its own layer instead of the host's Windows ones being
+      # shadowed in -- esbuild and rollup ship platform-specific binaries and
+      # a Windows node_modules mounted into Alpine fails immediately.
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+
+  patient:
+    image: node:22-alpine
+    build: !reset null
+    working_dir: /app
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
+    environment:
+      VITE_API_PROXY: http://backend:8000
+    volumes:
+      - ../patient:/app
+      - /app/node_modules
+    ports:
+      - "5174:5174"
