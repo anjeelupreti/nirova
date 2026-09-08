@@ -9264,3 +9264,68 @@ Whole suite, fast and seeds together: **157 passed, 9 skipped.**
 `province`/`district` as the shape of every address, `name_nepali` on
 `ServiceItem` as *the* second language, and NMC registration as *the* clinical
 credential. A group in the Gulf has an emirate, Arabic, and a DHA licence.
+
+## 243 - Nobody could configure their own system
+
+`ConfigSetting` has existed since the organization app was written and has
+**never had an endpoint**. Everything in it was written by a seed or by a
+service call. Two consequences, and the second is one I caused two commits ago:
+
+* `privacy.require_care_relationship` — the switch that narrows clinical
+  browsing to a clinician's own patients — was off by default and unturnable
+  except from a Django shell. Every test that exercises it sets it with
+  `set_config_value`, which is why nobody noticed.
+* the whole of `apps.organization.locale`, added in logs 241 and 242. I built
+  a timezone, a fiscal calendar and a tax rate that a customer had no way to
+  set. That is the same defect as the staff API in log 235, committed by me,
+  a day later.
+
+`config.read` and `config.update` were in the catalogue, held by four roles,
+and checked by nothing. Two more off the unreachable list.
+
+**GET / PUT / DELETE `/api/org/settings/`.** The read/write split is real
+rather than decorative: an operations manager may see how the system is
+configured and may not change it, and there is a test for that exact row.
+
+**A declared registry, not a key/value endpoint.** `settings_registry.py`
+declares each setting with its kind, its choices, its default, whether a
+facility may hold its own value, and a caution where the change has
+consequences. An endpoint that accepted any namespace and key would make
+`config.update` permission to write arbitrary rows into a tenant's
+configuration table, and every consumer of `config_value` would then have to
+defend itself against keys it had never heard of. It also means the screen
+renders a select without a second copy of the fiscal calendars in the
+frontend — and the copy is always the one that gets forgotten.
+
+**Validation at the boundary, because these failures are otherwise silent.**
+A misspelled timezone throws nowhere; it leaves every timestamp in the default
+zone and says nothing. Caught here it is a sentence a person can act on. Five
+values are refused and each is a real mistake somebody would make: `Asia/Dubay`,
+a calendar that is not one of the four, a tax rate that is not a number, a tax
+rate of 300%, and "Rupees" where a three-letter code belongs.
+
+**Reset removes the row rather than writing the default.** So `is_set` goes
+back to false, and a tenant that later changes its mind about what the default
+should be follows it instead of being pinned to a value it once copied. Two
+things fell out of that:
+
+* `ConfigSetting` is **soft-deleted**, so the row stays and stamped — "we
+  turned this off in March" remains answerable — while `ConfigSetting.objects`
+  excludes it and resolution correctly falls back.
+* its manager's `delete()` returns a plain count, not Django's
+  `(count, per_model)` tuple. The first version did `rows.delete()[0]` and
+  crashed with `'int' object is not subscriptable`, which is what running it
+  found and reading it would not have.
+
+`is_set` and `set_at` are on every response because "13.00" tells a reader
+nothing about whether somebody chose it or whether it is simply what everybody
+gets, and those are different facts when deciding whether to change it.
+
+**Proved by reintroducing both defects:**
+
+| defect reintroduced | what failed |
+|---|---|
+| the registry check removed, so any key is writable | the undeclared-key test |
+| `coerce` returns the raw value unvalidated | all five bad-value cases |
+
+Whole suite: **170 passed, 9 skipped.**
