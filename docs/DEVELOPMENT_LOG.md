@@ -8790,3 +8790,46 @@ containers start.
 
 That last row is the one worth keeping. Until log 231 that account was 403 on
 all six clinical endpoints, and had been since the seed was written.
+
+## 233 - A tenant provisioned in Docker is not reachable from the host
+
+Running the suite on the host against the containers' Postgres failed 89 of 90
+tests with:
+
+```
+psycopg.OperationalError: [Errno 11001] getaddrinfo failed
+```
+
+The control plane was fine -- it connects to `localhost:5432`, which is
+published. The moment anything touched a *tenant*, Django dialled `postgres`.
+
+**Not a bug.** `TenantDatabase` stores host and port per tenant rather than
+deriving them from settings, and the model says why: it is what lets one large
+customer be moved onto its own database server without touching application
+code. A tenant provisioned inside the API container correctly records the
+hostname that container resolves. The row is describing a network the host is
+not on.
+
+But the design had no way to *perform* the move it exists to allow. So
+`manage.py retarget_tenants` now does it -- `--host`, `--port`, `--only <slug>`,
+dry by default because moving where a customer's data is read from is not
+something to do because a command was typed slightly wrong. It reports what it
+would change and writes nothing until `--apply`, and afterwards says to restart
+anything running, because a live process holds the connection settings it
+registered at startup.
+
+**Both modes proved, in both directions:**
+
+| | |
+|---|---|
+| `--host localhost --apply`, host suite | **82 passed**, 8 skipped |
+| `--host postgres --apply`, restart, doctor via nginx | 6 patients |
+
+The host run passes two more than the container run for a legible reason:
+`test_nav.py` reads `frontend/src/App.tsx`, which is beside the backend in the
+repository and not inside the backend image, and now skips there instead of
+crashing (log 231).
+
+Only one mode can be active at a time -- the row names one host. The Docker
+path is the resting state, because "one click can make system up" was the ask;
+the README says so where somebody will hit it.

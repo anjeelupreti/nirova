@@ -122,6 +122,28 @@ mounts, so **nothing is built** and a source change is on screen immediately.
 
 ### On the host instead
 
+> **One thing to know first.** `TenantDatabase` stores host and port **per
+> tenant**, deliberately — that is what lets one large customer be moved onto
+> its own database server without touching application code. The side effect
+> is that a tenant provisioned inside Docker records `host="postgres"`, which
+> the host machine cannot resolve:
+>
+> ```
+> psycopg.OperationalError: [Errno 11001] getaddrinfo failed
+> ```
+>
+> Nothing is broken; the row is describing a network you are not on. Switch
+> with the command that exists for exactly this:
+>
+> ```bash
+> manage.py retarget_tenants --host localhost --apply   # work on the host
+> manage.py retarget_tenants --host postgres  --apply   # back to the stack
+> ```
+>
+> It is a dry run without `--apply`, and anything already running needs a
+> restart afterwards. Only one of the two modes can be active at a time.
+
+
 ```bash
 # 1. Databases only
 docker compose -f infra/docker-compose.yml up -d postgres redis
