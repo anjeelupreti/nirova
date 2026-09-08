@@ -8833,3 +8833,56 @@ crashing (log 231).
 Only one mode can be active at a time -- the row names one host. The Docker
 path is the resting state, because "one click can make system up" was the ask;
 the README says so where somebody will hit it.
+
+## 234 - A receptionist could see three times what a consultant could
+
+Measured, for every seeded role, which of the 27 navigation entries their
+authority actually reaches:
+
+```
+doctor         max_scope=department   sees  6 of 27
+nurse          max_scope=department   sees  5 of 27
+pharmacist     max_scope=facility     sees 13 of 27
+receptionist   max_scope=facility     sees 17 of 27
+```
+
+The two clinical roles were the only ones capped at `department`, and they were
+the two that saw least. Six screens ask for `encounter.read` at **facility**
+scope -- the nurse workspace, ICU, theatre, blood bank, referrals and the
+patient portal -- and every one of them was refused to the roles built to use
+them. Most pointedly: **a nurse could not open the nurse workspace.** The one
+screen written for that role was the one screen the role could not reach.
+
+**The decision was the user's** and they took it: widen the doctor to facility
+scope. I extended it to `nurse` as well, and say so plainly rather than
+quietly -- a nurse locked out of the nurse workspace is a defect on its face
+rather than a policy question, and a ward spans departments by construction,
+which is what a ward is. One line to revert if that reading is wrong.
+
+**What this widens, and what it does not.** `max_scope` is where a role may be
+*granted*, not what it may do. The permission lists are untouched. Relationship
+narrowing is untouched: with the privacy switch on, a doctor still browses only
+patients they have a care relationship with, because scope and relationship are
+two independent controls and having both is the point.
+
+`seed_hr_demo` now onboards the demo consultant at facility scope so the demo
+shows it; `assign_role` keys on scope, so this needed a clean tenant to prove
+rather than a re-run.
+
+**After, through `resolve_authorization` rather than a proxy for it:**
+
+| account | before | after |
+|---|---|---|
+| doctor | 6 of 27 | **16 of 27** |
+| owner | 27 | 27 |
+| pharmacy | 13 | 13 |
+| counter | 10 | 10 |
+
+Confirmed over HTTP that they open rather than merely appear: `/api/icu/stays/`,
+`/api/ot/theatres/`, `/api/ipd/nurse-workspace/summary/`,
+`/api/ipd/nurse-workspace/tasks/` and `/api/referrals/` all answer 200 to the
+demo doctor, having answered 403 to every one of them before. The standing
+guard for this is `test_nav.py::test_every_visible_screen_opens_for_the_role_
+that_sees_it`, which now runs in the container too (log 231) and passes.
+
+Full suite: **129 passed, 8 skipped.**

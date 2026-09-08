@@ -189,7 +189,13 @@ class Command(BaseCommand):
                     email=f"doctor@{slug}.test",
                     actor=hr_manager,
                     role_code="doctor",
-                    scope="department",
+                    # Facility, matching the role's widened ceiling. At
+                    # department scope this consultant could open 6 of the 27
+                    # screens and a receptionist could open 17; the six they
+                    # were refused -- ICU, theatre, blood bank, referrals, the
+                    # nurse workspace and the portal -- are the ones a
+                    # consultant is called to.
+                    scope="facility",
                 )
                 user.set_password(DEMO_PASSWORD)
                 user.save(update_fields=["password"])

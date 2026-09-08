@@ -339,7 +339,25 @@ SYSTEM_ROLES = [
         "code": "doctor",
         "name": "Doctor",
         "description": "Consulting clinician.",
-        "max_scope": Scope.DEPARTMENT,
+        # **Facility, not department.**
+        #
+        # Measured before changing: a doctor could reach 6 of the 27 screens
+        # in the navigation and a *receptionist* could reach 17. Six screens
+        # -- the nurse workspace, ICU, theatre, blood bank, referrals and the
+        # patient portal -- ask for `encounter.read` at facility scope, and
+        # every one of them was refused to the only role qualified to use it.
+        #
+        # A consultant in a Nepali hospital covers the ward, not one
+        # department: they are called to ICU, they order blood, they refer
+        # out. Capping the role at department described an organisation chart
+        # nobody works to.
+        #
+        # This widens *where* the role may be granted, not what it may do. The
+        # permission list below is unchanged, and relationship narrowing still
+        # holds browsing to the doctor's own patients when a customer turns
+        # the privacy switch on -- the two controls are independent, which is
+        # the point of having both.
+        "max_scope": Scope.FACILITY,
         "permissions": [
             "facility.read", "department.read",
             "patient.read", "patient.create", "patient.update",
@@ -352,7 +370,14 @@ SYSTEM_ROLES = [
         "code": "nurse",
         "name": "Nurse",
         "description": "Ward and outpatient nursing.",
-        "max_scope": Scope.DEPARTMENT,
+        # Same ceiling, and for a blunter reason: **a nurse could not open the
+        # nurse workspace.** That screen asks for `encounter.read` at facility
+        # scope, and the nurse role was capped below it, so the one screen
+        # built for this role was the one it could not reach. Five of 27
+        # visible, fewer than any other clinical role.
+        #
+        # A ward spans departments by construction -- that is what a ward is.
+        "max_scope": Scope.FACILITY,
         "permissions": [
             "facility.read", "department.read",
             "patient.read", "patient.update",
