@@ -3042,13 +3042,58 @@ because three modules were already working around its absence.*
 
 ---
 
+# Packaging and local operation `[x]`
+
+*Added 8 September 2026, on the ask: "we need frontend, backend everything, so
+that one click can make system up" and "app build should not make me wait"
+(log 230).*
+
+- [x] `docker compose -f infra/docker-compose.yml up` brings up all seven
+      services — Postgres, Redis, API, Celery worker, Celery scheduler, and
+      both React applications behind nginx. Measured cold, no images, no
+      volumes: 3m26s to all seven healthy
+- [x] First run also migrates, seeds the catalogue, provisions a demo tenant
+      and fills it — nothing else is typed
+- [x] Backend image is multi-stage, non-root, with the dependency layer keyed
+      only on `requirements.txt` and pip's cache in a BuildKit mount
+- [x] **One** web image for both React applications (`ARG APP`) and **one**
+      nginx template for both, expanded by `envsubst`. Two files 95% the same
+      drift, and the half that drifts is whichever nobody rebuilt
+- [x] `/api` is proxied, not called cross-origin, so the container stack sees
+      one origin exactly as the Vite dev proxy does — CORS behaviour is then
+      the same in both rather than production being a special case
+- [x] Hashed assets `immutable` for a year; `index.html` `no-cache`. Correct
+      rather than aggressive, because Vite fingerprints every filename
+- [x] Every dependant waits on `condition: service_healthy`, never a bare
+      `depends_on` — the gap between "container started" and "Postgres accepts
+      connections" is the commonest reason a stack works on the second try
+- [x] `manage.py bootstrap` decides "already done" by asking the database, not
+      by leaving a marker file a volume can outlive
+- [x] Production settings' TLS assumptions behind one flag defaulting to
+      secure. `SECURE_SSL_REDIRECT` alone would answer every URL in a local
+      stack with a 301 to a port nothing listens on
+- [x] `.gitattributes` forces LF on shell scripts, Dockerfiles and templates —
+      a CRLF entrypoint fails as `exec format error`, invisible in a diff
+- [x] Hot-reload override (`infra/docker-compose.dev.yml`): Vite dev server and
+      `runserver` on bind mounts, so in that mode there is no build at all
+- [x] Frontend first load 984 kB → **314 kB** raw, 237 kB → **90 kB** gzipped,
+      via route-level `lazy()` and vendor chunks split by how often each
+      changes. `vite build` 15s → 8.5s (log 229)
+- [x] `@tanstack/react-query` removed — its chunk built to 1 kB because nothing
+      had ever imported it (log 229)
+- [ ] A published image and a deploy target. This is local operation only
+- [ ] TLS in front, and a compose profile that terminates it
+- [ ] Resource limits and a restart policy tuned for anything but a laptop
+
+---
+
 # Testing and CI `[~]`
 
 *Added 5 September 2026. There were no tests at all until then — the seeds
 were the whole verification mechanism, which worked only because somebody
 remembered to run them twice by hand.*
 
-- [x] `pytest` + `pytest-django`, 55 tests, 45 seconds
+- [x] `pytest` + `pytest-django`, 127 tests
 - [x] Every seed run twice, in dependency order, as separate parametrised
       tests — so a failure says whether it never worked or only worked once
 - [x] One invariant test per numbered development-log entry. That is the
@@ -3062,6 +3107,18 @@ remembered to run them twice by hand.*
       and a real build of both frontends
 - [x] `patient/` lockfile generated — `npm ci` would have failed there and its
       builds were never reproducible
+- [x] The seed registry is read from the filesystem, not maintained by hand.
+      `seed_hr_demo` existed, was committed, was in the README, and was in no
+      list — so nothing ran it for months and it raised `NameError` the first
+      time anything did (log 231)
+- [x] The demo estate is built from **empty** by `manage.py bootstrap`, in an
+      order that was measured rather than reasoned about. Until a container
+      did this, every run in the project's life had used a database somebody
+      had already built (log 231)
+- [ ] The suite itself run against a fresh tenant in CI, not only against
+      whatever the runner happens to have. Four tests were passing vacuously
+      because the demo doctor held no role and a user who sees nothing
+      satisfies every assertion about not seeing too much (log 231)
 - [ ] Coverage measurement
 - [ ] A hermetic unit layer for the pure calculations (NEWS2, tax slabs,
       ageing buckets) that needs no database

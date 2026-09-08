@@ -28,9 +28,18 @@
 # *start*, which for Postgres is several seconds before it will accept a
 # connection. That gap is the commonest reason a stack works on the second try.
 
-x-backend-build: &backend-build
-  context: ..
-  dockerfile: backend/Dockerfile
+# **Only `backend` declares `build:`.**
+#
+# The worker and the scheduler run the same image, and when all three declared
+# the same build *and* the same image name, compose built them concurrently and
+# they raced to tag it:
+#
+#     target backend: failed to solve: image "nirova-backend:latest":
+#     already exists
+#
+# on a first `up` with no images -- exactly the run that has to work. So one
+# service builds it and the other two name it. They depend on the backend's
+# healthcheck, so the image is long built by the time their containers start.
 
 # Settings every backend container shares. Anchored rather than repeated, so
 # the worker cannot drift from the API whose code it is supposed to be running
@@ -113,7 +122,9 @@ services:
   # Application
   # -----------------------------------------------------------------------
   backend:
-    build: *backend-build
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: nirova-backend
     container_name: nirova-backend
     environment:
@@ -147,7 +158,7 @@ services:
     restart: unless-stopped
 
   worker:
-    build: *backend-build
+    # No `build:` -- see the note at the top of this file.
     image: nirova-backend
     container_name: nirova-worker
     environment:
@@ -172,7 +183,6 @@ services:
     restart: unless-stopped
 
   scheduler:
-    build: *backend-build
     image: nirova-backend
     container_name: nirova-scheduler
     environment:

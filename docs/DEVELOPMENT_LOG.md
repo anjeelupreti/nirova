@@ -8758,3 +8758,35 @@ with no screen, the payslip with eight wrong field names, and the reporting
 routes nobody had called. *The bugs are in the code nobody has ever executed*,
 and a test fixture that attaches to a database somebody already built is a way
 of never executing it.
+
+## 232 - The one-click path failed on the one run that has to work
+
+Verified log 230 the only honest way -- removed the images *and* the volumes
+and ran `docker compose up` as somebody cloning the repository would:
+
+```
+target backend: failed to solve:
+image "docker.io/library/nirova-backend:latest": already exists
+```
+
+`backend`, `worker` and `scheduler` all declared the same `build:` anchor and
+the same `image:`. Compose built the three concurrently and they raced to tag
+the result. It could not reproduce once any image existed, which is why every
+earlier test of the stack passed: those runs all had the image already.
+
+One service builds it now; the other two name it, and they wait on the
+backend's healthcheck anyway, so the image is long finished before their
+containers start.
+
+**Re-verified from genuinely nothing** -- no images, no volumes:
+
+| | |
+|---|---|
+| all seven services healthy | **3m07s** |
+| `/`, `/queue` on both apps | 200 |
+| `/api/health/` via both proxies and direct | 200 |
+| login through nginx | 200 |
+| `doctor@manakamana.test` GET patients / encounters / prescriptions | **6 / 7 / 4** |
+
+That last row is the one worth keeping. Until log 231 that account was 403 on
+all six clinical endpoints, and had been since the seed was written.
