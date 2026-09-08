@@ -3042,6 +3042,47 @@ because three modules were already working around its absence.*
 
 ---
 
+# Locale and self-service configuration `[~]`
+
+*Added 8 September 2026 (logs 241-244), on the instruction to judge this
+against real practices from a single clinic to a multinational group.*
+
+- [x] `TIME_ZONE` was one global constant, so every timestamp rendered in
+      Kathmandu time. Storage was always UTC, so the data was right and the
+      display was wrong — the more dangerous of the two, because nothing looks
+      broken. Now activated per request from the facility's own zone
+- [x] Four fiscal calendars (Nepal, calendar year, 1 April, 1 July), named by
+      what they are rather than by country. Invoice numbering is gapless per
+      fiscal year, so a January–December branch numbering against Nepal's July
+      boundary reset its sequence mid-year
+- [x] The standard tax rate follows the tenant. A Gulf branch was charging
+      Nepal's 13% and the invoice was arithmetically consistent and wrong
+- [x] Defaults are Nepal throughout — a single clinic configures nothing
+- [x] Built on `ConfigSetting`, so a facility may hold its own value and the
+      group may **lock** one so no branch differs. No migration to every tenant
+      database in the fleet
+- [x] Resolution memoised per request in a `ContextVar` and invalidated on
+      write, because `effective_tax_rate` is a property evaluated once per row
+- [x] `GET/PUT/DELETE /api/org/settings/` — the first endpoint `ConfigSetting`
+      has ever had. The privacy switch was previously unturnable except from a
+      Django shell
+- [x] A declared registry, not a key/value endpoint: an API accepting any
+      namespace and key is permission to write arbitrary configuration rows
+- [x] Validation at the boundary — a misspelled timezone throws nowhere and
+      silently leaves every timestamp in the default zone
+- [x] `SystemSettings` screen, rendered from the server's registry so there is
+      no second copy of the calendars in the frontend
+- [ ] `province`/`district` as the shape of every address. A Gulf facility has
+      an emirate; a UK one has a county
+- [ ] `name_nepali` on `ServiceItem` as *the* second language
+- [ ] NMC registration as *the* clinical credential. Dubai issues a DHA
+      licence, the UK a GMC number
+- [ ] Currency conversion. The setting relabels prices; it converts nothing,
+      and says so before you change it
+- [ ] Per-country invoice layout and statutory fields
+
+---
+
 # Staff administration `[~]`
 
 *Added 8 September 2026 (logs 235, 236). Seven catalogue permissions were

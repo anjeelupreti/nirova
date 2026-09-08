@@ -9280,8 +9280,15 @@ service call. Two consequences, and the second is one I caused two commits ago:
   set. That is the same defect as the staff API in log 235, committed by me,
   a day later.
 
-`config.read` and `config.update` were in the catalogue, held by four roles,
-and checked by nothing. Two more off the unreachable list.
+**A correction to what I wrote in this entry's commit message.** I said
+`config.read` and `config.update` were "checked by nothing". They were not.
+Both were already enforced in five places — `hr/attendance_api.py` twice for
+attendance policy, and as the *write* code on three billing and insurance
+viewsets — which is why they never appeared on the unreachable list I have
+been tracking. The measurement is unchanged at 65 of 76 enforced: this entry
+adds an endpoint for two permissions that already had teeth, not two that had
+none. What was genuinely unreachable was the **settings themselves**, not the
+permissions guarding them.
 
 **GET / PUT / DELETE `/api/org/settings/`.** The read/write split is real
 rather than decorative: an operations manager may see how the system is
