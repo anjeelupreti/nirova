@@ -53,6 +53,14 @@ PROBE = {
 
 def _nav():
     app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.tsx"
+    if not app.exists():
+        # **Skip, do not crash.** This test reads the frontend source, which
+        # sits beside the backend in the repository and *not* inside the
+        # backend container image -- the image ships the backend only, by
+        # design. Letting the FileNotFoundError through made the container
+        # suite report a failure that says nothing about the code, and a red
+        # result nobody can act on is worse than an honest skip.
+        pytest.skip(f"frontend source not present at {app}; nothing to parse")
     text = app.read_text(encoding="utf-8")
     items = []
     for match in re.finditer(r'\{\s*to:\s*"(/[^"]*)"[^}]*\}', text):

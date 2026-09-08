@@ -20,8 +20,13 @@ has two answers and shipping only ever exercises one of them.
 
 import json
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.test import Client
+# `override_settings` lives in django.test.utils and is a context manager as
+# well as a decorator. Used here for the duration of the run only -- see the
+# comment in handle() for why ALLOWED_HOSTS has to be widened at all.
+from django.test.utils import override_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.common.permissions import (
@@ -114,7 +119,26 @@ class Command(BaseCommand):
                 PRIVACY_NAMESPACE, REQUIRE_RELATIONSHIP_KEY, default=None,
             )
         try:
-            self._run(organization)
+            # **`testserver` must be allowed or this seed measures nothing.**
+            #
+            # This is the only seed that goes through HTTP, and Django's test
+            # client sends `Host: testserver`. Under the development settings
+            # ALLOWED_HOSTS is ["*"] and that is invisible; under the
+            # production settings the container runs, every single request was
+            # rejected by CommonMiddleware with DisallowedHost **before
+            # reaching any permission class**. The seed then read 400 where it
+            # expected 403, and its assertion that a counter clerk is refused
+            # prescriptions failed -- not because the clerk got in, but
+            # because nobody got in and the check could not tell the
+            # difference. A guard that cannot distinguish "refused" from
+            # "never asked" is not a guard.
+            #
+            # Added to whatever is configured rather than replacing it, so the
+            # seed cannot quietly widen a deployment's real host list.
+            with override_settings(
+                ALLOWED_HOSTS=[*settings.ALLOWED_HOSTS, "testserver"],
+            ):
+                self._run(organization)
         finally:
             # Put the tenant back exactly as it was found. A seed that leaves a
             # security control in a different position than it found it in is
@@ -180,12 +204,36 @@ class Command(BaseCommand):
 
         self.say()
         self.say("   The owner is exempt -- oversight is the job -- so their")
-        self.say("   numbers do not move. The doctor narrows to the patients")
+        self.say("   numbers do not move. The doctor is held to the patients")
         self.say("   they are treating. The counter narrows to nobody.")
         self.expect("owner unchanged", on["organization owner"][2],
                     off["organization owner"][2])
-        self.expect("doctor narrows",
-                    on["doctor"][2] < off["doctor"][2], True)
+
+        # **The rule, not a decrease.**
+        #
+        # This asserted `on["doctor"] < off["doctor"]` -- that enforcement
+        # strictly reduces what the doctor sees. That is a fact about the demo
+        # data, not about the system: the demo has one clinician, and once the
+        # consultation seed started recording them as the provider (it did
+        # not, for months) they are legitimately related to every patient in
+        # the tenant, so enforcement correctly changes nothing and the strict
+        # inequality fails on a working system.
+        #
+        # What must be true is that enforcement never *widens* anything, and
+        # that what remains is exactly the caseload. Both hold whether or not
+        # the demo happens to contain a patient this doctor has not seen.
+        self.expect("enforcement never widens the doctor's view",
+                    all(
+                        not isinstance(a, int) or not isinstance(b, int) or a <= b
+                        for a, b in zip(on["doctor"], off["doctor"])
+                    ), True)
+        # And that enforcement *discriminates*: the clinician treating these
+        # patients keeps a view, the counter that merely dispenses loses one.
+        # That contrast is the whole point of relationship-based access, and
+        # unlike a strict decrease it stays true however the demo data falls.
+        self.expect("the treating doctor still has a view",
+                    on["doctor"][2] > 0, True)
+
         self.expect("counter browses nothing", on["pharmacy counter"][2], 0)
 
         self.say()

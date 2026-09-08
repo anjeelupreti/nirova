@@ -46,7 +46,7 @@ from apps.emergency.services import (
 )
 from apps.encounters.models import TriageCategory
 from apps.identity.models import User
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.patients.models import Patient
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -73,12 +73,7 @@ class Command(BaseCommand):
         doctor = doctor or consultant
 
         with tenant_context(context_for_organization(organization)):
-            facility = (
-                Facility.objects.filter(facility_type="hospital").first()
-                or Facility.objects.filter(facility_type="clinic").first()
-            )
-            if facility is None:
-                raise CommandError("No facility. Run `seed_demo` first.")
+            facility = demo_facility()
 
             self._close_stale(facility, nurse)
             unknown = self._unidentified(organization, facility, nurse)

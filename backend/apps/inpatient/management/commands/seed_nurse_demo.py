@@ -57,7 +57,7 @@ from apps.inpatient.nursing_services import (
     get_patient_emar,
     record_bedside_round,
 )
-from apps.organization.models import Facility
+from apps.organization.models import Department, Facility
 from apps.patients.models import Patient
 from apps.prescriptions.models import DoseRoute, Frequency, Prescription, PrescriptionLine, PrescriptionLineStatus
 from apps.tenancy.connections import context_for_organization
@@ -166,17 +166,49 @@ class Command(BaseCommand):
 
         today = timezone.localdate()
 
+        # **Who is looking after these patients, and where.**
+        #
+        # These three encounters recorded neither a provider nor a department,
+        # which made them the only inpatient episodes in the tenant that no
+        # scoped user could reach: `related_patient_ids` reads
+        # `provider_uuid`, and department scope reads `department_id`. A ward
+        # round that nobody can open is not a demonstration of anything.
+        #
+        # The consultant is the demo doctor when there is one -- the same
+        # account `seed_hr_demo` onboards -- and the department is the one the
+        # ward belongs to.
+        consultant = (
+            User.objects.filter(email=f"doctor@{organization.slug}.test").first()
+            or nurse_maya
+        )
+        ward_department = getattr(ward, "department", None) or Department.objects.filter(
+            facility=facility,
+        ).first()
+
         def ensure_admission(patient, bed, ref, diag):
             enc, _ = Encounter.objects.get_or_create(
                 reference=f"ENC-{ref}",
                 defaults={
                     "patient": patient,
                     "facility": facility,
+                    "department": ward_department,
+                    "provider_uuid": consultant.uuid,
+                    "provider_name": consultant.full_name,
                     "encounter_type": EncounterType.INPATIENT,
                     "status": EncounterStatus.IN_PROGRESS,
                     "started_at": timezone.now() - timedelta(days=2),
                 },
             )
+            # `get_or_create` guarantees the row, not its contents: a tenant
+            # seeded before this fix has these three encounters already, with
+            # both fields empty, and would keep them for ever.
+            if enc.provider_uuid is None or enc.department_id is None:
+                enc.provider_uuid = enc.provider_uuid or consultant.uuid
+                enc.provider_name = enc.provider_name or consultant.full_name
+                enc.department = enc.department or ward_department
+                enc.save(update_fields=[
+                    "provider_uuid", "provider_name", "department", "updated_at",
+                ])
             adm = Admission.objects.filter(reference=ref).first()
             if not adm:
                 adm = Admission.objects.create(
@@ -343,7 +375,29 @@ class Command(BaseCommand):
                 encounter=adm_septic.encounter,
                 patient=adm_septic.patient,
                 facility=facility,
+                # Named, because a prescription with no prescriber is not a
+                # record of anything -- it cannot be printed, audited, or
+                # scoped, and `related_patient_ids` reads this column. It was
+                # the one row in the whole tenant with the field empty.
+                #
+                # This does not fix the bypass the comment above describes:
+                # the reference is still blank because only
+                # `create_prescription` allocates one, and moving this to the
+                # service means restructuring the lines below to be passed in
+                # up front. Recorded rather than half-done.
+                prescriber_id=consultant.uuid,
+                prescriber_name=consultant.full_name,
             )
+        elif rx.prescriber_id is None:
+            # Reused from a tenant seeded before the line above existed.
+            # `get_or_create` and "reuse whichever exists" both guarantee the
+            # row and not its contents, so without this the empty column
+            # survives every future run.
+            rx.prescriber_id = consultant.uuid
+            rx.prescriber_name = consultant.full_name
+            rx.save(update_fields=[
+                "prescriber_id", "prescriber_name", "updated_at",
+            ])
         line_ceftriaxone, _ = PrescriptionLine.objects.get_or_create(
             prescription=rx,
             generic_name="Ceftriaxone",

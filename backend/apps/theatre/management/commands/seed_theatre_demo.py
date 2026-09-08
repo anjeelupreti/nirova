@@ -24,7 +24,7 @@ from apps.billing.models import ServiceCategory, ServiceItem, TaxTreatment
 from apps.hr.models import Employee, EmployeeStatus
 from apps.hr.services import NotPractising
 from apps.identity.models import User
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.patients.models import Patient
 from apps.pharmacy.models import Batch, Product, StockLocation
 from apps.tenancy.connections import context_for_organization
@@ -97,10 +97,7 @@ class Command(BaseCommand):
             raise CommandError("Run `seed_demo` first.")
 
         with tenant_context(context_for_organization(organization)):
-            facility = (
-                Facility.objects.filter(facility_type="hospital").first()
-                or Facility.objects.filter(facility_type="clinic").first()
-            )
+            facility = demo_facility()
             # Excluding provisional emergency records: an implant registry
             # that reads "Unknown 1 Unidentified" demonstrates nothing.
             patients = list(

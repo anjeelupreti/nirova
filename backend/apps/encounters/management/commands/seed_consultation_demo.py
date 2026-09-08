@@ -62,9 +62,23 @@ class Command(BaseCommand):
         if organization is None:
             raise CommandError(f"No organization '{options['slug']}'.")
 
-        actor = User.objects.filter(
-            email=f"owner@{options['slug']}.test"
-        ).first()
+        # **The consultant, not the owner.**
+        #
+        # This seeded three consultations with the organization owner as the
+        # actor and no `provider_uuid` at all, so four of the tenant's
+        # thirteen encounters recorded nobody as having seen the patient.
+        # That is wrong as a record -- an episode of care with no clinician
+        # is not one -- and it is why the demo doctor's care-relationship set
+        # was three patients instead of six: `related_patient_ids` reads
+        # `Encounter.provider_uuid`, and there was nothing there to read.
+        #
+        # Falls back to the owner so the seed still runs on a tenant that has
+        # no doctor account, rather than refusing.
+        slug = options["slug"]
+        actor = (
+            User.objects.filter(email=f"doctor@{slug}.test").first()
+            or User.objects.filter(email=f"owner@{slug}.test").first()
+        )
 
         with tenant_context(context_for_organization(organization)):
             facility = Facility.objects.filter(facility_type="clinic").first()
@@ -84,6 +98,10 @@ class Command(BaseCommand):
 
         encounter = start_encounter(
             organization, patient, facility, actor=actor,
+            # The actor is the clinician here, so say so on the record.
+            # `start_encounter` takes these and nothing was passing them.
+            provider_uuid=getattr(actor, "uuid", None),
+            provider_name=getattr(actor, "full_name", ""),
             encounter_type=EncounterType.OUTPATIENT,
             chief_complaint="Fever and cough for three days",
         )
@@ -158,6 +176,10 @@ class Command(BaseCommand):
 
         encounter = start_encounter(
             organization, patient, facility, actor=actor,
+            # The actor is the clinician here, so say so on the record.
+            # `start_encounter` takes these and nothing was passing them.
+            provider_uuid=getattr(actor, "uuid", None),
+            provider_name=getattr(actor, "full_name", ""),
             chief_complaint="Sore throat, difficulty swallowing",
         )
 
@@ -217,6 +239,10 @@ class Command(BaseCommand):
 
         encounter = start_encounter(
             organization, patient, facility, actor=actor,
+            # The actor is the clinician here, so say so on the record.
+            # `start_encounter` takes these and nothing was passing them.
+            provider_uuid=getattr(actor, "uuid", None),
+            provider_name=getattr(actor, "full_name", ""),
             chief_complaint="Follow-up, on warfarin for atrial fibrillation",
         )
         record_vitals(encounter, {

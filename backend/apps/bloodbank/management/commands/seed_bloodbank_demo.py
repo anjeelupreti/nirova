@@ -62,7 +62,7 @@ from apps.bloodbank.services import (
     wastage,
 )
 from apps.identity.models import User
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.patients.models import Patient
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -115,7 +115,7 @@ class Command(BaseCommand):
 
     def run(self, organization):
         actor = User.objects.filter(email="owner@manakamana.test").first()
-        facility = Facility.objects.filter(facility_type="hospital").first()
+        facility = demo_facility()
         today = timezone.localdate()
         now = timezone.now()
 

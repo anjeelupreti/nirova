@@ -50,7 +50,7 @@ from apps.hr.services import (
     team_of,
 )
 from apps.identity.models import User
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.rbac.permissions import Scope
 from apps.rbac.services import (
     UserAuthorization,
@@ -85,9 +85,7 @@ class Command(BaseCommand):
         with tenant_context(context_for_organization(organization)):
             seed_system_roles()
 
-            hospital = Facility.objects.filter(facility_type="hospital").first()
-            if hospital is None:
-                raise CommandError("No hospital facility found; run seed_demo first.")
+            hospital = demo_facility()
 
             # Find two nurses and a doctor for the demo
             nurse_a = Employee.objects.filter(

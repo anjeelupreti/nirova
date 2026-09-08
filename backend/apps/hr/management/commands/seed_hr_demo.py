@@ -32,6 +32,7 @@ from apps.hr.models import (
     VerificationStatus,
 )
 from apps.hr.services import (
+    HrError,  # tolerated on a re-run; see the doctor onboarding below
     NotPractising,
     assert_may_practise,
     confirm,
@@ -196,7 +197,21 @@ class Command(BaseCommand):
                     f"   {doctor.full_name} onboarded: login {user.email}, "
                     "seat checked against the plan, doctor role assigned"
                 )
-            except Exception as exc:      # noqa: BLE001 - reported, not swallowed
+            except HrError as exc:
+                # **Narrowed from `except Exception`.**
+                #
+                # The broad version printed a warning and carried on, which is
+                # how a genuine defect survived every run of this seed: the
+                # department-scoped role assignment was refused because
+                # `provision_login` named no department, the warning scrolled
+                # past, and the demo doctor was left holding nothing. A seed
+                # is this project's verification mechanism; one that reports
+                # a failed authorization as a line of yellow text verifies
+                # nothing.
+                #
+                # HrError is still tolerated because it is what a *re-run*
+                # raises -- "already has a login" -- and re-running must be
+                # safe. Anything else now stops the seed.
                 self.stdout.write(self.style.WARNING(
                     f"   login not provisioned: {exc}"
                 ))
@@ -347,12 +362,14 @@ class Command(BaseCommand):
         )
         officer.refresh_from_db()
 
-        self._show_history(officer)
+        history = self._show_history(officer)
         self.stdout.write(
             f"   the old posting survives in the history ({before_department}), "
             "which a mutated row could not have told us"
         )
 
+        # `EmploymentEvent.Meta.ordering` is ["-effective_on", "-created_at"],
+        # so index 0 is the most recent event -- the one `transfer` just filed.
         latest = history[0]
         if latest.event_type != EventType.PROMOTION:
             self.stdout.write(self.style.ERROR(
@@ -361,6 +378,14 @@ class Command(BaseCommand):
             ))
 
     def _show_history(self, employee):
+        """Print the employment record, and hand it back to the caller.
+
+        It returns the list because `_promote` needs to inspect the event
+        `transfer` just filed, and used to read a `history` name that only
+        existed here -- a NameError on every run of this seed. It went
+        unnoticed because `seed_hr_demo` is the one seed `tests/test_seeds.py`
+        does not list, so nothing had executed this branch.
+        """
         history = list(employee.events.all())
         self.stdout.write(
             f"   {employee.full_name} is now {employee.position.title}; "
@@ -371,6 +396,7 @@ class Command(BaseCommand):
                 f"     {event.effective_on} "
                 f"{event.get_event_type_display().lower():<24} {event.summary}"
             )
+        return history
 
     def _contracts(self, people, hr_manager):
         self.stdout.write(self.style.MIGRATE_HEADING("\n6. Terms"))

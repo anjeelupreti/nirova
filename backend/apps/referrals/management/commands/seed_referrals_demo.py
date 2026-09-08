@@ -14,7 +14,8 @@ from django.utils import timezone
 
 from apps.encounters.models import Encounter
 from apps.identity.models import User
-from apps.organization.models import Department, Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
+from apps.organization.models import Department
 from apps.patients.models import Patient
 from apps.referrals.models import (
     DECLINE_REASONS,
@@ -92,8 +93,11 @@ class Command(BaseCommand):
     def run(self, organization):
         today = timezone.localdate()
         now = timezone.now()
-        hospital = Facility.objects.filter(facility_type="hospital").first()
-        clinic = Facility.objects.filter(facility_type="clinic").first() or hospital
+        # Two ends of a referral, and they must not be the same building --
+        # `demo_facility(exclude=...)` returns a different facility when the
+        # tenant has one and falls back to the same when it does not.
+        hospital = demo_facility()
+        clinic = demo_facility(exclude=hospital)
         gp = Person("Dr Prakash Adhikari")
         specialist = Person("Dr Sunita Karki")
         clerk = Person("Manisha Shrestha")

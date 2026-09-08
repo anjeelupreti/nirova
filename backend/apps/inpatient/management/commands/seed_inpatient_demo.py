@@ -56,7 +56,7 @@ from apps.inpatient.services import (
     transfer_bed,
     ward_occupancy,
 )
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.patients.models import Patient
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -96,12 +96,7 @@ class Command(BaseCommand):
             raise CommandError("Run `seed_demo` first.")
 
         with tenant_context(context_for_organization(organization)):
-            facility = (
-                Facility.objects.filter(facility_type="hospital").first()
-                or Facility.objects.filter(facility_type="clinic").first()
-            )
-            if facility is None:
-                raise CommandError("No facility. Run `seed_demo` first.")
+            facility = demo_facility()
 
             patients = list(
                 Patient.objects.filter(merged_into__isnull=True)[:3]

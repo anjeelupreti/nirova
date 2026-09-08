@@ -485,11 +485,36 @@ def provision_login(
     if role_code:
         # Imported here for the same reason: rbac is a tenant app but the
         # assignment needs the user object, which is not.
+        from apps.rbac.permissions import Scope
         from apps.rbac.services import assign_role
 
+        # **Every narrow scope must name where it applies, not just FACILITY.**
+        #
+        # This read `facility=employee.facility if scope == "facility"`, so a
+        # `department`-scoped onboarding named neither a facility nor a
+        # department and `assign_role` refused it -- correctly, since a scope
+        # that names nothing reaches nothing. `seed_hr_demo` onboards the demo
+        # consultant at department scope and caught that refusal in an
+        # `except Exception` that printed a warning, so on every run since,
+        # the demo doctor has been left holding nothing but the generic
+        # `staff` role. `seed_access_demo` then measured a "doctor" who was
+        # 403 on all six clinical endpoints and reported it as narrowing.
+        #
+        # The employee record already knows both answers. Use them.
+        narrow_scopes = {
+            Scope.UNIT, Scope.DEPARTMENT, Scope.FACILITY, Scope.MULTI_FACILITY,
+        }
         assign_role(
             user, role_code, scope=scope,
-            facility=employee.facility if scope == "facility" else None,
+            facility=employee.facility if scope in narrow_scopes else None,
+            # Only for the scopes that are *about* a department. Handing one to
+            # a FACILITY-scoped assignment would narrow it below what was
+            # asked for -- the opposite failure, and a quieter one.
+            department=(
+                employee.department
+                if scope in {Scope.UNIT, Scope.DEPARTMENT}
+                else None
+            ),
             assigned_by=actor,
             reason=f"Onboarding {employee.employee_code}",
         )

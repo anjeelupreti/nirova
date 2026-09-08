@@ -1860,48 +1860,66 @@ def test_browsing_never_reaches_a_patient_you_have_no_relationship_with(tenant):
     }
     terms = ["un", "ra", "sh", "MRN", "ka", "de", "ma", "sa"]
 
-    checked, leaked = 0, []
-    for email in ("doctor@manakamana.test", "counter@manakamana.test",
-                  "pharmacy@manakamana.test", "manager@manakamana.test"):
-        user = User.objects.filter(email=email).first()
-        client = _report_client(email, tenant)
-        if user is None or client is None:
-            continue
-        membership = Membership.objects.filter(
-            user=user, organization__slug=tenant.slug,
-        ).first()
-        if membership is None:
-            continue
-        allowed = related_patient_ids(
-            user.uuid, resolve_authorization(user, membership),
-        )
-        # `None` means no restriction -- an owner or an organization-scoped
-        # role -- and is not the same answer as an empty set. Nothing to prove
-        # about somebody who is allowed everything.
-        if allowed is None:
-            continue
-
-        for term in terms:
-            response = client.get("/api/search/", {"q": term})
-            assert response.status_code == 200, (
-                f"{email} q={term!r} -> {response.status_code}"
+    # **The switch has to be on for this to mean anything.**
+    #
+    # Relationship narrowing is off by default: `narrow_to_related_patients`
+    # returns the queryset untouched when `relationship_required()` is
+    # False. Without setting it, this asserts a rule the product is
+    # deliberately not applying, and whether it passes depends on how the
+    # demo data happens to fall. It did pass for months -- because the demo
+    # doctor held no role at all and so contributed no hits, and `checked >
+    # 0` was satisfied entirely by the other three accounts. The moment that
+    # onboarding was fixed, the same unchanged test failed on thirty
+    # perfectly legitimate rows.
+    _privacy_switch(True)
+    try:
+        checked, leaked = 0, []
+        for email in ("doctor@manakamana.test", "counter@manakamana.test",
+                      "pharmacy@manakamana.test", "manager@manakamana.test"):
+            user = User.objects.filter(email=email).first()
+            client = _report_client(email, tenant)
+            if user is None or client is None:
+                continue
+            membership = Membership.objects.filter(
+                user=user, organization__slug=tenant.slug,
+            ).first()
+            if membership is None:
+                continue
+            allowed = related_patient_ids(
+                user.uuid, resolve_authorization(user, membership),
             )
-            for group in json.loads(response.content.decode())["groups"]:
-                if group["type"] not in models_by_type:
-                    continue
-                module_name, model_name = models_by_type[group["type"]]
-                module = __import__(module_name, fromlist=[model_name])
-                model = getattr(module, model_name)
-                for hit in group["results"]:
-                    if hit.get("by_reference"):
+            # `None` means no restriction -- an owner or an organization-scoped
+            # role -- and is not the same answer as an empty set. Nothing to prove
+            # about somebody who is allowed everything.
+            if allowed is None:
+                continue
+
+            for term in terms:
+                response = client.get("/api/search/", {"q": term})
+                assert response.status_code == 200, (
+                    f"{email} q={term!r} -> {response.status_code}"
+                )
+                for group in json.loads(response.content.decode())["groups"]:
+                    if group["type"] not in models_by_type:
                         continue
-                    checked += 1
-                    row = model.objects.get(uuid=hit["uuid"])
-                    if row.patient_id not in allowed:
-                        leaked.append(
-                            f"{email} q={term!r} {group['type']} "
-                            f"{hit['label']}"
-                        )
+                    module_name, model_name = models_by_type[group["type"]]
+                    module = __import__(module_name, fromlist=[model_name])
+                    model = getattr(module, model_name)
+                    for hit in group["results"]:
+                        if hit.get("by_reference"):
+                            continue
+                        checked += 1
+                        row = model.objects.get(uuid=hit["uuid"])
+                        if row.patient_id not in allowed:
+                            leaked.append(
+                                f"{email} q={term!r} {group['type']} "
+                                f"{hit['label']}"
+                            )
+    finally:
+        # Back to the shipping default whatever was found. A test that
+        # leaves a security control in a different position than it found
+        # it in is worse than one that fails.
+        _privacy_switch(None)
 
     assert not leaked, "\n".join(leaked)
     assert checked > 0, "no clinical hits were examined, so nothing was proved"
@@ -2359,6 +2377,36 @@ def test_the_workspace_only_lists_what_you_can_act_on(tenant):
             assert group["items"]
 
 
+
+def _manufacture_pending(code):
+    """One pending row for a source the demo data never produces.
+
+    Returns `None` for anything not listed, so a new source added to the
+    registry fails the test loudly rather than being silently skipped.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    if code == "break_glass":
+        from apps.patients.models import Patient
+        from apps.rbac.models import BreakGlassGrant
+
+        patient = Patient.objects.first()
+        if patient is None:
+            return None
+        return BreakGlassGrant.objects.create(
+            patient_uuid=patient.uuid,
+            patient_label=patient.full_name,
+            user_id=patient.uuid,       # any uuid; only the label is rendered
+            user_label="Dr Test Reviewer",
+            reason="Unconscious patient in resus, no notes available.",
+            granted_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(hours=4),
+        )
+    return None
+
+
 def test_every_workspace_source_can_format_a_real_row(tenant):
     """Four of the eight have no pending rows in demo data.
 
@@ -2369,6 +2417,7 @@ def test_every_workspace_source_can_format_a_real_row(tenant):
     from django.db import IntegrityError
 
     from apps.tenancy.db import tenant_atomic
+    from apps.workspace.sources import all_sources
 
     client = _report_client("owner@manakamana.test", tenant)
     if client is None:
@@ -2378,12 +2427,31 @@ def test_every_workspace_source_can_format_a_real_row(tenant):
         body = json.loads(client.get("/api/me/workspace/").content.decode())
         return {group["type"]: group for group in body["approvals"]}
 
+    # All eight, not the three that used to be listed.
+    #
+    # The old list covered leave, purchase orders and payroll runs, and the
+    # threshold below was met because a developer's long-lived database
+    # happened to have pending rows for three more. A fresh tenant has pending
+    # rows for exactly **one** source, so on the first container run this
+    # proved four and failed -- correctly, because the formatting of
+    # `break_glass`, `facility_changes`, `shift_swaps` and `tills` had still
+    # never executed. That is the trap this test was written for, so the fix
+    # is to cover them, not to lower the bar.
     plans = [
         ("leave", "apps.hr.models", "LeaveRequest", "status", "pending"),
         ("purchase_orders", "apps.procurement.models", "PurchaseOrder",
          "status", "pending_approval"),
         ("payroll_runs", "apps.payroll.models", "PayrollRun",
          "status", "pending_approval"),
+        ("shift_swaps", "apps.hr.models", "ShiftSwapRequest",
+         "status", "pending_manager"),
+        ("tills", "apps.pos.models", "CounterSession", "status", "closed"),
+        ("facility_changes", "apps.provisioning.models",
+         "FacilityChangeRequest", "status", "org_review"),
+        # The only one keyed on a timestamp rather than a status: the queue is
+        # "not yet reviewed", so `None` is the pending value.
+        ("break_glass", "apps.rbac.models", "BreakGlassGrant",
+         "reviewed_at", None),
     ]
 
     proved = set(groups())
@@ -2413,6 +2481,27 @@ def test_every_workspace_source_can_format_a_real_row(tenant):
             row = candidate
             break
         if row is None:
+            # **No row to borrow, so make one.**
+            #
+            # `break_glass` has no grants at all in a fresh tenant -- emergency
+            # access is, correctly, not something a demo seed performs -- so
+            # flipping an existing row cannot reach it, and its formatter had
+            # never executed once. Manufacturing one here is the only way to
+            # run that code, and it is deleted again below whatever happens.
+            row = _manufacture_pending(code)
+            if row is None:
+                continue
+            try:
+                found = groups()
+                assert code in found, (
+                    f"{code}: a manufactured row did not appear"
+                )
+                assert found[code]["items"][0]["title"], (
+                    f"{code} produced an item with no title"
+                )
+                proved.add(code)
+            finally:
+                row.delete()
             continue
         try:
             found = groups()
@@ -2427,7 +2516,11 @@ def test_every_workspace_source_can_format_a_real_row(tenant):
             setattr(back, field, was)
             back.save(update_fields=[field])
 
-    assert len(proved) >= 6, f"only {len(proved)} sources formatted a row"
+    assert len(proved) >= 8, (
+        f"only {len(proved)} of 8 sources formatted a row: "
+        f"{sorted({source.code for source in all_sources()} - proved)} "
+        "never ran"
+    )
 
 
 # ---------------------------------------------------------------------------

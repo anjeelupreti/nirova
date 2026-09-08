@@ -64,7 +64,7 @@ from apps.inpatient.models import (
     WardType,
 )
 from apps.inpatient.services import admit, available_beds, transfer_bed
-from apps.organization.models import Facility
+from apps.organization.demo import demo_facility  # picks the demo estate's facility
 from apps.patients.models import Patient
 from apps.tenancy.connections import context_for_organization
 from apps.tenancy.context import tenant_context
@@ -102,7 +102,7 @@ class Command(BaseCommand):
     def run(self, organization):
         now = timezone.now()
         actor = User.objects.filter(email__endswith="@manakamana.test").first()
-        facility = Facility.objects.filter(facility_type="hospital").first()
+        facility = demo_facility()
 
         self.step(1, "The unit")
         ward = Ward.objects.filter(
