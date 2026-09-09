@@ -75,6 +75,21 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDModel, TimeStampedModel):
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     last_active_at = models.DateTimeField(null=True, blank=True)
 
+    #: How this person likes the interface: theme, density, the landing
+    #: screen, which notifications they want.
+    #:
+    #: A JSON blob rather than columns, deliberately. These are **client**
+    #: preferences: nothing on the server branches on them, they change
+    #: whenever the interface gains an option, and a migration per checkbox
+    #: across every deployment is a poor trade for a value that only the
+    #: browser reads. Anything the server *acts* on -- `locale`, `timezone`,
+    #: whether they may sign in -- is a real column above and stays one.
+    #:
+    #: Validated against a declared set on the way in
+    #: (`apps/identity/preferences.py`), so this is not a place to write
+    #: arbitrary keys.
+    preferences = models.JSONField(default=dict, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = "email"

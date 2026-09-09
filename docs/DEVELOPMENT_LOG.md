@@ -9656,3 +9656,70 @@ the file as a note on why it is now counted.
 Type check clean. **Nothing is applied yet**, which makes this a library nobody
 uses — the exact criticism this log has made of other people's code four times
 this week. The next commit applies it.
+
+## 250 - Nobody could change their own password
+
+Working through the UI critique turned up something that is not a UI problem
+at all. A person could sign in to this system and **could not change their own
+name, their phone number, or their password**. `update_user` existed and was
+reachable only through the staff-administration API — which is somebody *else*
+editing you and needs `user.update` — so a doctor who married and changed
+their surname had to raise a ticket, and anybody who suspected their password
+was known had no way to change it.
+
+`GET/PATCH /api/auth/me/`, `PATCH /api/auth/me/preferences/`,
+`POST /api/auth/me/password/`.
+
+**Authenticated and nothing else, deliberately.** There is no permission code
+here and there should not be: requiring `user.update` to edit your own name
+would mean the authority to edit *colleagues* is the one that lets you edit
+yourself, and most people hold neither. The subject and the object are the
+same person; that is the authorisation.
+
+**Two refusals carry the security, and both are tested.**
+
+*The current password is required to set a new one.* Without it, a session
+left open on a ward computer is a permanent account takeover — anybody walking
+past sets a new password and locks the owner out. Requiring the old one means
+possession of the session is not enough.
+
+*An email address cannot be changed here.* It is the login identifier, so
+changing it is an account-recovery matter needing a verified round trip to the
+new address, and nothing in this system can send mail (§93). Refused loudly
+rather than dropped silently, because a PATCH that accepted the field and
+ignored it would leave somebody believing their login had changed.
+
+The response to a password change also **says what it does not do**: tokens
+already issued stay valid until they expire, because they are signed rather
+than looked up. Somebody changing their password because they fear they are
+compromised deserves to be told that rather than to assume otherwise.
+
+**Preferences are a declared registry**, the same argument as
+`settings_registry`: theme, density, landing screen, reduced motion, and two
+notification opt-ins. Merged rather than replaced on write, so an old browser
+tab saving after a release cannot erase the preferences it was never taught
+about. Stored as JSON on `User` because **nothing on the server branches on
+them** — `locale` and `timezone` stay real columns precisely because the
+server formats dates with them. The catalogue travels with the values so the
+screen renders labels and choices without a second copy in the frontend.
+
+14 tests. Both guards proved by reintroducing their defects — removing the
+current-password check fails the password test, allowing `email` through the
+serializer fails the login-identifier test.
+
+**One thing worth recording about the second proof.** The restore step of that
+experiment was cut off by the environment, and the email guard was left
+*removed* in the working tree. It was caught by checking rather than assuming,
+and restored before anything was committed — but a reintroduce-the-defect
+exercise that does not verify the restore is a way to ship the defect. The
+check is now part of the exercise, not the end of it.
+
+Fast suite: **146 passed, 9 skipped.**
+
+**An environment note, because it cost an hour.** Long runs were being killed
+partway, and each killed run left an orphaned Python process holding database
+connections. Eight had accumulated; the suite appeared to hang at a specific
+test, which passed in 1.4s when run alone. Killing the orphans fixed it
+entirely. The same failure appeared earlier in this project's history and is
+worth recognising on sight: *a suite that stops at the same test but passes
+that test alone is not a broken test.*
