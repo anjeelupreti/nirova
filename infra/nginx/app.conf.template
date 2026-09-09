@@ -28,7 +28,23 @@ server {
     # same in both, instead of production being a special case that only
     # reveals its problems on deploy.
     location /api/ {
-        proxy_pass http://${API_UPSTREAM};
+        # **Resolved per request, not once at startup.**
+        #
+        # `proxy_pass http://backend:8000` looks obvious and resolves that name
+        # exactly once, when nginx loads. Redeploy the backend -- which gives
+        # the container a new IP -- and every request 502s until nginx is also
+        # restarted. Found the hard way: the API answered 200 on :8000 and the
+        # same request through this proxy answered 502, with both containers
+        # reporting healthy.
+        #
+        # A variable in `proxy_pass` forces nginx to resolve on each request,
+        # using Docker's embedded DNS at 127.0.0.11. `$request_uri` has to be
+        # appended explicitly, because a `proxy_pass` with a variable no longer
+        # passes the original URI for you -- and without it every path would
+        # collapse to "/".
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $api_upstream http://${API_UPSTREAM};
+        proxy_pass $api_upstream$request_uri;
         proxy_http_version 1.1;
 
         proxy_set_header Host              $host;
@@ -48,7 +64,9 @@ server {
 
     # The Django admin and DRF's browsable API, for the same reason.
     location ~ ^/(admin|static|media)/ {
-        proxy_pass http://${API_UPSTREAM};
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $admin_upstream http://${API_UPSTREAM};
+        proxy_pass $admin_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;

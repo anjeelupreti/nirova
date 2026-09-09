@@ -9493,3 +9493,46 @@ refusal, and `recheck_tenants` afterwards reports `ready, unchanged`. Before
 the fix, the same experiment marked the tenant failed.
 
 Whole suite: **172 passed, 9 skipped.**
+
+## 247 - A backend deploy took the whole interface down
+
+Restoring the stack after the incident above, the frontend answered **502** on
+every API call while both containers reported healthy:
+
+```
+direct  http://localhost:8000/api/health/  ->  200
+through http://localhost:5173/api/health/  ->  502
+```
+
+The API was fine. nginx could not reach it.
+
+**`proxy_pass http://backend:8000` resolves that name exactly once, when nginx
+loads.** The backend container had been recreated and had a new address on the
+compose network; nginx was still holding the old one and would have held it
+until somebody restarted nginx too.
+
+That is not a development annoyance. In any real deployment the backend is
+redeployed far more often than the web tier, and each time it is, **the entire
+interface 502s until somebody notices and restarts a container that is not the
+one that changed.** Health checks do not catch it: both containers are healthy,
+because each is.
+
+The fix is a variable in `proxy_pass`, which forces nginx to resolve per
+request, pointed at Docker's embedded DNS:
+
+```nginx
+resolver 127.0.0.11 valid=10s ipv6=off;
+set $api_upstream http://${API_UPSTREAM};
+proxy_pass $api_upstream$request_uri;
+```
+
+`$request_uri` has to be appended explicitly. A `proxy_pass` with a variable
+stops passing the original URI for you, and without it every path collapses to
+`/` — which would have been a worse bug than the one being fixed, and is the
+sort of thing that only shows up on the second page you open.
+
+**Proved by doing the thing that broke it**: `up -d --force-recreate backend`,
+then the same request through nginx. 502 before, **200 after**.
+
+Both proxy blocks changed — the `/api/` one and the `(admin|static|media)` one,
+which had the same defect and would have been found later and separately.
