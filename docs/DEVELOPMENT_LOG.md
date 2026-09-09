@@ -9536,3 +9536,59 @@ then the same request through nginx. 502 before, **200 after**.
 
 Both proxy blocks changed — the `/api/` one and the `(admin|static|media)` one,
 which had the same defect and would have been found later and separately.
+
+## 248 - A pharmacy could not move a box from the store to the counter
+
+`MovementType.TRANSFER_OUT` and `TRANSFER_IN` have been in the model since the
+pharmacy app was written and **nothing had ever created one**. No service, no
+endpoint, no way through the product to do a thing every hospital pharmacy
+does several times a day. The demo tenant even has the shape — a `Main store`
+and a `Dispensary counter` at the same facility — with no way to move anything
+between them.
+
+**Two steps, not one, and that is the whole design.**
+
+A transfer could be written as a pair of movements posted together, and for a
+store handing a box to the counter next door it would even be right. It is
+wrong the moment the two locations are in different buildings: stock that left
+this morning and arrives this afternoon would appear at the destination while
+it is still in a van, **and the destination could dispense it**. That is the
+kind of wrong that passes a happy-path test.
+
+So the goods leave on dispatch and arrive on receipt, and between those two
+moments the transfer record is where they are. There is deliberately **no
+`BatchStock` row for stock in transit**: it is at neither location, and
+inventing a third one would make every stock query have to know about it.
+
+**What arrives is not always what was sent.** `quantity_sent` and
+`quantity_received` are separate fields on the line, so "we sent 100 and 98
+arrived" is a fact the system holds rather than a discrepancy somebody
+remembers and adjusts away. Only what arrived is posted as `TRANSFER_IN`; the
+shortfall stays on the line and surfaces on the transfer. Receiving *more*
+than was sent is refused — that is a counting error at one end or the other,
+and accepting it would create stock out of nothing.
+
+**Cancelling is not an undo.** The stock really did leave, so calling a
+consignment back is its own `TRANSFER_IN` to the source and both movements
+remain on the ledger. Erasing the dispatch would make the ledger disagree with
+what the storekeeper remembers happening.
+
+**Segregation of duties is deliberately not enforced between the two ends.**
+In a two-person pharmacy the same person walks the box across and signs for
+it, and a rule making that impossible would be worked around by not recording
+transfers at all — which is worse than the risk it was guarding. Who did each
+half is recorded, which is what lets somebody ask the question later. Stated
+in the service so it reads as a decision rather than an omission.
+
+**Proved by reintroducing the defect.** Crediting the destination on dispatch
+— the atomic version — fails exactly the three tests written against it:
+the in-transit test, the shortfall test, and the cancellation ledger test.
+Seven tests in all.
+
+Suite: **179 passed, 9 skipped.**
+
+**Not yet built, and named so it is not mistaken for done:** there is no
+endpoint and no screen. The service is reachable from `manage.py shell` only,
+which is precisely the criticism this log has made of other people's code
+three times this week. `stock.transfer` stays on the unreachable-permissions
+list until it has a route.

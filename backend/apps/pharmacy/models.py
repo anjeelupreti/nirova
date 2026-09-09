@@ -816,3 +816,150 @@ class StockCountLine(BaseModel):
     def has_variance(self) -> bool:
         variance = self.variance
         return variance is not None and variance != ZERO
+
+
+# ---------------------------------------------------------------------------
+# Moving stock between locations
+# ---------------------------------------------------------------------------
+
+
+class TransferStatus(models.TextChoices):
+    """Where a consignment has got to.
+
+    There is no "in transit" value because that is what `DISPATCHED` means:
+    the stock has left the source and has not arrived. Naming it twice would
+    invite somebody to set one and read the other.
+    """
+
+    DISPATCHED = "dispatched", "Sent, not yet received"
+    RECEIVED = "received", "Received"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class StockTransfer(BaseModel):
+    """Stock moving from one location to another.
+
+    **Two steps, not one, and that is the whole point of the model.** A
+    transfer could be written as a pair of movements posted together, and for
+    a main store handing a box to the dispensary next door that would even be
+    right. It is wrong the moment the two locations are in different
+    buildings: stock that left this morning and arrives this afternoon would
+    appear at the destination while it is still in a van, and the destination
+    could dispense it.
+
+    So the goods leave on dispatch and arrive on receipt, and **between those
+    two moments this record is where they are**. There is deliberately no
+    `BatchStock` row for stock in transit: it is not at either location, and
+    inventing a third one would make every stock query have to know about it.
+
+    The other reason for two steps is the one every storekeeper will recognise
+    without being told: what arrives is not always what was sent. `quantity_
+    sent` and `quantity_received` are separate fields on the line so that
+    "we sent 100 and 98 arrived" is a fact the system can hold, rather than a
+    discrepancy somebody has to remember and adjust away.
+    """
+
+    reference = models.CharField(max_length=32, unique=True, db_index=True)
+
+    source = models.ForeignKey(
+        StockLocation,
+        on_delete=models.PROTECT,
+        related_name="transfers_out",
+    )
+    destination = models.ForeignKey(
+        StockLocation,
+        on_delete=models.PROTECT,
+        related_name="transfers_in",
+    )
+
+    status = models.CharField(
+        max_length=16,
+        choices=TransferStatus.choices,
+        default=TransferStatus.DISPATCHED,
+        db_index=True,
+    )
+
+    dispatched_by_id = models.UUIDField(null=True, blank=True)
+    dispatched_at = models.DateTimeField(default=timezone.now, db_index=True)
+    #: Who signed for it at the other end. Not the same person as the
+    #: dispatcher in any well-run store, which is why it is a separate field
+    #: rather than an audit entry.
+    received_by_id = models.UUIDField(null=True, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.CharField(max_length=512, blank=True)
+
+    notes = models.CharField(max_length=512, blank=True)
+
+    class Meta:
+        ordering = ["-dispatched_at"]
+        indexes = [
+            models.Index(fields=["status", "-dispatched_at"]),
+            models.Index(fields=["destination", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reference}: {self.source.code} -> {self.destination.code}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.status == TransferStatus.DISPATCHED
+
+    @property
+    def has_discrepancy(self) -> bool:
+        """Did anything go missing between the two ends?
+
+        Only meaningful once received; a dispatched transfer has received
+        nothing yet, and reporting that as a shortfall would flag every
+        consignment in transit.
+        """
+        if self.status != TransferStatus.RECEIVED:
+            return False
+        return any(line.shortfall != ZERO for line in self.lines.all())
+
+
+class StockTransferLine(BaseModel):
+    """One batch on a consignment.
+
+    Per batch rather than per product, because expiry follows the batch and a
+    transfer that lost track of which batch moved would break FEFO at the
+    destination.
+    """
+
+    transfer = models.ForeignKey(
+        StockTransfer, on_delete=models.CASCADE, related_name="lines"
+    )
+    batch = models.ForeignKey(
+        Batch, on_delete=models.PROTECT, related_name="transfer_lines"
+    )
+
+    quantity_sent = models.DecimalField(max_digits=12, decimal_places=3)
+    #: Null until somebody receives it. Null and zero are different answers:
+    #: zero means the whole consignment was lost, null means nobody has
+    #: looked yet.
+    quantity_received = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True
+    )
+
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transfer", "batch"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="transfer_batch_once",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.batch.batch_number} x {self.quantity_sent}"
+
+    @property
+    def shortfall(self):
+        """How much did not arrive. Zero until received, never negative."""
+        if self.quantity_received is None:
+            return ZERO
+        return self.quantity_sent - self.quantity_received

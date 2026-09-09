@@ -32,6 +32,9 @@ from apps.pharmacy.models import (
     StockCountStatus,
     StockEntry,
     StockLocation,
+    StockTransfer,
+    StockTransferLine,
+    TransferStatus,
     expiry_bucket,
 )
 # assert_different_actors: a stock adjustment is the classic route for
@@ -974,3 +977,250 @@ def approve_count(count: StockCount, actor=None, notes: str = "") -> dict:
         metadata={"adjustments": len(adjustments)},
     )
     return {"reference": count.reference, "adjustments": adjustments}
+
+
+# ---------------------------------------------------------------------------
+# Moving stock between locations
+# ---------------------------------------------------------------------------
+
+
+def generate_transfer_reference() -> str:
+    year = timezone.now().year
+    stem = f"TRF-{year}-"
+    last = (
+        StockTransfer.all_objects.filter(reference__startswith=stem)
+        .order_by("-reference")
+        .values_list("reference", flat=True)
+        .first()
+    )
+    sequence = int(last.rsplit("-", 1)[1]) + 1 if last else 1
+    return f"{stem}{sequence:06d}"
+
+
+@tenant_atomic_method
+def dispatch_transfer(
+    source: StockLocation,
+    destination: StockLocation,
+    items: list,
+    actor=None,
+    notes: str = "",
+) -> StockTransfer:
+    """Send stock from one location to another.
+
+    `items` is `[{"batch": Batch, "quantity": Decimal|str, "note": str}]`.
+
+    **The stock leaves now.** A `TRANSFER_OUT` movement is posted against the
+    source for every line, which means `post_movement` does the work that
+    matters: it locks the balance row, refuses to send more than is there, and
+    writes the ledger entry. Nothing arrives at the destination until somebody
+    receives it -- see `receive_transfer`.
+
+    One transaction for the whole consignment. A transfer that sent three of
+    its five lines and then failed would leave stock nowhere: gone from the
+    source, never dispatched, and invisible at both ends.
+    """
+    if source.pk == destination.pk:
+        raise PharmacyError(
+            "A transfer needs two different locations. To correct a balance "
+            "in place, use a stock adjustment."
+        )
+    if not items:
+        raise PharmacyError("A transfer needs at least one batch.")
+
+    transfer = StockTransfer.objects.create(
+        reference=generate_transfer_reference(),
+        source=source,
+        destination=destination,
+        status=TransferStatus.DISPATCHED,
+        dispatched_by_id=getattr(actor, "uuid", None),
+        notes=notes,
+    )
+
+    for item in items:
+        batch = item["batch"]
+        quantity = quantise(item["quantity"])
+        if quantity <= ZERO:
+            raise PharmacyError(
+                f"{batch.batch_number}: a transfer line must be a positive "
+                "quantity."
+            )
+
+        # Raises InsufficientStock when the source cannot cover it, which
+        # rolls the whole consignment back. That is the behaviour we want: a
+        # storekeeper told "you do not have 40 of this" should re-count and
+        # re-send, not discover later that four lines of five went.
+        post_movement(
+            batch=batch,
+            location=source,
+            movement_type=MovementType.TRANSFER_OUT,
+            quantity=quantity,
+            actor=actor,
+            reason=f"Transfer {transfer.reference} to {destination.code}",
+            reference_type="pharmacy.StockTransfer",
+            reference_id=transfer.uuid,
+        )
+        StockTransferLine.objects.create(
+            transfer=transfer,
+            batch=batch,
+            quantity_sent=quantity,
+            note=item.get("note", ""),
+        )
+
+    record(
+        AuditAction.CREATE,
+        entity_type="pharmacy.StockTransfer",
+        entity_id=transfer.uuid,
+        entity_label=(
+            f"{transfer.reference}: {source.code} -> {destination.code}"
+        ),
+        metadata={"lines": len(items)},
+    )
+    return transfer
+
+
+@tenant_atomic_method
+def receive_transfer(
+    transfer: StockTransfer,
+    received: dict | None = None,
+    actor=None,
+) -> StockTransfer:
+    """Sign for a consignment at the destination.
+
+    `received` maps a line uuid to the quantity that actually arrived.
+    Anything not named is taken to have arrived in full, because the common
+    case is that it did, and making somebody retype five unchanged numbers is
+    how a system teaches people to click through it.
+
+    **A shortfall is recorded, not corrected.** Only what arrived is posted as
+    `TRANSFER_IN`; the difference stays on the line as `shortfall` and shows
+    on the transfer. Writing the full quantity in and adjusting it down
+    afterwards would produce a tidy ledger describing something that did not
+    happen.
+
+    Segregation of duties is *not* enforced here, deliberately. In a
+    two-person pharmacy the same person walks the box across and signs for it,
+    and a rule making that impossible would be worked around by not recording
+    transfers at all. Who did each half is recorded, which is what lets
+    somebody ask the question later.
+    """
+    if transfer.status != TransferStatus.DISPATCHED:
+        raise PharmacyError(
+            f"{transfer.reference} is {transfer.get_status_display().lower()}; "
+            "only a dispatched transfer can be received."
+        )
+
+    received = received or {}
+    for line in transfer.lines.select_related("batch"):
+        arrived = quantise(received.get(str(line.uuid), line.quantity_sent))
+
+        if arrived < ZERO:
+            raise PharmacyError(
+                f"{line.batch.batch_number}: a negative quantity cannot arrive."
+            )
+        if arrived > line.quantity_sent:
+            # More than was sent is not a happy surprise, it is a counting
+            # error at one end or the other, and accepting it would create
+            # stock out of nothing.
+            raise PharmacyError(
+                f"{line.batch.batch_number}: {arrived} received but only "
+                f"{line.quantity_sent} was sent. Re-count before signing."
+            )
+
+        if arrived > ZERO:
+            post_movement(
+                batch=line.batch,
+                location=transfer.destination,
+                movement_type=MovementType.TRANSFER_IN,
+                quantity=arrived,
+                actor=actor,
+                reason=(
+                    f"Transfer {transfer.reference} from {transfer.source.code}"
+                ),
+                reference_type="pharmacy.StockTransfer",
+                reference_id=transfer.uuid,
+            )
+
+        line.quantity_received = arrived
+        line.save(update_fields=["quantity_received", "updated_at"])
+
+    transfer.status = TransferStatus.RECEIVED
+    transfer.received_by_id = getattr(actor, "uuid", None)
+    transfer.received_at = timezone.now()
+    transfer.save(
+        update_fields=["status", "received_by_id", "received_at", "updated_at"]
+    )
+
+    shortfalls = [
+        line
+        for line in transfer.lines.select_related("batch")
+        if line.shortfall != ZERO
+    ]
+    record(
+        AuditAction.UPDATE,
+        entity_type="pharmacy.StockTransfer",
+        entity_id=transfer.uuid,
+        entity_label=f"{transfer.reference} received",
+        metadata={
+            "shortfalls": [
+                {
+                    "batch": line.batch.batch_number,
+                    "sent": str(line.quantity_sent),
+                    "received": str(line.quantity_received),
+                }
+                for line in shortfalls
+            ],
+        },
+    )
+    return transfer
+
+
+@tenant_atomic_method
+def cancel_transfer(
+    transfer: StockTransfer, reason: str, actor=None,
+) -> StockTransfer:
+    """Call a consignment back, returning the stock to where it came from.
+
+    The stock has already left the source, so cancelling is not an undo: it is
+    a `TRANSFER_IN` back to the source, which leaves both movements on the
+    ledger. A cancellation that erased the dispatch would make the ledger
+    disagree with what the storekeeper remembers happening.
+    """
+    if transfer.status != TransferStatus.DISPATCHED:
+        raise PharmacyError(
+            f"{transfer.reference} is already "
+            f"{transfer.get_status_display().lower()}."
+        )
+    if not reason:
+        raise PharmacyError("Cancelling a transfer needs a reason.")
+
+    for line in transfer.lines.select_related("batch"):
+        post_movement(
+            batch=line.batch,
+            location=transfer.source,
+            movement_type=MovementType.TRANSFER_IN,
+            quantity=line.quantity_sent,
+            actor=actor,
+            reason=f"Transfer {transfer.reference} cancelled: {reason}",
+            reference_type="pharmacy.StockTransfer",
+            reference_id=transfer.uuid,
+        )
+
+    transfer.status = TransferStatus.CANCELLED
+    transfer.cancelled_at = timezone.now()
+    transfer.cancellation_reason = reason
+    transfer.save(
+        update_fields=[
+            "status",
+            "cancelled_at",
+            "cancellation_reason",
+            "updated_at",
+        ]
+    )
+    record(
+        AuditAction.UPDATE,
+        entity_type="pharmacy.StockTransfer",
+        entity_id=transfer.uuid,
+        entity_label=f"{transfer.reference} cancelled",
+        reason=reason,
+    )
+    return transfer
