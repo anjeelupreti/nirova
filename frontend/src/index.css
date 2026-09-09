@@ -57,3 +57,67 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Preferences that change the whole interface                                */
+/* -------------------------------------------------------------------------- */
+
+@layer base {
+  /*
+   * Row height, set by `usePreferences` as a data attribute on <html>.
+   *
+   * A variable rather than a class on every table, so a screen that builds
+   * its own rows still honours the choice without knowing it exists. Compact
+   * fits roughly a third more rows on screen, which is what a triage board or
+   * a bed list wants and what a billing form does not.
+   */
+  :root {
+    --row-padding-y: 0.625rem;
+  }
+
+  :root[data-density="compact"] {
+    --row-padding-y: 0.375rem;
+  }
+
+  /*
+   * Motion, off on request.
+   *
+   * Two ways in, and both are honoured. The media query is the device asking
+   * -- somebody who set "reduce motion" in their operating system has already
+   * said this once and should not have to say it again. The data attribute is
+   * this application asking, for people on a shared machine whose device
+   * setting is not theirs to change.
+   *
+   * `!important` because it must beat utility classes, and 0.01ms rather than
+   * 0 so that transition and animation end events still fire -- code that
+   * waits for one would hang forever at exactly zero.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  :root[data-reduced-motion="true"] *,
+  :root[data-reduced-motion="true"] *::before,
+  :root[data-reduced-motion="true"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+   * Colour the native scrollbars and form controls to match the theme. The
+   * provider also sets this inline; this is the resting default so a page
+   * rendered before JavaScript runs is not light-on-dark for a frame.
+   */
+  :root.dark {
+    color-scheme: dark;
+  }
+}

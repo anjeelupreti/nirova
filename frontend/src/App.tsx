@@ -13,7 +13,6 @@ import {
   Building2,
   ChevronDown,
   GaugeCircle,
-  LogOut,
   FlaskConical,
   ListOrdered,
   Package,
@@ -47,6 +46,7 @@ import {
 } from "lucide-react";
 
 import GlobalSearch from "@/components/GlobalSearch";
+import UserMenu from "@/components/UserMenu";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +90,7 @@ const QueuePage = lazy(() => import("@/pages/Queue"));
 const ReferralsPage = lazy(() => import("@/pages/Referrals"));
 const ReportsPage = lazy(() => import("@/pages/Reports"));
 const SelfServicePage = lazy(() => import("@/pages/SelfService"));
+const AccountPage = lazy(() => import("@/pages/Account"));
 const StaffPage = lazy(() => import("@/pages/Staff"));
 const ServicesPage = lazy(() => import("@/pages/Services"));
 const TheatrePage = lazy(() => import("@/pages/Theatre"));
@@ -103,7 +104,6 @@ import {
   AlertDescription,
   AlertTitle,
   Badge,
-  Button,
   Select,
 } from "@/components/ui/primitives";
 
@@ -347,14 +347,19 @@ export default function App() {
             </Badge>
           )}
 
-          <div className="ml-auto flex items-center gap-3">
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              {data?.user.display_name}
-            </span>
-            <Button variant="ghost" size="sm" onClick={session.logout}>
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </Button>
+          {/*
+            The account menu, where every product of this kind puts it: an
+            avatar at the far right that opens onto the things about *you*
+            rather than about the organization. Before this the header had a
+            name in grey text and a Sign out button, and there was nowhere at
+            all to reach your own settings.
+          */}
+          <div className="ml-auto flex items-center gap-2">
+            <UserMenu
+              name={data?.user.display_name ?? ""}
+              email={data?.user.email ?? ""}
+              onSignOut={session.logout}
+            />
           </div>
         </div>
 
@@ -485,6 +490,9 @@ export default function App() {
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/staff" element={<StaffPage />} />
+          {/* Reached from the account menu rather than the sidebar: it is
+              about you, not about the work. */}
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/time" element={<TimePage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/facilities" element={<FacilitiesPage />} />

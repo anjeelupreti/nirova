@@ -9723,3 +9723,71 @@ test, which passed in 1.4s when run alone. Killing the orphans fixed it
 entirely. The same failure appeared earlier in this project's history and is
 worth recognising on sight: *a suite that stops at the same test but passes
 that test alone is not a broken test.*
+
+## 251 - Dark mode has never worked, and there was nowhere to turn it on
+
+`darkMode: ["class"]` has been in the Tailwind config since the beginning,
+`dark:` variants are written throughout the console, and **nothing has ever
+added the class to `<html>`**. Every one of those variants was dead code.
+Density and reduced motion were not expressed at all. This is the third thing
+found this week that was installed, configured and never connected —
+`tailwindcss-animate`, `@radix-ui/react-dropdown-menu`, and now the dark
+palette itself.
+
+And there was nowhere to turn any of it on. The header had a name in grey text
+and a Sign out button; no route to anything about *you*.
+
+**`usePreferences` is what makes the preferences mean anything.** It sits above
+the router, because a theme that only applied on the screen where you chose it
+would be a joke.
+
+*Two sources, deliberately.* The server is the record, so preferences follow
+you to another machine — which is the point of storing them per user.
+`localStorage` is a cache read **synchronously on the first paint**, because
+the server's answer arrives a round trip after the page renders and without it
+every load flashes white before turning dark. The cache is never the
+authority; the server's answer replaces it the moment it lands.
+
+*`system` keeps following the device.* A laptop that switches at sunset
+switches this with it, with no reload. `color-scheme` is set so native
+scrollbars and form controls follow as well — the detail whose absence makes a
+dark theme look half-finished.
+
+*Saves are debounced, last-write-wins, and nothing rolls back on failure.* The
+value is already applied and cached; a preference that reverted itself a
+second after being set would be worse than one that quietly did not sync.
+
+**Density is a CSS variable, not a class on every table**, so a screen that
+builds its own rows honours it without knowing it exists. **Reduced motion
+honours both** the device's `prefers-reduced-motion` and this application's own
+switch — somebody who set it in their operating system has said it once
+already — at `0.01ms` rather than `0`, so that code waiting on a transition-end
+event does not hang forever.
+
+**The account screen is three sections and deliberately not one form.** Details
+are typed and submitted. A password is a different act with its own risk and
+its own confirmation. Preferences save the moment they are touched, because a
+theme toggle with a Save button underneath it is a toggle nobody believes. The
+whole panel renders from the server's catalogue, so a preference added in
+Python appears there next release with no change to the screen.
+
+**The account menu** uses Radix's dropdown for the parts people notice only
+when they are wrong: focus returning to the trigger on close, Escape and
+outside clicks, arrow keys between items, and being announced as a menu. The
+theme sits on that menu as well as on the settings screen, because it is the
+one preference people change *because of the room they are in*, and making them
+navigate to a settings page for it means they will not.
+
+**Verified through the running stack, not merely built:**
+
+| | |
+|---|---|
+| `GET /api/auth/me/` | 200, six preferences and the catalogue |
+| `PATCH …/preferences/` `{theme: dark, density: compact}` | applied, and still set on the next read |
+| `{theme: "neon"}` | 400 — *"Appearance must be one of: dark, light, system."* |
+| reset | 200 |
+
+Both container images needed rebuilding first: the backend was serving the
+image from before `me_api.py` existed and answered 404. That is the second time
+this week a verification has caught a stale container rather than a bug, which
+is worth remembering as a first thing to check rather than a last.
