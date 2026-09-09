@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 
 import api from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type {
   Facility,
   Paginated,
@@ -45,6 +44,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { Avatar, StatTile } from "@/components/ui/data";
+import {
+  EmptyState,
+  StatSkeleton,
+  TableSkeleton,
+} from "@/components/ui/feedback";
+import { Page, PageHeader, StatGrid } from "@/components/ui/layout";
 import {
   RecordPanel,
   status,
@@ -65,37 +71,6 @@ const STATUS_VARIANT: Record<
   left: "destructive",
 };
 
-function StatTile({
-  label,
-  value,
-  tone = "default",
-  icon: Icon,
-}: {
-  label: string;
-  value: number | string;
-  tone?: "default" | "warning" | "danger";
-  icon: typeof Users;
-}) {
-  const toneClass = {
-    default: "text-foreground",
-    warning: "text-amber-600",
-    danger: "text-destructive",
-  }[tone];
-
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-3 py-4">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-        <div>
-          <p className={cn("text-2xl font-semibold leading-none", toneClass)}>
-            {value}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function QueuePage() {
   // Opening a token. The list row already carries the MRN, the chief
@@ -179,74 +154,90 @@ export default function QueuePage() {
   const stats = queue?.statistics;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Queue</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Live OPD queue, refreshing every {REFRESH_MS / 1000} seconds.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Select
-            className="h-9 w-auto"
-            value={facilityUuid}
-            onChange={(e) => setFacilityUuid(e.target.value)}
-          >
-            {facilities.map((facility) => (
-              <option key={facility.uuid} value={facility.uuid}>
-                {facility.name}
-              </option>
-            ))}
-          </Select>
-          <Button
-            disabled={busy || !facilityUuid}
-            onClick={() =>
-              void act("/clinical/queue/call-next/", {
-                facility_uuid: facilityUuid,
-              })
-            }
-          >
-            <BellRing className="h-4 w-4" />
-            Call next
-          </Button>
-        </div>
-      </div>
+    <Page>
+      <PageHeader
+        title="Queue"
+        description={`Live OPD queue, refreshing every ${REFRESH_MS / 1000} seconds.`}
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              value={facilityUuid}
+              onChange={(e) => setFacilityUuid(e.target.value)}
+              aria-label="Facility"
+            >
+              {facilities.map((facility) => (
+                <option key={facility.uuid} value={facility.uuid}>
+                  {facility.name}
+                </option>
+              ))}
+            </Select>
+            <Button
+              disabled={busy || !facilityUuid}
+              onClick={() =>
+                void act("/clinical/queue/call-next/", {
+                  facility_uuid: facilityUuid,
+                })
+              }
+            >
+              <BellRing className="h-4 w-4" />
+              Call next
+            </Button>
+          </>
+        }
+      />
 
-      {stats && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <StatTile label="Waiting" value={stats.waiting} icon={Users} />
+      {/* A skeleton in the shape of the tiles rather than nothing, so the
+          page does not grow by 90px the moment the first poll returns. */}
+      {!stats ? (
+        <StatSkeleton count={5} />
+      ) : (
+        <StatGrid className="xl:grid-cols-5">
+          <StatTile
+            label="Waiting"
+            value={stats.waiting}
+            icon={<Users className="h-4 w-4" />}
+          />
           <StatTile
             label="In consultation"
             value={stats.in_service}
-            icon={PlayCircle}
+            icon={<PlayCircle className="h-4 w-4" />}
           />
           <StatTile
             label="Completed"
             value={stats.completed}
-            icon={CheckCircle2}
+            icon={<CheckCircle2 className="h-4 w-4" />}
           />
           <StatTile
             label="Emergencies"
             value={stats.emergencies}
-            tone={stats.emergencies > 0 ? "danger" : "default"}
-            icon={Siren}
+            icon={<Siren className="h-4 w-4" />}
+            delta={stats.emergencies > 0 ? "needs attention" : undefined}
+            intent={stats.emergencies > 0 ? "bad" : "neutral"}
           />
           <StatTile
-            label="Average wait (min)"
-            value={stats.average_wait_minutes}
-            // Thirty minutes is the point at which a waiting room starts to
-            // feel broken, so that is where the colour changes.
-            tone={
+            label="Average wait"
+            value={`${stats.average_wait_minutes} min`}
+            icon={<Clock className="h-4 w-4" />}
+            // Thirty minutes is where a waiting room starts to feel broken,
+            // and forty-five is where people leave. The intent says what the
+            // number means rather than which way it moved.
+            delta={
               stats.average_wait_minutes > 45
-                ? "danger"
+                ? "too long"
                 : stats.average_wait_minutes > 30
-                  ? "warning"
-                  : "default"
+                  ? "getting long"
+                  : "comfortable"
             }
-            icon={Clock}
+            intent={
+              stats.average_wait_minutes > 45
+                ? "bad"
+                : stats.average_wait_minutes > 30
+                  ? "neutral"
+                  : "good"
+            }
           />
-        </div>
+        </StatGrid>
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -259,10 +250,17 @@ export default function QueuePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!queue || queue.queue.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nobody is in the queue.
-              </p>
+            {!queue ? (
+              <TableSkeleton rows={5} columns={5} />
+            ) : queue.queue.length === 0 ? (
+              <EmptyState
+                illustration="people"
+                title="Nobody is waiting"
+                description={
+                  "Tokens appear here as patients check in at the desk. "
+                  + "The board refreshes on its own."
+                }
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -290,9 +288,20 @@ export default function QueuePage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">{token.patient_name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {token.patient_mrn}
+                        {/* An avatar, so a queue reads as people rather than
+                            as a column of names. The colour is derived from
+                            the name, so the same patient is the same colour
+                            every time this board refreshes. */}
+                        <div className="flex items-center gap-3">
+                          <Avatar name={token.patient_name} size="sm" />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
+                              {token.patient_name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {token.patient_mrn}
+                            </div>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -447,6 +456,6 @@ export default function QueuePage() {
             ) : null,
         }}
       />
-    </div>
+    </Page>
   );
 }
