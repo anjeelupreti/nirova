@@ -21,7 +21,7 @@ because it *is* the truth.
 import time
 
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import OperationalError, connections
 
 from apps.tenancy.seeding import TENANT_SEEDS
@@ -159,21 +159,49 @@ class Command(BaseCommand):
         if organization is None:
             return False
 
+        from apps.tenancy.provisioning import database_exists
+
+        # `exc` is bound outside the handler on purpose: Python deletes an
+        # `except ... as exc` name when the block ends, and the message below
+        # needs to say what actually went wrong.
+        failure = ""
         try:
             with tenant_context(context_for_organization(organization)):
                 return Patient.objects.exists()
         except Exception as exc:  # noqa: BLE001
-            # The organization row exists but its database does not answer --
-            # provisioning failed, or the database was dropped underneath it.
-            # Report and fall through to a full run, which will either fix it
-            # or fail with a better message than this one could give.
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Demo tenant '{slug}' exists but is not readable ({exc}); "
-                    "running the full bootstrap."
-                )
+            failure = str(exc)
+
+        # **"I cannot reach it" is not "it is not there".**
+        #
+        # This used to report the failure and carry on into a full bootstrap,
+        # which calls `provision_organization`, which cannot reach it either
+        # -- and whose `except` writes `status=failed` and a last_error onto
+        # the tenant. A *connectivity* problem was therefore escalated into a
+        # tenant marked permanently broken, and it took a live incident to
+        # notice: a backend container was reading a tenant row that named a
+        # host only the host machine can resolve, and every restart re-broke a
+        # database that was completely healthy.
+        #
+        # So the two are now told apart. If the database is on the server, the
+        # problem is reaching it, and re-provisioning cannot help.
+        record = getattr(organization, "database", None)
+        if record is not None and database_exists(record.db_name):
+            raise CommandError(
+                f"Tenant database for '{slug}' exists but this process cannot "
+                f"reach it ({failure}). Nothing has been changed. "
+                "This is usually a host mismatch: the tenant row records a "
+                f"hostname ({record.host}) that resolves somewhere else. "
+                "Check with `manage.py recheck_tenants`, and repoint it with "
+                "`manage.py retarget_tenants --host <name> --apply`."
             )
-            return False
+
+        self.stdout.write(
+            self.style.WARNING(
+                f"Demo tenant '{slug}' has no database ({failure}); "
+                "running the full bootstrap."
+            )
+        )
+        return False
 
     def _wait_for_db(self, seconds: int) -> None:
         """Block until the control plane answers, or give up loudly.

@@ -9377,3 +9377,119 @@ setting does not retroactively renumber documents that have already been
 issued. That is the correct behaviour and it is now a checked fact.
 
 Frontend build clean; Configuration is a 14 kB route chunk.
+
+## 245 - A customer could not be taken on without a database shell
+
+Everything needed to provision a tenant had existed for a long time and none
+of it was reachable. `provision_organization` creates the database, runs the
+migrations and seeds the roles; it is idempotent and well tested; and its only
+callers were `manage.py provision_tenant` and `seed_demo`. The platform API
+could *read* customers and not create one:
+
+```python
+class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
+```
+
+So onboarding required an engineer with shell access on the production host.
+For a product meant to serve practices from a single room to a chain, that
+caps the business at whatever one developer can hand-run, and it puts somebody
+with a database prompt in the middle of every sale.
+
+**`apps/provisioning/onboarding.py` is `seed_demo` with the demonstration taken
+out.** That command has assembled a working customer end to end since the
+beginning — organization, subscription, change-request policy, provisioned
+database, owner with the administrator role — and what it knew was buried in a
+management command nobody could call.
+
+Reachable three ways, all one service: `POST /api/platform/organizations/
+onboard/`, `manage.py onboard`, and the service itself.
+
+**Ordering, chosen for what survives a failure halfway.** Control-plane rows
+first, transactional, and harmless if provisioning never happens — an
+organization stuck at `pending` is visible and retryable. Then the database,
+outside that transaction, because creating one cannot be rolled back and
+holding a control-plane transaction open across tens of seconds of migrations
+would block everything else touching those tables. Then the owner's login,
+last, because `assign_role` writes to a tenant that does not exist until the
+step before it finishes.
+
+The owner gets **no password**, the same rule as `invite_user`: a platform
+operator typing a password for a customer's administrator would know a
+credential that is not theirs.
+
+**What the tests cover, and the one thing they cannot.** Four contract tests
+pass — an unknown plan is refused and names the real ones, nothing is created
+when it is, and a customer's own `organization_admin` gets 403 because no
+authority inside one customer should create another. What they cannot do is
+drive a real provisioning run:
+
+```
+django.db.transaction.TransactionManagementError:
+This is forbidden when an 'atomic' block is active.
+```
+
+`CREATE DATABASE` cannot run inside a transaction and pytest-django wraps every
+test in one. The obvious fix, `django_db(transaction=True)`, is the wrong one:
+`TransactionTestCase` **truncates every table in `databases` afterwards**, and
+`databases="__all__"` is the demo tenant the rest of the suite reads. A test
+that passes by destroying the fixture every other test depends on is worse
+than no test. So the provisioning half was verified by running it.
+
+**Verified by running it, twice, and then cleaned up.**
+
+| | |
+|---|---|
+| `manage.py onboard sunrise …` | organization `trial`, database `ready` and really present, subscription `starter/trialing`, owner `is_organization_owner` with no password, `organization_admin` held *inside* the new tenant, 16 roles seeded, 0 facilities |
+| `POST …/onboard/` (lakeside) | `HTTP 201`, `database ready`, `must_set_password=True`, `existed False` |
+
+Both dropped afterwards; `pg_database` is back to `nirova_tenant_manakamana`
+alone.
+
+---
+
+## 246 - `failed` was a one-way door with no handle on the inside
+
+Found by an incident in the middle of the work above, not by reading.
+
+The Postgres container went away for a few hours. Every request touching the
+demo tenant failed, `TenantDatabase.status` became `failed` — and when Postgres
+came back, **nothing set it right again**. The database was healthy, fully
+migrated and full of data. The tenant stayed unreachable because a row said so,
+and `context_for_organization` refuses a failed tenant before it tries to
+connect.
+
+That is correct on the way in and a trap on the way out. A hosted system where
+a transient blip permanently strands a customer, and the only repair is an
+UPDATE on the control plane, is one where every blip becomes a support
+escalation.
+
+`manage.py recheck_tenants` asks each tenant the only question that matters —
+**does it answer?** — and moves the status to match reality **in both
+directions**, which is why it is not merely a "clear the failed flag" command:
+a tenant recorded as ready that has stopped answering is worth surfacing before
+a user finds it. Dry by default.
+
+**Then the same incident showed something worse.** The suite went from green to
+47 failures and stayed there. The cause was not the outage:
+
+* The backend container runs `bootstrap --if-needed` on start.
+* `_demo_is_populated` could not read the tenant, because the tenant row
+  recorded `host=localhost` — set for host-side work — and inside a container
+  `localhost` is the container.
+* My own `except Exception: return False` treated "cannot reach it" as "it is
+  not there", so bootstrap ran the full sequence, called
+  `provision_organization`, which could not reach it either, and whose
+  `except` writes `status=failed` onto the tenant.
+
+**A connectivity problem was escalated into a tenant marked permanently
+broken, on every container restart.** The mode conflict written up in log 233
+turned out to have teeth.
+
+`_demo_is_populated` now tells the two apart: if the database is on the server,
+the problem is reaching it and re-provisioning cannot help, so it raises with
+the actual error, the hostname on the row, and the two commands that fix it.
+**Proved by pointing the tenant at `nosuchhost` and running it** — a clear
+refusal, and `recheck_tenants` afterwards reports `ready, unchanged`. Before
+the fix, the same experiment marked the tenant failed.
+
+Whole suite: **172 passed, 9 skipped.**

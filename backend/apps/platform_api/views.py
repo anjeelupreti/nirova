@@ -8,11 +8,15 @@ facility registry and the usage counters are already here.
 
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+# record: onboarding a customer is a platform act and belongs in the log next
+# to suspensions and plan changes.
+from apps.audit.models import AuditAction
+from apps.audit.services import record
 from apps.common.permissions import IsPlatformStaff
 from apps.entitlements.resolver import resolve_entitlements
 from apps.entitlements.services import facility_quota_summary
@@ -20,7 +24,9 @@ from apps.organization.serializers import (
     ChangeRequestDecisionInputSerializer,
     FacilityChangeRequestSerializer,
 )
+from apps.provisioning.onboarding import onboard_organization
 from apps.platform_api.serializers import (
+    OnboardOrganizationSerializer,
     OrganizationSerializer,
     PlanSerializer,
     SubscriptionSerializer,
@@ -131,7 +137,13 @@ class PlatformDashboardView(APIView):
 
 
 class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
-    """Customers, as the platform sees them."""
+    """Customers, as the platform sees them.
+
+    Read-only for everything except `onboard`. A customer's own details are
+    changed by that customer, and the one act the platform performs on their
+    behalf -- bringing them into existence -- has consequences no PATCH should
+    have: it creates a physical database.
+    """
 
     serializer_class = OrganizationSerializer
     permission_classes = [IsPlatformStaff]
@@ -163,6 +175,59 @@ class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
                 member_count=Count("memberships", distinct=True),
             )
             .order_by("display_name")
+        )
+
+    @action(detail=False, methods=["post"], url_path="onboard")
+    def onboard(self, request):
+        """Take on a customer: organization, subscription, database, owner.
+
+        `POST` on the collection rather than a plain `create`, and named, so
+        the URL says what it does. `POST /organizations/` reads as "add a row";
+        this creates a database, runs every migration against it, seeds a role
+        catalogue and issues somebody the keys, and takes tens of seconds doing
+        it. A name is the cheapest way to stop that looking routine.
+
+        Idempotent by slug: a second call finishes whatever the first did not,
+        which is what you want when an attempt died halfway through a
+        migration.
+        """
+        form = OnboardOrganizationSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+
+        result = onboard_organization(actor=request.user, **form.validated_data)
+
+        organization = result["organization"]
+        record(
+            AuditAction.CREATE,
+            entity_type="tenancy.Organization",
+            entity_id=organization.uuid,
+            entity_label=f"{organization.display_name} onboarded",
+            metadata={
+                "slug": organization.slug,
+                "plan": result["plan"],
+                "database": result["database_status"],
+                "owner": result["owner"].email,
+                "by": getattr(request.user, "email", ""),
+            },
+        )
+
+        return Response(
+            {
+                "organization": OrganizationSerializer(
+                    self.get_queryset().get(pk=organization.pk)
+                ).data,
+                "database_status": result["database_status"],
+                "owner": {
+                    "email": result["owner"].email,
+                    "full_name": result["owner"].full_name,
+                    "created": result["owner_created"],
+                    # Said plainly, because the operator will be asked "what is
+                    # their password" and the answer is that there isn't one.
+                    "must_set_password": not result["owner"].has_usable_password(),
+                },
+                "already_existed": not result["created"],
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["get"], url_path="entitlements")

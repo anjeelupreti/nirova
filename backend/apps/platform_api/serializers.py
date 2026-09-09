@@ -113,3 +113,35 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "grace_ends_at", "cancel_at_period_end", "auto_renew", "addons",
         )
         read_only_fields = fields
+
+
+class OnboardOrganizationSerializer(serializers.Serializer):
+    """What the platform needs to take on a customer.
+
+    Deliberately small. Everything a customer can tell us later -- their VAT
+    number, their address, their logo -- is left out, because an onboarding
+    form that asks for twenty things before it will do anything is one that
+    gets filled in with placeholders.
+    """
+
+    slug = serializers.SlugField(max_length=64)
+    legal_name = serializers.CharField(max_length=255)
+    display_name = serializers.CharField(max_length=255)
+    primary_email = serializers.EmailField()
+    business_type = serializers.CharField(max_length=32, required=False)
+    plan_code = serializers.CharField(max_length=64)
+
+    #: The one person who can then do everything else. Without this the
+    #: customer gets a database nobody can sign in to, which is the state
+    #: `provision_tenant` on its own leaves them in.
+    owner_email = serializers.EmailField()
+    owner_name = serializers.CharField(max_length=255)
+
+    trial_days = serializers.IntegerField(required=False, min_value=0,
+                                          max_value=365)
+    province = serializers.CharField(max_length=64, required=False,
+                                     allow_blank=True)
+    district = serializers.CharField(max_length=64, required=False,
+                                     allow_blank=True)
+    phone = serializers.CharField(max_length=32, required=False,
+                                  allow_blank=True)
