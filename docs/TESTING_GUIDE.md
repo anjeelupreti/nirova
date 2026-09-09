@@ -11,58 +11,83 @@ A single-site clinic would show you almost none of it.
 
 ## 1. Get it running
 
-**Needs** Docker, Python 3.12+, Node 20+.
+**Needs** Docker. Nothing else, unless you want to run something on the host.
 
 ```bash
-# Databases
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up
+```
 
-# Backend
+Seven services: Postgres, Redis, the API, a Celery worker and scheduler, and
+both React applications behind their own nginx. On a first run it also
+migrates, seeds the plan catalogue, provisions a demo tenant and fills it with
+a working hospital. About three and a half minutes from a machine with no
+images; seconds afterwards.
+
+| | |
+|---|---|
+| staff console | <http://localhost:5173> |
+| patient application | <http://localhost:5174> |
+| API, admin, OpenAPI | <http://localhost:8000> |
+
+`docker compose -f infra/docker-compose.yml down -v` throws the data away and
+the next `up` rebuilds it from nothing.
+
+The tenant gets a **separate PostgreSQL database**. That is not a detail — it
+is the isolation model, and it means a customer's clinical data is not
+reachable from the control plane at all.
+
+### Running it on the host instead
+
+```bash
+docker compose -f infra/docker-compose.yml up -d postgres redis
+
 cd backend
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
 # source .venv/bin/activate && pip install -r requirements.txt  # macOS / Linux
 cp .env.example .env
 
-.venv/Scripts/python.exe manage.py migrate        # control plane
-.venv/Scripts/python.exe manage.py seed_catalog   # plans, modules, add-ons
-.venv/Scripts/python.exe manage.py seed_demo      # the tenant, its database, its users
-```
-
-`seed_demo` provisions a **separate PostgreSQL database** for the tenant. That
-is not a detail — it is the isolation model, and it means the tenant's clinical
-data is not reachable from the control plane at all.
-
-Then the data. Order matters: later seeds read what earlier ones wrote.
-
-```bash
-for s in seed_hr_demo seed_clinical_demo seed_consultation_demo \
-         seed_billing_demo seed_diagnostics_demo seed_pharmacy_demo \
-         seed_procurement_demo seed_pos_demo seed_attendance_demo \
-         seed_ess_demo seed_payroll_demo seed_inpatient_demo \
-         seed_nurse_demo seed_emergency_demo seed_icu_demo \
-         seed_theatre_demo seed_bloodbank_demo seed_finance_demo \
-         seed_insurance_demo seed_referrals_demo seed_portal_demo \
-         seed_notifications_demo seed_access_demo; do
-  .venv/Scripts/python.exe manage.py $s || echo "FAILED: $s"
-done
-```
-
-**Read the output, don't just watch it scroll.** The seeds narrate what they
-expect beside what they got — that is the project's main verification
-mechanism, and most bugs in the development log were found by a seed
-contradicting itself rather than by a test failing.
-
-```bash
+.venv/Scripts/python.exe manage.py bootstrap      # everything, in order
 .venv/Scripts/python.exe manage.py runserver      # :8000
 
 cd ../frontend && npm install && npm run dev      # :5173  staff console
 cd ../patient  && npm install && npm run dev      # :5174  patient application
 ```
 
-Two applications, deliberately. The patient one is a separate build with its own
-origin and its own auth store, so a clinician and a patient are different kinds
-of subject structurally rather than by a conditional.
+`bootstrap` replaces the twenty-line seed loop this guide used to print. It
+runs them in the order `apps/tenancy/seeding.py` records — an order that was
+**measured**, by running it against an empty database until it completed,
+rather than reasoned about. The individual seeds still exist; see
+`manage.py help`.
+
+> **If you run the backend on the host, read this.** `TenantDatabase` stores
+> host and port **per tenant**, so a tenant provisioned inside Docker records
+> `host="postgres"`, which your machine cannot resolve:
+>
+> ```
+> psycopg.OperationalError: [Errno 11001] getaddrinfo failed
+> ```
+>
+> Nothing is broken; the row describes a network you are not on.
+>
+> ```bash
+> manage.py retarget_tenants --host localhost --apply   # work on the host
+> manage.py retarget_tenants --host postgres  --apply   # back to the stack
+> ```
+>
+> **Only one mode can be active at a time**, and leaving a container running
+> in the other one is how a whole afternoon disappears — see log 246. Stop
+> the backend container while working host-side:
+> `docker compose -f infra/docker-compose.yml stop backend worker scheduler`.
+
+**Read the seed output, do not just watch it scroll.** The seeds narrate what
+they expect beside what they got — that is the project's main verification
+mechanism, and most bugs in the development log were found by a seed
+contradicting itself rather than by a test failing.
+
+Two applications, deliberately. The patient one is a separate build with its
+own origin and its own auth store, so a clinician and a patient are different
+kinds of subject structurally rather than by a conditional.
 
 ---
 
@@ -70,23 +95,61 @@ of subject structurally rather than by a conditional.
 
 ```bash
 cd backend
-.venv/Scripts/python.exe -m pytest -q                    # 86 tests, ~60s
-.venv/Scripts/python.exe -m pytest -q -m "not seeds"     # the fast half, ~3s
+.venv/Scripts/python.exe -m pytest -q                    # 179 tests, ~2m15s
+.venv/Scripts/python.exe -m pytest -q -m "not seeds"     # the fast half, ~90s
 ```
 
-They need the stack above running. The suite is **not hermetic on purpose**:
-this project is database-per-tenant, and reproducing that against a throwaway
-test database means reimplementing provisioning inside the harness — a harness
-that reimplements the thing it is testing does not test it.
+They need the stack above running, and they need the tenant pointed at a host
+this process can reach — see the box in section 1. The suite is **not hermetic
+on purpose**: this project is database-per-tenant, and reproducing that against
+a throwaway test database means reimplementing provisioning inside the harness
+— and a harness that reimplements the thing it is testing does not test it.
 
-Two things it does that matter:
+Four things it does that matter:
 
 - **Every seed runs twice.** Six defects have been found by the second run
   alone, including one seed that had been failing every Saturday since it was
   written.
-- **Every role hits every parameterless endpoint**, failing on any 5xx. A 403 is
-  an answer; a 500 is a bug, and it hides behind permissions — *an endpoint only
-  the right role can reach is an endpoint only the right role can crash.*
+- **Every role hits every parameterless endpoint**, failing on any 5xx. A 403
+  is an answer; a 500 is a bug, and it hides behind permissions — *an endpoint
+  only the right role can reach is an endpoint only the right role can crash.*
+- **Every navigation entry must open for the role that sees it**, and every
+  entry must be in the probe map. A screen missing from that map used to be
+  skipped silently, which is how five screens sat unchecked for weeks
+  (log 236).
+- **Every guard is proved by reintroducing its defect.** A guard that has
+  never been shown to fail is not a guard. Twice, that exercise showed the
+  guard itself was broken.
+
+### What the suite deliberately cannot do
+
+`CREATE DATABASE` cannot run inside a transaction and pytest wraps every test
+in one, so **provisioning is not driven by the suite**. The obvious fix,
+`django_db(transaction=True)`, is the wrong one: `TransactionTestCase`
+truncates every table in `databases` afterwards, and `databases="__all__"`
+includes the demo tenant the rest of the suite reads. A test that passes by
+destroying the fixture every other test depends on is worse than no test.
+
+Provisioning is verified where it can be — `manage.py bootstrap` builds a
+tenant from nothing on every container start, and `manage.py onboard` runs the
+same service from the command line:
+
+```bash
+manage.py onboard probe --legal-name "Probe Clinic" --email a@b.test     --plan starter --owner-email owner@probe.test --owner-name "A Person"
+```
+
+### When a tenant says it is broken and is not
+
+A transient database outage marks tenants `failed`, and until log 246 nothing
+ever set them right again.
+
+```bash
+manage.py recheck_tenants           # what it would change
+manage.py recheck_tenants --apply   # change it
+```
+
+It asks each tenant database the only question that matters — does it answer —
+and corrects the status in **both** directions.
 
 ---
 
@@ -281,6 +344,47 @@ Get a token by signing in at `/api/auth/login/`, and a facility UUID from
 
 ---
 
+## 6b. The screens added since this guide was written
+
+Worth a look because each one closed a gap where the product simply could not
+do something.
+
+**Staff access** — Organization → Staff access, as the owner. Invite a
+colleague, grant them a role, revoke it, deactivate them. Before this there
+was no way to add a second member of staff at all; every account in every
+database came from a seed script (log 235).
+
+Two things to try deliberately:
+
+- Sign in as `manager@manakamana.test` (operations manager). They can see the
+  staff list and **cannot** open the role list — `user.read` and `role.assign`
+  are different permissions and it shows.
+- As the owner, look at the role list. Roles you may not grant are listed with
+  *what puts them out of reach*. A facility manager sees seven grantable roles
+  and nine refused, each naming the permissions it carries that they do not
+  hold.
+
+**Configuration → System** — the time zone, the financial year, the currency,
+the standard tax rate and the privacy switch. Before this, `ConfigSetting` had
+no endpoint at all: the privacy switch could only be turned on from a Django
+shell (log 243).
+
+Set the time zone to `Asia/Dubai` and reload any screen with a timestamp on
+it. Everything shifts by an hour and three quarters, because Kathmandu is
++05:45 and Dubai is +04:00 — which is the gap a Gulf ward was reading its drug
+administration times across (log 241). Put it back with **Back to the
+default**, which removes the row rather than writing the default value, so the
+badge returns to `default` rather than `set`.
+
+**Detail panels** — Queue, Portal accounts, the counter's sales list, pharmacy
+stock, and facility change requests. Click a row. Every field in those panels
+was already arriving on the list request and was rendered nowhere: the chief
+complaint on a queue token, `locked_until` on a portal account, a whole
+receipt behind a sale, and `reserved` versus `available` on a batch — the
+difference between "we have forty" and "we can dispense twenty-eight".
+
+---
+
 ## 7. When something looks wrong
 
 **Compare against the database, not against your expectation.** A count on its
@@ -306,6 +410,16 @@ what it prevents.
 Stated so you do not spend an afternoon on them.
 
 - **The `staff` accounts cannot sign in** without `changepassword` first.
+- **Newly invited users cannot sign in either**, and that is deliberate: an
+  invitation sets no password, because nothing can email one and a password
+  somebody else typed for you is not a credential. Use `changepassword`.
+- **Stock transfers have a service and no screen.** `dispatch_transfer`,
+  `receive_transfer` and `cancel_transfer` work and are tested; there is no
+  endpoint, so the only way to try one is `manage.py shell` (log 248).
+- **`prescription.approve` guards a workflow that does not exist.**
+  `PrescriptionStatus` has no approval state. The permission is either a
+  feature to build or a catalogue entry to delete, and that is a product
+  decision rather than a bug.
 - **The write endpoints have not been swept** the way the read endpoints have.
   A write sweep needs valid payloads per endpoint and has not been built.
 - **No SMS or email.** Invitation codes are handed over at the desk because

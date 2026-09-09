@@ -9592,3 +9592,67 @@ endpoint and no screen. The service is reachable from `manage.py shell` only,
 which is precisely the criticism this log has made of other people's code
 three times this week. `stock.transfer` stays on the unreachable-permissions
 list until it has a route.
+
+## 249 - The console had no design system, only components
+
+Asked to look at this as a product rather than a checklist, and told the UI is
+the poorest part of it. That is a fair reading and the measurements agree:
+
+| | |
+|---|---|
+| `tailwindcss-animate` | installed, wired into the Tailwind config, **used by nothing** |
+| bare spinner as the entire loading state | **23 of 34 screens** |
+| a figure with a label, hand-built per screen | **16 of 34** |
+| avatars anywhere in the console | **none** |
+| named motion durations | none |
+| page heading conventions | 34 |
+
+The last row is the real problem and the reason the console reads as "just
+lists of things". Nothing is *wrong* on any single screen — they simply do not
+agree with each other, and a product whose title moves between pages reads as
+thirty-four small applications rather than one.
+
+**Three files. The third matters most.**
+
+*`ui/feedback.tsx`* — skeletons **in the shape of the thing being fetched**, so
+the layout does not jump when data lands. That is not decoration: a screen
+that reflows on arrival makes people lose the row they were reading.
+Illustrated empty states, inline SVG on `currentColor` so they are right in
+both themes with no second asset and no extra request on a screen that is
+already waiting. And the distinction a single "No results" destroys: *you have
+no patients yet* and *nobody matches "gurung"* are different facts calling for
+different next actions.
+
+*`ui/data.tsx`* — `Avatar` with its colour derived from the name, so the same
+colleague is the same colour on every screen and after every reload; an avatar
+colour that moves is worse than none, because the eye learns it and is then
+misled. `StatTile` whose delta carries an **intent rather than a sign** —
+falling waiting time is good, falling revenue is not, and a dashboard that
+paints every decrease red tells a triage nurse that a shorter queue is a
+problem. `SegmentedControl` with one absolutely-positioned highlight that
+slides between options rather than blinking. `Timeline`, because a patient's
+care rendered as rows sorted by date is a list of facts and not a story.
+
+*`ui/layout.tsx`* — `Page`, `PageHeader`, `Toolbar`, `Section`, `StatGrid`,
+`ScrollX`. **This is the fix for placement and arrangement, and it is not a
+widget.** The heading has one shape and the shape carries the decisions: title
+left, description under it, actions right, breadcrumb above. `Toolbar` splits
+narrowing from viewing, so the date filter is always on the same side. A
+screen wanting something else now has to say so in the diff instead of
+inventing it silently.
+
+**Motion is three named durations in the theme**, not a number each author
+picks: 150ms for a colour, 200ms for something that moves, 300ms for something
+arriving. Anything slower reads as the application being slow, which on a ward
+is worse than plain.
+
+**One correction, made before committing.** The first draft of the `data.tsx`
+comment said stat markup was duplicated across "six dashboards". That was
+written from impression. Counted, it is **sixteen** — and the avatar claim was
+wrong in the other direction: there were none to duplicate. Both comments now
+say what was measured, and the fact that the first draft was wrong is left in
+the file as a note on why it is now counted.
+
+Type check clean. **Nothing is applied yet**, which makes this a library nobody
+uses — the exact criticism this log has made of other people's code four times
+this week. The next commit applies it.
