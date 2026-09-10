@@ -12,6 +12,11 @@
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
+    /* On white, a raised surface is still white -- depth comes from the
+       shadow. On black there is no shadow to see, which is why the dark
+       palette lifts this and the light one does not. */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
     --primary: 175 84% 24%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96%;
@@ -28,24 +33,70 @@
     --radius: 0.6rem;
   }
 
+  /*
+   * Dark: actually dark.
+   *
+   * The palette this replaces was shadcn's slate default -- `222 47% 8%`,
+   * which is hue 222 at 47% saturation. That is a *blue*, and it read as one:
+   * the whole interface had a blue-green cast that nobody had chosen. Every
+   * surface below is at **zero saturation**, so a grey is a grey.
+   *
+   * **The background is 0%: pitch black.** On an OLED screen those pixels are
+   * switched off, which is the point of a dark theme on a phone at a bedside
+   * at three in the morning.
+   *
+   * Depth then has to come from lightness alone, because there is no hue to
+   * carry it. The ladder is deliberate and the steps are small -- a surface
+   * that jumps to 20% on black looks like a mistake rather than a card:
+   *
+   *     0%   background   the page itself
+   *     5%   card         anything raised off it
+   *     7%   popover      raised off that: menus, panels, tooltips
+   *    12%   muted        fills: skeletons, chips, a hovered row
+   *    16%   border       lines, which must be visible without being seen
+   *
+   * **The foreground is 96%, not 100%.** Pure white on pure black haloes --
+   * the text appears to bleed into the background at small sizes, and reading
+   * a ward list in it is tiring. 96% is indistinguishable as a colour and
+   * markedly easier to read.
+   *
+   * The accent colours are lifted rather than reused from the light theme.
+   * A hue that reads well on white is usually too dark on black: the teal
+   * goes from 24% lightness to 50%, and the red from 51% to 60%, so both
+   * clear the contrast floor against a background that gives them nothing.
+   */
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 96%;
-    --card: 222 45% 11%;
-    --card-foreground: 210 40% 96%;
-    --primary: 172 66% 44%;
-    --primary-foreground: 222 47% 8%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 96%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 96%;
-    --destructive: 0 63% 51%;
-    --destructive-foreground: 210 40% 96%;
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 172 66% 44%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 172 70% 50%;
+    /* Black text on the teal, not white: at 50% lightness the teal is bright
+       enough that white on it fails contrast and black on it passes easily. */
+    --primary-foreground: 0 0% 4%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 0 0% 12%;
+    /* 64% clears 4.5:1 against the card and stays clearly secondary. Lower
+       and it is decoration; higher and it competes with the real text. */
+    --muted-foreground: 0 0% 64%;
+
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 96%;
+
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 4%;
+
+    --border: 0 0% 16%;
+    --input: 0 0% 18%;
+    --ring: 172 70% 50%;
   }
 
   * {
