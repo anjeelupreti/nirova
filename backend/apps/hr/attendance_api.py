@@ -815,9 +815,24 @@ class LeaveLedgerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        employee = _self_or(request, request.query_params.get("employee"))
-        if request.query_params.get("employee"):
+        # The same shape as `LeaveBalanceView`, and it had the same two faults:
+        # a *read* that raised 400 for a caller with no employee record, and a
+        # permission check that ran after the lookup so the gap between 404 and
+        # 403 revealed which employee uuids are real. Fixed here too rather than
+        # left as the one that got away -- log 256 fixed the balance and this
+        # sits four hundred lines below it.
+        named = request.query_params.get("employee")
+        if named:
             get_authorization(request).require("employee.read", Scope.FACILITY)
+            employee = _self_or(request, named)
+        else:
+            employee = Employee.for_user(request.user.uuid)
+            if employee is None:
+                # An empty *list*, not an object: this endpoint answers with a
+                # bare array and the screen renders it directly. An empty
+                # answer of a different shape is a different bug.
+                return Response([])
+
         entries = LeaveLedgerEntry.objects.filter(
             employee=employee
         ).select_related("leave_type")

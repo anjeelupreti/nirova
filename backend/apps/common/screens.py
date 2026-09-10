@@ -30,7 +30,89 @@ UNSAFE = re.compile(
 #: `api.get<T>("/path")`, `api.post(\`/path/${id}/\`)`, and the rest. Captures
 #: the whole quoted string including interpolations, so that a path built with
 #: `${id}` can be told apart from one written out in full.
-API_CALL = re.compile(r"""api\.(?:get|post|patch|del|put)[^(]*\(\s*[`"']([^`"']*)""")
+#:
+#: **`\s*` around the dot, because 102 calls were invisible without it.** The
+#: console writes a promise chain as
+#:
+#:     void api
+#:       .get<Paginated<Facility>>("/org/facilities/")
+#:       .then(...)
+#:
+#: and a pattern requiring `api.` with nothing between them matched none of
+#: them. Every audit built on this — screens, queries, reachability — was
+#: reporting on pages while missing about a fifth of what they call, and
+#: `audit_reach` said the appointment diary never asked for its own slots. A
+#: blind spot that silently shrinks the input is the worst kind for an audit:
+#: the output looks complete.
+#:
+#: `\b` so that an unrelated identifier ending in "api" is not read as a call.
+API_CALL = re.compile(
+    r"""\bapi\s*\.\s*(?:get|post|patch|del|put)[^(]*\(\s*[`"']([^`"']*)"""
+)
+
+
+#: Any string literal shaped like an API path: `"/hr/shifts/"`,
+#: `` `/clinical/patients/${id}/` ``. Two or more segments, lowercase-ish first
+#: segment, so that a route like `/wards` or a className is not mistaken for one.
+PATH_LITERAL = re.compile(r"""[`"']((?:/[a-z][a-z0-9._-]*){2,}/?[^`"']*)""")
+
+
+def every_referenced_path() -> set[str]:
+    """Every API path the frontend mentions anywhere, however it is written.
+
+    Wider than `every_called_path` on purpose, and used only for the
+    reachability question -- "does anything in the console reach this endpoint",
+    not "where is it called".
+
+    **Because a call site is not the only way a path is written.** The HR setup
+    screen holds its endpoints in a configuration array --
+    `{ noun: "shift pattern", endpoint: "/hr/shifts/" }` -- and calls
+    `api.get(section.endpoint)`. No extraction that looks for a literal inside
+    `api.get(` can see those, and `audit_reach` duly reported the holiday
+    calendar and the shift patterns as features nobody could use. Both have had
+    a screen for months.
+
+    The trade is deliberate: this counts a path mentioned in a comment as
+    reached. A reachability audit that cries wolf gets ignored, and a missed
+    gap here is one this command was never going to be the only chance to
+    catch.
+    """
+    root = Path(settings.BASE_DIR).parent / "frontend" / "src"
+    if not root.exists():
+        return set()
+
+    referenced: set[str] = set()
+    for file in sorted(root.rglob("*.tsx")) + sorted(root.rglob("*.ts")):
+        for match in PATH_LITERAL.finditer(
+            file.read_text(encoding="utf-8", errors="ignore")
+        ):
+            referenced.add("/api" + match.group(1))
+    return referenced | every_called_path()
+
+
+def every_called_path() -> set[str]:
+    """Every API path anything in the frontend calls, pages or not.
+
+    `paths_by_page` reads `src/pages` because it reports *per screen*. That is
+    the wrong scope for asking "does anything call this endpoint at all":
+    `GlobalSearch` is a component, `useSession` is a hook, and neither lives in
+    `pages`. Using the per-page map for a reachability question reported
+    `/api/search/` as unreached by anything, which is untrue and would have sent
+    somebody looking for a bug in a working feature.
+    """
+    root = Path(settings.BASE_DIR).parent / "frontend" / "src"
+    if not root.exists():
+        return set()
+
+    called: set[str] = set()
+    for file in sorted(root.rglob("*.tsx")) + sorted(root.rglob("*.ts")):
+        if "lib/api" in file.as_posix():
+            continue
+        for match in API_CALL.finditer(file.read_text(encoding="utf-8", errors="ignore")):
+            raw = match.group(1)
+            if raw.startswith("/"):
+                called.add("/api" + raw)
+    return called
 
 
 def paths_by_page(only: str | None = None) -> dict[str, dict[str, bool]]:

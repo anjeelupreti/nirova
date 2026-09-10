@@ -10489,3 +10489,97 @@ it. Restored and verified.
 | `sync_roles --dry-run` | 5 roles, 1 permission, no strays |
 | `audit_screens --screen Appointments` | 200 for owner, doctor and reception |
 | full backend suite | 234 passed |
+
+## 262 - The audits could not see a fifth of the calls, and one whole direction
+
+Two blind spots, found by pulling on the appointments thread.
+
+**The extractor could not see a chained call.** The console writes
+
+    void api
+      .get<Paginated<Facility>>("/org/facilities/")
+      .then(...)
+
+and the pattern required `api.` with nothing between them. **102 calls were
+invisible** — to `audit_screens`, to `audit_queries`, and to
+`tests/test_frontend_calls.py`, which carried its own copy of the same regex and
+so drifted from the shared one the moment the shared one was fixed. Two regexes
+for one rule is exactly the failure `apps/common/screens.py` was extracted to
+prevent, and it had already happened.
+
+An audit whose input silently shrinks is the worst kind: the output looks
+complete. Widening it surfaced two real bugs immediately — the leave ledger,
+and a 500 in the pharmacy allocation preview.
+
+**And the audits only asked one direction.** `audit_screens` starts from what
+the screens call and asks whether it answers; an endpoint no screen calls is not
+in its list at all. That is why §20 went unnoticed. **`manage.py audit_reach`**
+asks the other way: it walks the URL configuration and reports what nothing in
+the console reaches.
+
+It took three passes to be trustworthy, and each failure is worth naming.
+
+*It did not understand DRF's routers.* Those register raw regexes, not path
+converters, so stripping `<...>` left rows like
+`/api/billing/^charges/(?P*[^/.]+)/`. 784 endpoints looked unreached against a
+console that plainly works. Obviously wrong, therefore harmless; one keystroke
+from being subtly wrong, which would not have been.
+
+*It read only `src/pages`.* `GlobalSearch` is a component and `useSession` is a
+hook. `/api/search/` was reported as reached by nothing.
+
+*It looked only at call sites.* The HR setup screen keeps its endpoints in a
+configuration array — `{ noun: "shift pattern", endpoint: "/hr/shifts/" }` — and
+calls `api.get(section.endpoint)`. No pattern that looks for a literal inside
+`api.get(` can see those, so the holiday calendar and the shift patterns were
+reported as features nobody could use. Both have had a screen for months. The
+reachability question now counts *any* path-shaped literal, which will
+occasionally count a mention in a comment as a call. That trade is deliberate:
+an audit that cries wolf gets ignored.
+
+**433 endpoints reached, 54 not**, excluding the portal, the platform console,
+authentication and the health checks — each excluded by name, so that adding an
+excuse is a decision somebody writes down.
+
+The 54 cluster, and the clusters are the finding:
+
+- **Pharmacy stock: 13.** Receiving a delivery, adjusting, the stock ledger,
+  valuation, reconciliation, batch quarantine and recall exposure, and stock
+  counts with their record-and-approve pair. **A pharmacy cannot receive a
+  delivery or count its stock.** Larger than the appointments gap.
+- **Finance: 6.** Expenses and supplier invoices, neither recordable nor
+  approvable.
+- **Insurance: 5.** Policies, eligibility, estimates.
+- **Documents, ED alerts, POS returns: 4 each.**
+
+**Two bugs the widened extractor found on its first run.**
+
+`/api/hr/leave-ledger/` had exactly the two faults log 256 fixed in
+`LeaveBalanceView`, four hundred lines above it: a *read* raising 400 for a
+caller with no employee record, and a permission check running after the object
+lookup, so the gap between 404 and 403 revealed which employee uuids are real.
+Fixed the same way, returning an empty list rather than an empty object —
+that endpoint answers with a bare array and an empty answer of a different shape
+is a different bug.
+
+`/api/pharmacy/dispenses/allocate/` passed its `quantity` query parameter to
+`allocate_fefo` as text, and `quantise()` raises `InvalidOperation` on anything
+that is not a number — a 500 for a typed parameter that should be a 400. The
+screen debounces this endpoint on every keystroke in the quantity box, so a
+half-typed value reaches it constantly.
+
+**And one mistake of mine, worth recording because of how it happened.** I read
+the first thirty lines of `DispenseViewSet`, saw no `allocate` action, and wrote
+one — the endpoint already existed a hundred lines further down the same class.
+The audit's 404 was never a missing route: the screen builds that query by
+concatenating two template literals across two lines, the extractor captured
+only the first, and the probe went out with no `location`. Removed the
+duplicate; kept the quantity validation by applying it to the real one. The
+lesson is the one this project keeps relearning in different clothes: **grep the
+whole thing, do not read the top of it.**
+
+| | |
+|---|---|
+| calls the extractor could see | +102 |
+| `audit_reach` | 433 reached, 54 not, in six clusters |
+| full backend suite | 234 passed, 9 skipped |

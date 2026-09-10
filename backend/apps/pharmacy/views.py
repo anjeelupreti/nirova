@@ -1,5 +1,11 @@
 """Pharmacy endpoints."""
 
+# `Decimal` rather than `float` for every quantity that crosses this boundary:
+# stock is counted in units that have to add up exactly, and a quantity that
+# has been through a float no longer does. `InvalidOperation` is what `Decimal`
+# raises on text that is not a number, and it is not a `ValueError`.
+from decimal import Decimal, InvalidOperation
+
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -373,7 +379,24 @@ class DispenseViewSet(viewsets.ModelViewSet):
         location = get_object_or_404(
             StockLocation, uuid=request.query_params.get("location")
         )
-        quantity = request.query_params.get("quantity", "1")
+        # Parsed here rather than handed to `allocate_fefo` as text. The
+        # service calls `quantise()` on it, which raises `InvalidOperation` on
+        # anything that is not a number -- a 500 for a typed query parameter,
+        # which is a 400. The screen debounces this endpoint on every keystroke
+        # in the quantity box, so a half-typed value reaches it constantly.
+        try:
+            quantity = Decimal(str(request.query_params.get("quantity") or "1"))
+        except (InvalidOperation, ValueError):
+            return Response(
+                {"quantity": "Not a number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if quantity <= 0:
+            return Response(
+                {"quantity": "Ask for a quantity above zero."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         preferred = (
             Batch.objects.filter(uuid=request.query_params["batch"]).first()
             if request.query_params.get("batch")
