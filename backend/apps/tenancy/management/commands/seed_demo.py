@@ -227,7 +227,18 @@ class Command(BaseCommand):
         receptionist = self._user(
             f"reception@{slug}.test", "Kamala Adhikari", organization, False, slug
         )
-        return cashier, pharmacy_manager, receptionist
+        # **And the store keeper, for the same reason the receptionist was
+        # missing.** `pharmacy_manager` holds `stock.count` and
+        # `stock.approve_adjustment` but *not* `stock.adjust` -- deliberately,
+        # because approving your own adjustment is the control this pair
+        # exists to enforce. The consequence was that no demo account could
+        # receive a delivery at all, so nothing exercised the maker half of
+        # the maker-checker pair and the whole stockroom went untested from
+        # the outside.
+        store_keeper = self._user(
+            f"store@{slug}.test", "Dipesh Shakya", organization, False, slug
+        )
+        return cashier, pharmacy_manager, receptionist, store_keeper
 
     # -- tenant ----------------------------------------------------------
 
@@ -257,7 +268,7 @@ class Command(BaseCommand):
         filter is doing exactly what it should, and the user sees an empty
         estate. It looks like a permissions bug and is really an ordering one.
         """
-        cashier, pharmacy_manager, receptionist = counter_staff
+        cashier, pharmacy_manager, receptionist, store_keeper = counter_staff
         with tenant_context(context_for_organization(organization)):
             from apps.organization.models import Facility as TenantFacility
 
@@ -286,6 +297,9 @@ class Command(BaseCommand):
             )
             assign_role(receptionist, "receptionist", scope="facility",
                         facility=clinic, reason="Demo seed")
+            # At the pharmacy, where the stock is.
+            assign_role(store_keeper, "store_keeper", scope="facility",
+                        facility=facility, reason="Demo seed")
         self.stdout.write(f"  counter roles bound to {facility.code}")
 
     def _open_facilities(self, organization, requester, approver, platform_user):

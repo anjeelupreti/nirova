@@ -3131,6 +3131,33 @@ service creates the record.*
 
 ---
 
+# The stockroom, reachable at last `[x]`
+
+*Added after `manage.py audit_reach` found thirteen pharmacy endpoints that no
+screen called (log 263). A pharmacy could dispense from stock it had no way of
+putting there.*
+
+- [x] Receive a delivery — the only door through which a batch is created, and
+      the same batch number, product and expiry adds to the existing batch
+      rather than splitting it (which would leave a recall finding half of it)
+- [x] Adjust a batch, with a reason the API insists is long enough to mean
+      something to whoever reads the ledger next year
+- [x] The movement ledger, with the running balance rather than deltas alone
+- [x] Valuation: at cost, at retail, the margin held in the stock, and the
+      figure worth acting on — what has expired and is still being counted as
+      if it were sellable
+- [x] Stock counts: open, count blind, submit for review, approve. **Approving
+      is refused to whoever did the counting** — a stock adjustment is the
+      classic route for concealing theft
+- [x] A blind count is blind at the API, not merely on the screen: the expected
+      quantity is nulled in the serializer, so it never reaches the browser
+- [x] A `store_keeper` demo user. `pharmacy_manager` holds `stock.count` and
+      `stock.approve_adjustment` and deliberately **not** `stock.adjust`, so no
+      demo account could receive a delivery and the maker half of the pair was
+      untestable from outside
+- [ ] Batch quarantine and recall exposure, reconciliation — endpoints exist,
+      still no screen
+
 # Locale and self-service configuration `[~]`
 
 *Added 8 September 2026 (logs 241-244), on the instruction to judge this

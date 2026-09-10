@@ -10583,3 +10583,71 @@ whole thing, do not read the top of it.**
 | calls the extractor could see | +102 |
 | `audit_reach` | 433 reached, 54 not, in six clusters |
 | full backend suite | 234 passed, 9 skipped |
+
+## 263 - A pharmacy could dispense stock it had no way of putting there
+
+`audit_reach`'s largest cluster: **thirteen endpoints in `apps/pharmacy` that no
+screen called.** Receiving a delivery, adjusting a batch, the movement ledger,
+valuation, reconciliation, batch quarantine and recall exposure, and stock
+counts with their record-and-approve pair. All built, all with services behind
+them, none reachable. The pharmacy screen could dispense and could not receive.
+
+**Receiving is the only door through which a batch is created**, and that is
+deliberate in the model: a batch exists because something arrived, with an
+expiry and a price. There is no "create batch" anywhere. So a system with no
+receiving screen has no way to legitimately hold stock at all.
+
+**A count is two people, and the screen is built to show that.** Counting sends
+numbers for review and adjusts nothing; approving is a separate act with its own
+button and its own sentence explaining that whoever counted cannot do it. A
+control the interface hides is a control people route around.
+
+**Blind counting turns out to be enforced better than I assumed.** I wrote that
+the screen hides the expected quantity while somebody counts. It does, but the
+*serializer* nulls the field outright for an open blind count — so the number
+never reaches the browser and cannot be read out of a network tab either. The
+screen's omission is belt and braces; the API is the control. Corrected the
+comment to say so, and added a test asserting the field is absent, because the
+entire value of a blind count is that one field being missing.
+
+**Two things I assumed and the API said otherwise**, both caught by running it
+rather than by reading: a new count's status is `counting`, not `open` — a
+status map missing the state every new count is in would have shown a raw string
+on every open count — and stock valuation answers `value_at_cost`,
+`value_at_retail`, `potential_margin` and `expired_value_at_cost` rather than a
+single `total`. The fourth is the one worth showing: expired stock is still
+counted in the first two and is worth nothing.
+
+**And the demo tenant had nobody who could receive a delivery.**
+`pharmacy_manager` holds `stock.count` and `stock.approve_adjustment` and
+deliberately not `stock.adjust`, because approving your own adjustment is the
+control this pair exists to enforce. `pharmacy_counter` holds neither. So the
+maker half of the maker-checker pair had no demo account, and the entire
+stockroom was untestable from outside. `store@` is a `store_keeper` now — the
+same omission as the missing receptionist, one module along, found the same way.
+
+**A test that proved nothing, and how it looked exactly right.** The
+self-approval test first had the *store keeper* count and then try to approve.
+It passed. It also passed with `assert_different_actors` deleted from the
+service — because the store keeper does not hold `stock.approve_adjustment`, so
+their approval was refused for want of the permission and never reached the
+segregation check. The test was exercising the permission gate and reporting on
+the segregation control.
+
+Rewritten so the **pharmacy manager** counts: they hold both permissions, and
+are therefore the only actor for whom the segregation guard is the thing
+standing in the way. With the guard removed that test now fails loudly, having
+approved its own −3 adjustment. Restored and verified.
+
+That is the third time this project has produced a guard that had never been
+shown to fail, and the first time the reason was the *actor* rather than the
+code. "Prove it by reintroducing the defect" is necessary and evidently not
+sufficient: the test also has to be run by somebody for whom that defect is the
+only thing in the way.
+
+| | |
+|---|---|
+| `tests/test_stockroom.py` | 9 passed |
+| self-approval guard | proved: 200 with a posted adjustment when removed |
+| full backend suite | 243 passed, 9 skipped |
+| `npm run build` | clean |

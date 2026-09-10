@@ -15,6 +15,9 @@ import {
   CalendarClock,
   CheckCircle2,
   Package,
+  ScrollText,
+  ClipboardList,
+  PackagePlus,
   PackageSearch,
   Search,
   TrendingDown,
@@ -62,12 +65,33 @@ import {
   useRecordPanel,
 } from "@/components/RecordPanel";
 import { PageHeader } from "@/components/ui/layout";
+import {
+  CountPanel,
+  LedgerPanel,
+  ReceivePanel,
+} from "@/pages/pharmacy/Stockroom";
 
-type Tab = "dispense" | "stock" | "expiry" | "reorder" | "catalogue";
+type Tab =
+  | "dispense"
+  | "stock"
+  | "receive"
+  | "count"
+  | "ledger"
+  | "expiry"
+  | "reorder"
+  | "catalogue";
 
 const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
   { id: "dispense", label: "Dispense", icon: Package },
   { id: "stock", label: "Stock", icon: Boxes },
+  // Receiving, counting and the ledger were built and had no screen at all: a
+  // pharmacy could dispense from stock it had no way of putting there. They sit
+  // next to Stock because they are the same question asked in the three
+  // directions it can be asked -- what is here, how it got here, and whether
+  // the shelf agrees.
+  { id: "receive", label: "Receive", icon: PackagePlus },
+  { id: "count", label: "Counts", icon: ClipboardList },
+  { id: "ledger", label: "Ledger", icon: ScrollText },
   { id: "expiry", label: "Expiry", icon: CalendarClock },
   { id: "reorder", label: "Reorder", icon: TrendingDown },
   // Last, because it is the one you visit least: the catalogue is set up once
@@ -835,6 +859,11 @@ export default function PharmacyPage() {
         <DispensePanel facilityUuid={facilityUuid} locationUuid={locationUuid} />
       )}
       {tab === "stock" && <StockPanel locationUuid={locationUuid} />}
+      {tab === "receive" && <ReceivePanel locationUuid={locationUuid} />}
+      {tab === "count" && (
+        <CountPanel facilityUuid={facilityUuid} locationUuid={locationUuid} />
+      )}
+      {tab === "ledger" && <LedgerPanel locationUuid={locationUuid} />}
       {tab === "expiry" && <ExpiryPanel locationUuid={locationUuid} />}
       {tab === "reorder" && <ReorderPanel locationUuid={locationUuid} />}
       {/*
