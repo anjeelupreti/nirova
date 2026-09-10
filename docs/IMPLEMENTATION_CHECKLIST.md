@@ -2999,11 +2999,61 @@ because three modules were already working around its absence.*
 
 # Phase 11 — Platform surface `[ ]`
 
-## §124 Data import and migration `[ ]`
-- [ ] Excel, CSV and API import
-- [ ] Opening stock and opening balances
-- [ ] Patients, employees, medicines, suppliers, customers, historical data
-- [ ] Upload → mapping → validation → duplicate detection → preview → import → error report → audit
+## §124 Data import and migration `[~]`
+
+*The pipeline is built and running: `apps/dataimport`, `/api/import/...`, and the
+`/import` screen. What remains is more kinds, not more pipeline — adding one is
+an `Importer` in `kinds.py` declaring its columns, its duplicate rule and which
+service creates the record.*
+
+- [x] CSV, TSV and Excel import. Encoding sniffed (a UTF-8 BOM from Excel on
+      Windows silently unmatched the first column), delimiter sniffed (a
+      semicolon file read as CSV parses as one enormous column with no error),
+      `data_only=True` so a `=CONCATENATE()` cell imports its value rather than
+      its formula, and duplicate Excel headers de-duplicated rather than
+      overwriting each other in a dict
+- [x] **Upload → mapping → validation → duplicate detection → preview → import
+      → error report → audit**, each a step somebody agrees to. Nothing before
+      commit touches a patient or a product, which is what makes the preview
+      trustworthy
+- [x] Mapping suggested from header aliases, then editable — and *stored*, so a
+      reviewer's correction is not silently re-suggested away. Three sample
+      values shown per column, because a column called "Date 2" cannot be
+      identified from its name
+- [x] Duplicate detection against existing records **and within the file
+      itself**. The second is the one every naive importer misses: at
+      validation time neither row exists, so no database lookup can find it,
+      and a spreadsheet kept for a decade has the same person in it several
+      times
+- [x] Every duplicate needs an explicit import-or-skip decision. No default:
+      skipping silently loses somebody who is genuinely new, importing silently
+      creates the split record the whole feature exists to prevent
+- [x] Commit goes through the real creation services, never the models — so an
+      imported patient gets an MRN from the same sequence as one registered at
+      the counter, and is metered and audited identically
+- [x] One savepoint per row, so row 4,312 failing does not roll back the 4,311
+      before it; idempotent at batch level (a second commit is refused) and at
+      row level (a row already created is skipped), because a slow request and
+      a second click is the likeliest way a migration duplicates a file
+- [x] Entitlement quota checked once for the whole batch before anything is
+      created — a per-row check stops halfway with the customer over their plan
+      *and* their migration half done
+- [x] Error report as a CSV shaped to be corrected and re-uploaded: the original
+      columns first with the file's own headers, then the row number and the
+      problem
+- [x] `data.import`, its own sensitive permission. Registering one patient at
+      the counter is a clerk's job; creating eight thousand from a spreadsheet
+      is a migration
+- [x] Patients and medicines
+- [ ] Employees, suppliers, services and prices — importers, not pipeline
+- [ ] Opening stock and opening balances. Deliberately last: these are not
+      record creation, they are a stock ledger and a journal entry, and they
+      have to go through those services with a date and a counterpart account
+      rather than being written as rows
+- [ ] Historical clinical data (past encounters, prescriptions, results), which
+      needs a decision about what an imported encounter means for audit and for
+      the clinical record before any of it is built
+- [ ] API import
 
 ## §125 Interoperability `[~]`
 - [x] REST API

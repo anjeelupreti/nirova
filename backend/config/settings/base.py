@@ -95,6 +95,10 @@ TENANT_APPS = [
     "apps.reporting",
     "apps.search",
     "apps.workspace",
+    # Data import lives in the tenant database because an import batch is one
+    # customer's migration: their file, their column mapping, their duplicate
+    # decisions. Nothing about it is platform-level.
+    "apps.dataimport",
 ]
 
 LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS

@@ -61,6 +61,10 @@ PROBE = {
     # the screen as under-protected when what it had actually found was that
     # a doctor may read the list of departments, which is correct.
     "/configuration": None,
+    # The kind catalogue rather than the batch list: both need `data.import`,
+    # and the catalogue is what the screen loads first, so it is the endpoint
+    # whose refusal would actually be seen.
+    "/import": "/api/import/kinds/",
     "/services": "/api/billing/services/",
     "/workspace": "/api/me/workspace/",
     "/notifications": "/api/notifications/summary/",

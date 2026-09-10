@@ -94,6 +94,16 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     # route around.
     _p("catalog.manage", "Maintain catalogues: products, services, tests",
        "Administration"),
+    # Bulk import is its own authority and deliberately not `catalog.manage` or
+    # `patient.create`. Registering one patient at the counter is a clerk's job;
+    # creating eight thousand from a spreadsheet is a migration, it happens two
+    # or three times in a system's life, and a mistake in it is the hardest kind
+    # to undo -- duplicate records with clinical history hanging off both.
+    # Sensitive, so it shows in the sensitive-permission report and needs a
+    # deliberate grant rather than arriving with a bundle.
+    _p("data.import", "Import data in bulk", "Administration",
+       "Upload, map, validate and commit a file of existing records.",
+       is_sensitive=True),
 
     # -- identity & access ----------------------------------------------
     _p("user.read", "View users", "Access control"),

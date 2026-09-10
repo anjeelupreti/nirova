@@ -11,6 +11,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import {
   Activity,
   Building2,
+  FileSpreadsheet,
   ChevronDown,
   GaugeCircle,
   FlaskConical,
@@ -69,6 +70,7 @@ const CapacityPage = lazy(() => import("@/pages/Capacity"));
 const ClaimsPage = lazy(() => import("@/pages/Claims"));
 const ConfigurationPage = lazy(() => import("@/pages/Configuration"));
 const ConsultationPage = lazy(() => import("@/pages/Consultation"));
+const DataImportPage = lazy(() => import("@/pages/DataImport"));
 const CounterPage = lazy(() => import("@/pages/Counter"));
 const DiagnosticsPage = lazy(() => import("@/pages/Diagnostics"));
 const EmergencyPage = lazy(() => import("@/pages/Emergency"));
@@ -239,6 +241,12 @@ const NAV_GROUPS: {
       // Six rarely-visited lists behind one entry rather than six. Reading
       // needs `config.read`; each list checks its own write permission.
       { to: "/configuration", label: "Configuration", icon: SlidersHorizontal, needs: "config.read", scope: "facility" },
+      // Beside Configuration because a migration is the same kind of act: rare,
+      // administrative, and done once when a practice starts rather than daily.
+      // `data.import` at organization scope -- registering one patient at the
+      // counter is a clerk's job, creating eight thousand from a spreadsheet is
+      // not, and the mistake is a different size.
+      { to: "/import", label: "Import records", icon: FileSpreadsheet, needs: "data.import", scope: "organization" },
     ],
   },
   {
@@ -493,6 +501,7 @@ export default function App() {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/configuration" element={<ConfigurationPage />} />
+          <Route path="/import" element={<DataImportPage />} />
           <Route path="/workspace" element={<WorkspacePage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/staff" element={<StaffPage />} />

@@ -10123,3 +10123,146 @@ with its rows.**
 | after | 0 proved, 2 unsettled ratios (both read, both fixed cost) |
 | `tests/test_query_budget.py` | 6 passed, 4 proved by reverting the fix |
 | full backend suite | 212 passed, 9 skipped |
+
+## 258 - A hospital could not bring its own records in
+
+§124 was entirely unbuilt, and it is not a convenience feature. A practice does
+not adopt a system empty: it arrives with eight thousand patients in a
+spreadsheet somebody has maintained since 2014, a medicine list with three
+spellings of paracetamol, and a stock count taken last Thursday. Without an
+import, the answer to "how do we start" is "type it all in again", which is not
+an answer. This is the thing that decides whether a customer can begin at all.
+
+**Why the design is a reviewable batch and not a function that takes a file.**
+A naive importer is worse than none, and it is worse in a specific way: the
+damage it does is the one kind that cannot be undone. Two records for the same
+patient split a clinical history, and by the time anybody notices there are
+encounters, prescriptions and invoices hanging off both. Unpicking that is
+`merge_patients`, by hand, per person. So an import here is an object with a
+life: uploaded, mapped, validated, previewed, decided, committed — with every
+row's fate recorded against its row number in the original file.
+
+**Nothing is written until commit.** Validation reads to find duplicates and
+writes only to `ImportRow`. That is the property that makes the preview worth
+reading: what it says will happen is what the commit does.
+
+**Commit goes through the real creation services, never the models.**
+`register_patient` allocates the MRN, checks the entitlement quota, writes the
+audit event and meters the record. An importer calling `Patient.objects.create`
+would bypass all four and look like it worked; the first symptom would be two
+patients sharing an MRN a month later. The import is a caller like any other and
+gets no shortcut. Where a kind genuinely has no service behind it — a product is
+a plain row with no sequence or quota — the importer says so out loud, so a
+reader does not have to wonder whether it is an oversight.
+
+**A row is the unit of failure.** Each row commits in its own savepoint. One
+transaction for the file means an eight-thousand-row import fails entirely on
+its worst row, and whoever is migrating spends their week bisecting a
+spreadsheet.
+
+**Idempotent at both levels, because the likeliest way a migration duplicates a
+file is a slow request and a second click.** A committed batch is refused
+outright; within a batch, a row that already has a `created_uuid` is skipped, so
+a commit interrupted halfway finishes rather than doubles.
+
+**The duplicate that every naive importer misses.** Two rows in the *same file*
+for the same person. No database lookup can find it — at validation time neither
+row exists — and a spreadsheet kept for a decade has the same patient in it three
+or four times. Each importer declares a `same_file_key`, and it is allowed to
+answer "cannot tell": two rows reading "Ram Bahadur Thapa, male" with no phone
+and no birthday may genuinely be two people, and guessing they are one would
+*silently drop a patient*, which is worse than importing a duplicate somebody can
+merge.
+
+**Every duplicate needs an explicit decision.** No default, in either direction.
+Skipping silently loses somebody who is genuinely new; importing silently creates
+the split record this whole feature exists to prevent. The commit stops and asks.
+
+**The file's own dialect, worked out rather than assumed.** A UTF-8 BOM — which
+Excel on Windows writes by default — leaves a zero-width character glued to the
+first header, so `Name` becomes `﻿Name`, matches no alias, and the first
+column silently fails to map. A semicolon-delimited file read as CSV parses as
+one enormous column with no error at all. `data_only=True` reads a formula's
+cached value, because a migration file is full of `=CONCATENATE(...)` and
+importing the formula source as a patient's name is obvious afterwards and
+invisible at the time. Two Excel columns called "Remarks" are de-duplicated
+rather than one overwriting the other in a dict.
+
+**And the values inside them.** `M`, `Male`, `पुरुष` and `m` are one gender.
+`A+`, `A +ve`, `A positive` and `A pos` are one blood group — 128 spellings
+generated rather than typed, after a comprehension I could not read turned out
+not to cover `A pos`. `9841-234567`, `984 123 4567` and Excel's
+`9841234567.0` are one telephone number, which matters because the duplicate
+check would otherwise match none of them to each other. `N/A`, `-`, `#N/A` and
+`unknown` are blank, not text.
+
+**`02/03/1995` is 2 March.** Nepal writes day first. Reading it the American way
+moves a birthday by ten months with nothing looking wrong, so day-first formats
+are tried before month-first and month-first is reached only when day-first
+failed — at which point there is no ambiguity left to get wrong. Proved by
+reversing the order: the test failed with *"02/03/1995 became 1995-02-03 — read
+as month-first, which moves every Nepali birthday it touches"*.
+
+**A row reports every problem it has, not the first.** Reporting one means the
+file is corrected one mistake per upload, and a 3,000-row migration becomes a
+week of uploads.
+
+**Two refusals that are clinical rather than clerical.** A patient with neither a
+date of birth nor a stated age is rejected: weight-for-age dosing, screening
+intervals and the age beside a name all come from one of the two, and a record
+with neither looks complete and cannot be prescribed for safely. A syrup whose
+stock unit is "tablet" is rejected: stock is held in the base unit, so "give
+5 ml" has no expressible answer, and nobody finds out until a pharmacist tries.
+
+**The quota is checked once for the whole batch.** Per-row checking lets an
+import stop halfway with four thousand patients in and four thousand out — the
+customer over their plan *and* their migration half done, which is the worst of
+both.
+
+**The error report is shaped to be corrected, not merely read.** The original
+columns first, in the file's own order with the file's own headers, then the row
+number and the problem. A report of row numbers and messages has to be read
+beside the original file, which for four hundred rows nobody does.
+
+**`data.import` is its own permission, and sensitive.** Registering one patient
+at the counter is a clerk's job and the counter assistant does it all day.
+Creating eight thousand from a spreadsheet happens two or three times in a
+system's life and its mistakes are a different size.
+
+**Which exposed a gap that was not about imports at all.** A permission added to
+`PERMISSIONS` reaches only tenants provisioned afterwards: `seed_system_roles`
+runs at provisioning, and an existing `Role` row holds the list it was granted
+then. So `data.import` worked for the organization owner — who bypasses
+permission checks entirely — and answered 403 for the administrator meant to use
+it, which reads as a bug in the feature. `manage.py sync_roles` refreshes system
+roles against the catalogue across every tenant, with `--dry-run` reporting both
+additions *and removals* (a removal is a loss of authority and deserves reading,
+not skimming) and flagging permissions a role still grants that the catalogue no
+longer defines — authority that looks real and is checked by nothing. Verified by
+printing what would land before applying it: exactly one role, exactly one
+permission, no strays. The same accident has happened twice before in this
+project.
+
+**The screen is a stepper, and it is built around the review rather than the
+upload.** The upload is two controls; the review is most of the file. The mapping
+step shows three sample values per column, because a reviewer asked what a column
+called "Date 2" means cannot answer from the name. Duplicates are shown with what
+matched — "matches Ram Gurung (MRN 000412) on phone, name" — rather than with a
+score, because a score is not reviewable. Errors are summarised by column as well
+as listed by row, because a migration is fixed in the spreadsheet and the useful
+question is "what is wrong with this file", not "which rows are wrong".
+
+**Guards proved by reintroducing their defects**, all three restored and
+verified: removing the same-file duplicate check, removing the double-commit
+guard, and reversing the date order each failed the test written for it. The
+double-commit test is worth a note — with its dedicated guard removed the request
+still returned 400, from the *status* check below it, but with the message "has
+not been validated", which is misleading when the truth is "already imported".
+Two layers, and the first exists for the message.
+
+| | |
+|---|---|
+| `tests/test_data_import.py` | 13 passed |
+| `manage.py sync_roles --dry-run` | 1 role, 1 permission, no strays |
+| `audit_screens --screen DataImport` | 200 owner, 403 the other four — correct |
+| full backend suite | 225 passed, 9 skipped |

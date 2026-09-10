@@ -22,3 +22,4 @@ gunicorn==23.0.0
 # drives them rather than replacing them.
 pytest==9.1.1
 pytest-django==4.14.0
+openpyxl==3.1.5
