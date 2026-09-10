@@ -127,12 +127,28 @@ class FacilityViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(id__in=allowed)
         return queryset
 
-    @action(detail=False, methods=["get"], url_path="capacity")
+    @action(
+        detail=False, methods=["get"], url_path="capacity",
+        permission_classes=[
+            IsAuthenticated,
+            HasPermission.of("subscription.read", scope=Scope.ORGANIZATION),
+        ],
+    )
     def capacity(self, request):
         """Per-type facility capacity: what is used, what is left, and why.
 
         Rendered before the user starts a request, so limits are visible in
         advance rather than discovered on submission.
+
+        **`subscription.read`, not the viewset's `facility.read`.** This is
+        commercial information -- what the hospital's plan allows and how much
+        of it is spent -- and it inherited a permission every clinician holds
+        for the entirely different purpose of knowing which facilities exist.
+        Every doctor in the hospital could read the subscription's limits.
+
+        The same shape as `report.read` gating the general ledger (log 271):
+        one permission answering two questions, and the answer that lets more
+        people in is the one that wins.
         """
         organization = request.organization
         entitlements = resolve_entitlements(organization)

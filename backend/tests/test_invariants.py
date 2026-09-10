@@ -3264,7 +3264,11 @@ def test_master_data_refuses_writes_from_people_who_may_only_read_it(tenant):
         ("counter@manakamana.test", "/api/pharmacy/products/"),
         ("counter@manakamana.test", "/api/insurance/payers/"),
         ("manager@manakamana.test", "/api/payroll/components/"),
-        ("pharmacy@manakamana.test", "/api/finance/bank-accounts/"),
+        # The accountant, not the pharmacy manager. Bank accounts moved from
+        # `report.read` to `finance.read` (log 271) and the pharmacy manager
+        # holds neither the read nor the write -- so this pair silently stopped
+        # being exercised, and the guard below is what said so.
+        ("accountant@manakamana.test", "/api/finance/bank-accounts/"),
         ("doctor@manakamana.test", "/api/diagnostics/tests/"),
         ("doctor@manakamana.test", "/api/ipd/wards/"),
     ]

@@ -10991,3 +10991,71 @@ production bug that no test was looking for.
 | demo inbox | 21 rows with 8 links → 11 rows with 10 |
 | `tests/test_notifications.py` | 5 passed; both leaks proved by reverting |
 | full backend suite | 265 passed, 9 skipped |
+
+## 271 - "Is it an access thing?" Yes, and the audits could not see it
+
+One question: *why was a doctor given access to Capacity, Finance and the Nurse
+workspace, if things are all okay?* The answer is that they were not okay, and
+the reason nothing had caught it is the more important half.
+
+**`audit_screens` and `test_nav.py` check that the sidebar and the API agree.**
+That is a consistency check. When a screen's `needs` and its endpoints agree on
+a permission that is *too coarse*, everything passes and every doctor in the
+hospital can read the general ledger. Nothing was inconsistent. Everything was
+wrong. I had been reporting "every remaining failure is a correct refusal" and
+what I could actually support was "nothing disagrees".
+
+**Finance.** `report.read` gated laboratory turnaround and theatre utilisation
+-- which a doctor needs -- *and* the chart of accounts, journal entries, bank
+accounts and their statements, expenses, the balance sheet, the profit and loss,
+the VAT return and the trial balance. One permission, two questions, and the
+answer that lets more people in wins. Seven endpoints moved to a new
+`finance.read`, held by the accountant, the auditor, the facility manager and
+the financial controller.
+
+**Capacity.** It shows what the *subscription* allows and how much is spent --
+commercial information -- and inherited the viewset's `facility.read`, which
+every clinician holds for the entirely different purpose of knowing which
+facilities exist. Now `subscription.read`, which the accountant, auditor and
+operations manager hold.
+
+**And the one the question did not ask about, which was worse.** The matrix
+showed a **receptionist** with the ICU board, the operating list, the blood bank
+and the nurse's bedside console. All `encounter.read`, which they hold correctly
+for the outpatient queue and the appointment diary.
+
+`docs/ACCESS_DESIGN.md` had already called this: its target table gives the
+receptionist "identity tier, plus their facility's appointments and invoices",
+and its phase 1 adds `patient.safety.read` and `patient.clinical.read`. **Both
+permissions already exist and are already granted to exactly the right cast** --
+doctor, nurse, medical director, auditor. The screens had simply never moved
+onto them. Four modules and four nav entries later, they have.
+
+Emergency and Wards deliberately stay on `encounter.read`: registering an
+arrival and knowing which bed somebody is in are front-desk work.
+
+**`manage.py audit_access` is the answer to the question behind the question.**
+It prints the screen-by-role matrix, read off `App.tsx` and the seeded roles, so
+somebody can look once and say which cells are wrong instead of discovering one
+cell at a time. It says plainly what it cannot do: *whether a role should hold
+the permission a screen asks for is a question about a hospital, not about
+code.* Two of its own rows were misleading on the first run -- the platform
+console appeared "open to anybody signed in" when it is hidden by
+`isPlatformStaff`, and `data.import` appeared to be held by nobody because the
+organization administrator is excluded from the columns -- and both are fixed,
+because an audit that is wrong about itself is worse than no audit.
+
+**What I got wrong in answering.** I said the nurse workspace was the same
+defect. It is not: it is clinical data behind a clinical permission, and a
+doctor on a ward round wants exactly what it shows. The defect there was the
+*receptionist* holding it, not the doctor. And I had earlier told the user that
+eleven screens open nothing and named Emergency and ICU among them -- measured
+with a check that only looked for `TableRow onClick`, while both render their
+rows as `<button>`. Thirty of thirty-six screens open a record.
+
+| | |
+|---|---|
+| doctor, before | Finance, Capacity, plus every clinical board |
+| doctor, after | the clinical boards; not the ledger, not the subscription |
+| receptionist, before | ICU, theatre, blood bank, nurse workspace |
+| receptionist, after | the queue, appointments, patients, billing |

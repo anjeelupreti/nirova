@@ -1,6 +1,8 @@
 """Finance endpoints.
 
-`report.read` reads the books. Posting, reversing and closing need
+`finance.read` reads the books -- deliberately *not* `report.read`, which every
+doctor holds for laboratory turnaround and theatre utilisation and which used to
+gate this entire module. Posting, reversing and closing need
 `finance.post`, which exists separately from every other permission in the
 system because the people who raise invoices and the people who keep the
 ledger are deliberately not the same people.
@@ -337,7 +339,7 @@ def _resolve_account(value: str) -> Account:
 
 class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read", write="finance.post")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Account, relations=["facility", "parent"],
@@ -370,7 +372,7 @@ class AccountViewSet(viewsets.ModelViewSet):
 
 class PeriodViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PeriodSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         AccountingPeriod, fields=["fiscal_year", "status"],
@@ -418,7 +420,7 @@ class JournalViewSet(viewsets.ReadOnlyModelViewSet):
     """Read, post and reverse. There is no update and no delete."""
 
     serializer_class = JournalEntrySerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         JournalEntry, relations=["facility", "period"],
@@ -550,7 +552,7 @@ class SupplierInvoiceViewSet(viewsets.ModelViewSet):
 
 class ExpenseViewSet(viewsets.ModelViewSet):
     serializer_class = ExpenseSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read", write="finance.post")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         Expense, relations=["facility", "account"], fields=["status"],
@@ -567,14 +569,21 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         complete the flow at all.
 
         Claiming is recording that money was spent; it changes no balance and
-        posts nothing. `report.read` -- being able to see this screen -- is the
-        right floor for it, and the ledger is still protected because
+        posts nothing. `finance.read` -- being able to see this screen -- is
+        the right floor for it, and the ledger is still protected because
         `approve` is where the posting happens and that keeps `finance.post`.
 
         Editing and deleting a claim keep the stricter permission: those change
         a document somebody may already have approved.
         """
         if self.action == "create":
+            # **`report.read`, and deliberately not `finance.read`.** A blanket
+            # rename swept this line up with the rest of the module and put the
+            # deadlock back: `finance.read` is held by four roles, so the ward
+            # manager who bought the tea could no longer claim for it. Claiming
+            # is recording that money was spent -- it changes no balance and
+            # posts nothing -- so the floor is the broad permission, and the
+            # ledger stays protected by `approve`, which keeps `finance.post`.
             return [IsAuthenticated(), HasPermission.of("report.read")()]
         return super().get_permissions()
 
@@ -612,7 +621,7 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
 class BankAccountViewSet(viewsets.ModelViewSet):
     serializer_class = BankAccountSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="finance.post")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read", write="finance.post")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         BankAccount, relations=["facility"], fields=["is_active"],
@@ -664,7 +673,7 @@ class ReportView(APIView):
     a screen switching between them should not have to know seven URLs.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("finance.read")]
 
     def get(self, request):
         which = request.query_params.get("report", "trial_balance")

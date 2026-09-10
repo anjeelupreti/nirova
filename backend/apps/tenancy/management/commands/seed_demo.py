@@ -271,6 +271,20 @@ class Command(BaseCommand):
             )
             assign_role(controller, "financial_controller",
                         scope="organization", reason="Demo seed")
+
+            # **The other half of the finance pair.** An accountant reads the
+            # books and raises invoices; they do *not* hold `finance.post`, so
+            # they are the account that proves reading and posting are
+            # separable. Without one, the only demo user who could open a bank
+            # account could also post to it, and
+            # `test_master_data_refuses_writes_from_people_who_may_only_read_it`
+            # had no subject left for that pair.
+            accountant = self._user(
+                f"accountant@{organization.slug}.test", "Sabina Maharjan",
+                organization, False, organization.slug,
+            )
+            assign_role(accountant, "accountant", scope="organization",
+                        reason="Demo seed")
         self.stdout.write("  roles assigned")
 
     def _assign_counter_roles(self, organization, counter_staff):

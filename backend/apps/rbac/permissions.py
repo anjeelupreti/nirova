@@ -258,7 +258,25 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
        "Privacy", is_sensitive=True),
 
     # -- oversight --------------------------------------------------------
-    _p("report.read", "View reports", "Oversight"),
+    _p("report.read", "View reports", "Oversight",
+       "Operational and clinical reports: laboratory turnaround, theatre "
+       "utilisation, ward occupancy, queue waits."),
+    # **The books are not a report, and `report.read` was letting them be one.**
+    # Seven finance endpoints hung off `report.read` -- the chart of accounts,
+    # accounting periods, journal entries, bank accounts and their statements,
+    # expenses, and the balance sheet, profit and loss, VAT return, trial
+    # balance and ageing reports. `doctor` holds `report.read`, entirely
+    # reasonably, for laboratory turnaround and theatre utilisation. It meant
+    # every doctor in the hospital could read the general ledger and the bank
+    # statements.
+    #
+    # The same defect as `attendance.read` meaning both "my attendance" and
+    # "everybody's" (log 255): one permission answering two different
+    # questions, and the coarser answer wins.
+    _p("finance.read", "Read the books", "Finance",
+       "The ledger, the chart of accounts, bank accounts, expenses and the "
+       "financial statements. Separate from `report.read`, which is "
+       "operational reporting."),
     _p("report.build", "Build custom reports", "Oversight"),
     _p("analytics.read", "View analytics", "Oversight"),
     _p("audit.read", "View the audit log", "Oversight"),

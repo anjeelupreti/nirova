@@ -174,19 +174,29 @@ const NAV_GROUPS: {
   },
   {
     label: "Inpatient",
+    // **`patient.clinical.read` on the four clinical boards below, not
+    // `encounter.read`.** The coarse permission is held by the receptionist --
+    // correctly, for the outpatient queue and the appointment diary -- and it
+    // was putting the critical-care record, the operating list, the
+    // transfusion history and the nurse's bedside console in the front desk's
+    // sidebar. The tier already existed (`docs/ACCESS_DESIGN.md`); the screens
+    // had never moved onto it.
+    //
+    // Emergency and Wards deliberately stay on `encounter.read`: registering an
+    // arrival and knowing which bed somebody is in are front-desk work.
     items: [
       { to: "/emergency", label: "Emergency", icon: Siren, needs: "encounter.read", scope: "own" },
       { to: "/wards", label: "Wards", icon: BedDouble, needs: "encounter.read", scope: "own" },
-      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck, needs: "encounter.read", scope: "facility" },
-      { to: "/icu", label: "ICU", icon: HeartPulse, needs: "encounter.read", scope: "facility" },
-      { to: "/theatre", label: "Theatre", icon: Scissors, needs: "encounter.read", scope: "facility" },
+      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck, needs: "patient.clinical.read", scope: "facility" },
+      { to: "/icu", label: "ICU", icon: HeartPulse, needs: "patient.clinical.read", scope: "facility" },
+      { to: "/theatre", label: "Theatre", icon: Scissors, needs: "patient.clinical.read", scope: "facility" },
     ],
   },
   {
     label: "Diagnostics",
     items: [
       { to: "/diagnostics", label: "Laboratory & imaging", icon: FlaskConical, needs: "encounter.read", scope: "own" },
-      { to: "/blood", label: "Blood bank", icon: Droplet, needs: "encounter.read", scope: "facility" },
+      { to: "/blood", label: "Blood bank", icon: Droplet, needs: "patient.clinical.read", scope: "facility" },
       { to: "/referrals", label: "Referrals", icon: Send, needs: "encounter.read", scope: "facility" },
     ],
   },
@@ -203,7 +213,10 @@ const NAV_GROUPS: {
     items: [
       { to: "/billing", label: "Billing", icon: Receipt, needs: "invoice.read", scope: "facility" },
       { to: "/claims", label: "Insurance claims", icon: ShieldCheck, needs: "invoice.read", scope: "facility" },
-      { to: "/finance", label: "Finance", icon: Scale, needs: "report.read", scope: "facility" },
+      // `finance.read`, not `report.read`: every doctor holds the latter for
+      // laboratory turnaround and theatre utilisation, and it used to put the
+      // general ledger and the bank statements in their sidebar.
+      { to: "/finance", label: "Finance", icon: Scale, needs: "finance.read", scope: "facility" },
       // What things cost, beside the screens that charge for them. Reading is
       // `invoice.read` because anybody raising an invoice needs to see prices;
       // changing them is a different permission the screen checks itself.
@@ -235,7 +248,11 @@ const NAV_GROUPS: {
     label: "Organization",
     items: [
       { to: "/facilities", label: "Facilities", icon: Building2, needs: "facility.read", scope: "facility" },
-      { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "facility.read", scope: "facility" },
+      // `subscription.read`, not `facility.read`: this screen is what the
+      // hospital's *plan* allows and how much of it is spent -- commercial
+      // information that inherited the permission every clinician holds for
+      // knowing which facilities exist.
+      { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "subscription.read", scope: "organization" },
       { to: "/facility-requests", label: "Change requests", icon: ScrollText, needs: "facility.read", scope: "facility" },
       // Under Organization rather than People on purpose: /people is the
       // employee directory -- hiring, transfers, credentials -- and says

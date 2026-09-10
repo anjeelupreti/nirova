@@ -37,7 +37,14 @@ from apps.common.screens import paths_by_page
 #: nothing here exercised registration, booking or queue tokens as the person
 #: who actually does them, and the diary's permissions were wrong with no probe
 #: able to see it. The busiest role in a clinic had no demo user.
-DEMO_USERS = ["owner", "doctor", "reception", "manager", "counter", "pharmacy"]
+#: `controller` and `store` were added for the same reason `reception` was:
+#: without them the finance screens and the stockroom were exercised only by the
+#: owner, who bypasses every permission check and therefore proves nothing about
+#: whether the grants are right.
+DEMO_USERS = [
+    "owner", "doctor", "reception", "manager",
+    "counter", "pharmacy", "store", "controller", "accountant",
+]
 
 
 class Command(BaseCommand):

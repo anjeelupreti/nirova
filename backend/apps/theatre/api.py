@@ -1,7 +1,11 @@
 """Theatre endpoints.
 
-`encounter.read` sees the list — everybody working a session needs to know
-what is running. Booking, staffing and running a case need `encounter.create`.
+`patient.clinical.read` sees the list -- everybody *working a session* needs
+to know what is running, and that is surgeons, anaesthetists and scrub nurses,
+all of whom hold it. This used to ask for `encounter.read`, which is the same
+sentence with a much wider cast: the receptionist and the laboratory technician
+hold that one for the outpatient queue and the specimen worklist, and it put
+the operating list with its diagnoses in front of both. Booking, staffing and running a case need `encounter.create`.
 Forcing a double-booking needs `theatre.override`, which exists separately so
 it can be given to a coordinator and audited on every use.
 
@@ -326,7 +330,14 @@ class CancelSerializer(serializers.Serializer):
 
 class TheatreViewSet(viewsets.ModelViewSet):
     serializer_class = TheatreSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", write="bed.manage")]
+    # **`patient.clinical.read`, not `encounter.read`.** The coarse one is
+    # held by the receptionist -- correctly, for the outpatient queue and the
+    # appointment diary -- and it was putting the critical-care record, the
+    # operating list and the transfusion history in the front desk's sidebar.
+    # The tier this needs already existed (`ACCESS_DESIGN.md`, phase 1) and is
+    # held by doctor, nurse, medical director and auditor; the screens simply
+    # never moved onto it.
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read", write="bed.manage")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Theatre, relations=["facility", "department"],
@@ -362,7 +373,7 @@ class TheatreViewSet(viewsets.ModelViewSet):
 
 
 class SurgicalCaseViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         SurgicalCase, relations=["facility", "theatre", "patient"],
@@ -610,7 +621,7 @@ class ImplantRegistryView(APIView):
     issues a recall, and the answer has to be names and phone numbers.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def get(self, request):
         product = request.query_params.get("product")

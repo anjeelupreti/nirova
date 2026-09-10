@@ -337,6 +337,7 @@ SYSTEM_ROLES = [
         "description": "Runs one facility day to day.",
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "finance.read",
             "visit.schedule",
             "organization.read", "facility.read", "facility.request_change",
             "department.read", "department.manage", "config.read",
@@ -494,6 +495,7 @@ SYSTEM_ROLES = [
         "description": "Billing, receivables and payables.",
         "max_scope": Scope.ORGANIZATION,
         "permissions": [
+            "finance.read",
             "catalog.manage",
             "facility.read", "invoice.read", "invoice.create",
             "payment.record", "refund.create", "purchase.read", "salary.read",
@@ -524,6 +526,7 @@ SYSTEM_ROLES = [
         # held by the facility and pharmacy managers who know whether the goods
         # actually arrived.
         "permissions": [
+            "finance.read",
             "facility.read", "organization.read",
             "finance.post", "finance.close",
             "purchase.read", "invoice.read",
@@ -574,6 +577,7 @@ SYSTEM_ROLES = [
         "description": "Read-only oversight across the organization.",
         "max_scope": Scope.ORGANIZATION,
         "permissions": [
+            "finance.read",
             "organization.read", "facility.read", "department.read",
             "config.read", "user.read", "role.read", "patient.read",
             "encounter.read", "stock.read", "purchase.read", "invoice.read",

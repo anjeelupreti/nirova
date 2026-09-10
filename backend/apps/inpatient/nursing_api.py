@@ -218,7 +218,14 @@ class CreateTaskSerializer(serializers.Serializer):
 class NurseWorkspaceSummaryView(APIView):
     """Aggregate live census, NEWS2 alerts, medications due and tasks for the nurse."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # **`patient.clinical.read`, not `encounter.read`.** The coarse one is
+    # held by the receptionist -- correctly, for the outpatient queue and the
+    # appointment diary -- and it was putting the critical-care record, the
+    # operating list and the transfusion history in the front desk's sidebar.
+    # The tier this needs already existed (`ACCESS_DESIGN.md`, phase 1) and is
+    # held by doctor, nurse, medical director and auditor; the screens simply
+    # never moved onto it.
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def get(self, request):
         facility_uuid = request.query_params.get("facility")
@@ -254,7 +261,7 @@ class NurseAssignmentViewSet(viewsets.ModelViewSet):
     """Nurse-to-patient / bed assignments."""
 
     serializer_class = NurseAssignmentSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "uuid"
 
     def get_queryset(self):
@@ -343,7 +350,7 @@ class BedsideRoundView(APIView):
 class EmarView(APIView):
     """Electronic Medication Administration Record (eMAR) query & dose administration."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def get(self, request):
         adm_uuid = request.query_params.get("admission")
@@ -417,7 +424,7 @@ class NursingHandoverViewSet(viewsets.ModelViewSet):
     """SBAR shift handovers between outgoing and incoming nurses."""
 
     serializer_class = NursingHandoverSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "uuid"
 
     def get_queryset(self):
@@ -461,7 +468,7 @@ class NursingTaskViewSet(viewsets.ModelViewSet):
     """Bedside duties and nursing tasks for the shift."""
 
     serializer_class = NursingTaskSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "uuid"
 
     def get_queryset(self):

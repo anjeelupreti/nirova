@@ -3131,6 +3131,36 @@ service creates the record.*
 
 ---
 
+# Permissions that answered two questions `[~]`
+
+*Prompted by one question: "why was a doctor given access to Capacity, Finance,
+Nurse workspace — is it an access thing?" It was, and the audits could not see
+it: they check that the sidebar and the API **agree**, and both agreed on
+permissions that were too coarse (log 271).*
+
+- [x] **`finance.read`** — `report.read` gated both laboratory turnaround (which
+      a doctor needs) and the chart of accounts, bank statements, VAT return and
+      general ledger (which they do not). Seven endpoints moved; held by
+      accountant, auditor, facility manager and financial controller
+- [x] **Capacity is `subscription.read`** — it shows what the *plan* allows and
+      how much is spent, and inherited `facility.read`, which every clinician
+      holds in order to know which facilities exist
+- [x] **The four clinical boards moved to `patient.clinical.read`** — ICU,
+      theatre, blood bank and the nurse's bedside console. `encounter.read` is
+      held by the receptionist, correctly, for the outpatient queue and the
+      appointment diary, and it was putting the critical-care record and the
+      transfusion history in the front desk's sidebar. The tier already existed
+      in `ACCESS_DESIGN.md` phase 1; the screens had never moved onto it
+- [x] **`manage.py audit_access`** — the screen-by-role matrix, so this is read
+      once rather than discovered one cell at a time
+- [ ] Emergency and Wards stay on `encounter.read` deliberately: registering an
+      arrival and knowing which bed somebody is in are front-desk work. Revisit
+      if a customer disagrees
+- [ ] Phase 2 of `ACCESS_DESIGN.md`: `patient.clinical.read` enforced against a
+      *care relationship* rather than a facility, with break-glass as the
+      escape. The machinery exists (`apps/rbac/relationships.py`, break-glass,
+      the privacy queue) and is off by default
+
 # Returns at the counter, reachable at last `[x]`
 
 *Four endpoints with no screen (log 266). A pharmacy could sell and could not

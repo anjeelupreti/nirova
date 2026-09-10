@@ -1,6 +1,8 @@
 """Intensive care endpoints.
 
-`encounter.read` sees the board and a patient's chart. Charting — observations,
+`patient.clinical.read` sees the board and a patient's chart -- doctor,
+nurse, medical director, auditor. It asked for `encounter.read` until log 271,
+which the receptionist holds for the appointment diary. Charting — observations,
 fluids, infusions, ventilation, lines — needs `encounter.create`, which every
 ICU nurse has. Ending a stay and setting a ceiling of care need
 `encounter.create` too, but both write an audit record naming the actor,
@@ -520,7 +522,7 @@ class IcuStayViewSet(viewsets.ReadOnlyModelViewSet):
 
     permission_classes = [
         IsAuthenticated,
-        HasPermission.of("encounter.read"),
+        HasPermission.of("patient.clinical.read"),
         HasClinicalAccess,
     ]
     lookup_field = "uuid"
@@ -947,7 +949,14 @@ class IcuStayViewSet(viewsets.ReadOnlyModelViewSet):
 class UnitBoardView(APIView):
     """Every occupied bed in one unit, sickest and least-attended first."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # **`patient.clinical.read`, not `encounter.read`.** The coarse one is
+    # held by the receptionist -- correctly, for the outpatient queue and the
+    # appointment diary -- and it was putting the critical-care record, the
+    # operating list and the transfusion history in the front desk's sidebar.
+    # The tier this needs already existed (`ACCESS_DESIGN.md`, phase 1) and is
+    # held by doctor, nurse, medical director and auditor; the screens simply
+    # never moved onto it.
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def get(self, request):
         ward = get_object_or_404(Ward, uuid=request.query_params.get("ward"))

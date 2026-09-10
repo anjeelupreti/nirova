@@ -1,6 +1,8 @@
 """Blood bank endpoints.
 
-`encounter.read` sees the shelf and the donor registry. Collecting, grouping,
+`patient.clinical.read` sees the shelf and the donor registry -- a donor registry
+is a clinical record with a screening history on it. This asked for
+`encounter.read` until log 271, which the front desk holds. Collecting, grouping,
 screening and releasing need `pharmacy.dispense` — the laboratory-side
 permission a blood bank technician holds. Issuing needs it too.
 
@@ -451,7 +453,14 @@ class ReasonSerializer(serializers.Serializer):
 
 class DonorViewSet(viewsets.ModelViewSet):
     serializer_class = DonorSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # **`patient.clinical.read`, not `encounter.read`.** The coarse one is
+    # held by the receptionist -- correctly, for the outpatient queue and the
+    # appointment diary -- and it was putting the critical-care record, the
+    # operating list and the transfusion history in the front desk's sidebar.
+    # The tier this needs already existed (`ACCESS_DESIGN.md`, phase 1) and is
+    # held by doctor, nurse, medical director and auditor; the screens simply
+    # never moved onto it.
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "donor_number"
     filterset_class = uuid_filterset(
         Donor, fields=["blood_group", "status", "donor_type", "is_contactable"],
@@ -521,7 +530,7 @@ class DonorViewSet(viewsets.ModelViewSet):
 
 class DonationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = DonationSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "donation_number"
     filterset_class = uuid_filterset(
         Donation, relations=["donor", "facility"], fields=["status"],
@@ -604,7 +613,7 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class UnitViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UnitSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "unit_number"
     filterset_class = uuid_filterset(
         BloodUnit, relations=["facility", "donation"],
@@ -741,7 +750,7 @@ class UnitViewSet(viewsets.ReadOnlyModelViewSet):
 
 class BloodRequestViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RequestSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         BloodRequest, relations=["patient", "facility"],
@@ -781,7 +790,7 @@ class BloodRequestViewSet(viewsets.ReadOnlyModelViewSet):
 class CrossMatchView(APIView):
     """Test one unit against one patient."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def post(self, request):
         get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
@@ -809,7 +818,7 @@ class CrossMatchView(APIView):
 
 class TransfusionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TransfusionSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Transfusion, relations=["patient"], fields=["outcome"],
@@ -865,7 +874,7 @@ class TransfusionViewSet(viewsets.ReadOnlyModelViewSet):
 class BloodBankReportView(APIView):
     """Stock, wastage, haemovigilance and patient traceability."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def get(self, request):
         which = request.query_params.get("report", "stock")
