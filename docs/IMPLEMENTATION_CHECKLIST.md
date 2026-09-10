@@ -671,6 +671,16 @@ nothing else would have, kept here so they are not quietly dropped.*
 
 ## §20 Appointment management `[~]`
 
+*The diary screen was built after this section was written. Every item below was
+ticked and **none of it was reachable** — there was no appointment screen at all,
+so a receptionist could not book. Worse, they could not have: booking required
+`encounter.create`, which the `receptionist` role does not hold, and the demo
+tenant had no receptionist to notice with. `visit.schedule` is the permission it
+should always have had (log 261).*
+
+- [x] **The diary itself**, at `/appointments`: a day's sessions with their
+      remaining room, booking into a free slot, cancelling with a reason and
+      recording a no-show
 - [x] Provider schedules with weekday patterns
 - [x] Slot generation and capacity
 - [x] Deliberate overbooking through slot capacity
@@ -683,6 +693,15 @@ nothing else would have, kept here so they are not quietly dropped.*
 - [x] Priority
 - [x] Waiting-time and consultation-time measurement
 - [x] Facility-wide availability for a date
+- [x] **`visit.schedule`**, a permission for the front-desk act rather than a
+      borrowed clinical one. Held by the receptionist, doctor, nurse and
+      facility manager. Granting `encounter.create` instead was not an option:
+      a permission's scope comes from the assignment, so a facility-scoped
+      receptionist would also have been able to run emergency triage and record
+      a blood transfusion, both of which check that code at facility scope
+- [x] A demo receptionist. The busiest role in a clinic had no demo user —
+      `counter@` is the pharmacy till — so nothing exercised registration,
+      booking or queue tokens as the person who does them
 - [ ] Rescheduling flow (field exists)
 - [ ] Recurring appointments
 - [ ] Waitlist

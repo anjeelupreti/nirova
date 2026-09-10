@@ -217,7 +217,17 @@ class Command(BaseCommand):
         pharmacy_manager = self._user(
             f"pharmacy@{slug}.test", "Anil Maharjan", organization, False, slug
         )
-        return cashier, pharmacy_manager
+        # **The front desk, which the demo tenant did not have.** `counter@` is
+        # the *pharmacy* till, not reception, and the omission mattered more
+        # than it looked: the receptionist is the busiest role in a clinic, and
+        # with nobody holding it, nothing exercised registration, appointment
+        # booking or queue tokens as the person who actually does them. The
+        # appointment diary's permissions were wrong for two years of
+        # development and no probe could see it.
+        receptionist = self._user(
+            f"reception@{slug}.test", "Kamala Adhikari", organization, False, slug
+        )
+        return cashier, pharmacy_manager, receptionist
 
     # -- tenant ----------------------------------------------------------
 
@@ -247,7 +257,7 @@ class Command(BaseCommand):
         filter is doing exactly what it should, and the user sees an empty
         estate. It looks like a permissions bug and is really an ordering one.
         """
-        cashier, pharmacy_manager = counter_staff
+        cashier, pharmacy_manager, receptionist = counter_staff
         with tenant_context(context_for_organization(organization)):
             from apps.organization.models import Facility as TenantFacility
 
@@ -264,6 +274,18 @@ class Command(BaseCommand):
                         facility=facility, reason="Demo seed")
             assign_role(pharmacy_manager, "pharmacy_manager", scope="facility",
                         facility=facility, reason="Demo seed")
+
+            # Reception belongs at the clinic, not the pharmacy: a front desk
+            # books consultations, and a pharmacy counter has no diary. Falls
+            # back to whatever facility exists so a single-site pharmacy tenant
+            # still gets a receptionist rather than silently skipping one.
+            clinic = (
+                TenantFacility.objects.filter(facility_type="clinic").first()
+                or TenantFacility.objects.filter(facility_type="hospital").first()
+                or facility
+            )
+            assign_role(receptionist, "receptionist", scope="facility",
+                        facility=clinic, reason="Demo seed")
         self.stdout.write(f"  counter roles bound to {facility.code}")
 
     def _open_facilities(self, organization, requester, approver, platform_user):

@@ -352,6 +352,50 @@ export interface SessionAvailability {
   next_free: string | null;
 }
 
+/** One booked appointment. */
+export interface Appointment {
+  uuid: string;
+  reference: string;
+  patient: string;
+  patient_mrn: string;
+  patient_name: string;
+  patient_phone: string;
+  facility: string;
+  facility_name: string;
+  department: string | null;
+  department_name: string | null;
+  provider_uuid: string | null;
+  provider_name: string;
+  /** ISO datetime. */
+  scheduled_for: string;
+  duration_minutes: number;
+  status: string;
+  source: string;
+  reason: string;
+  priority: number;
+  is_follow_up: boolean;
+  arrived_at: string | null;
+  consultation_started_at: string | null;
+  consultation_ended_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string;
+  waiting_minutes: number | null;
+  consultation_minutes: number | null;
+  is_overdue: boolean;
+  notes: string;
+  created_at: string;
+}
+
+/** The free slot times in one provider session on one date. */
+export interface ScheduleSlots {
+  date: string;
+  provider_name: string;
+  slot_minutes: number;
+  /** ISO datetimes. */
+  free_slots: string[];
+  count: number;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Encounters and prescribing                                                  */
 /* -------------------------------------------------------------------------- */

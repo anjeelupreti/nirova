@@ -65,6 +65,10 @@ PROBE = {
     # and the catalogue is what the screen loads first, so it is the endpoint
     # whose refusal would actually be seen.
     "/import": "/api/import/kinds/",
+    # The diary, not the availability view: availability is open to anybody who
+    # can read a facility, so probing it would report the screen as open to
+    # people who in fact see an empty page.
+    "/appointments": "/api/clinical/appointments/",
     "/services": "/api/billing/services/",
     "/workspace": "/api/me/workspace/",
     "/notifications": "/api/notifications/summary/",

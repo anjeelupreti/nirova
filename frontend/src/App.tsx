@@ -23,6 +23,7 @@ import {
   Truck,
   UserCog,
   CalendarClock,
+  CalendarDays,
   Coins,
   BedDouble,
   Globe,
@@ -64,6 +65,7 @@ import { cn } from "@/lib/utils";
   renders, and putting a spinner in front of the login form to save a few
   kilobytes is a bad trade.
 */
+const AppointmentsPage = lazy(() => import("@/pages/Appointments"));
 const BillingPage = lazy(() => import("@/pages/Billing"));
 const BloodPage = lazy(() => import("@/pages/Blood"));
 const CapacityPage = lazy(() => import("@/pages/Capacity"));
@@ -162,6 +164,10 @@ const NAV_GROUPS: {
     label: "Patients",
     items: [
       { to: "/patients", label: "Patients", icon: Users, needs: "patient.read", scope: "own" },
+      // Beside the queue on purpose: a receptionist moves between "who is
+      // booked" and "who is waiting" all morning, and they were a click apart
+      // in different groups.
+      { to: "/appointments", label: "Appointments", icon: CalendarDays, needs: "encounter.read", scope: "own" },
       { to: "/queue", label: "Queue", icon: ListOrdered, needs: "encounter.read", scope: "own" },
       { to: "/portal", label: "Portal accounts", icon: KeyRound, needs: "patient.read", scope: "facility" },
     ],
@@ -479,6 +485,7 @@ export default function App() {
           <Route path="/" element={<Navigate to={home} replace />} />
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/queue" element={<QueuePage />} />
+          <Route path="/appointments" element={<AppointmentsPage />} />
           <Route path="/consultation/:uuid" element={<ConsultationPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/finance" element={<FinancePage />} />

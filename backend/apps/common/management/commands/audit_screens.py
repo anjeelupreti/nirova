@@ -32,7 +32,12 @@ from apps.common.fixtures_for_audit import fill, resolve_values
 from apps.common.screens import paths_by_page
 
 #: Demo accounts, in the order a reviewer would think about them.
-DEMO_USERS = ["owner", "doctor", "manager", "counter", "pharmacy"]
+#:
+#: `reception` was added after the appointment diary was built: without it,
+#: nothing here exercised registration, booking or queue tokens as the person
+#: who actually does them, and the diary's permissions were wrong with no probe
+#: able to see it. The busiest role in a clinic had no demo user.
+DEMO_USERS = ["owner", "doctor", "reception", "manager", "counter", "pharmacy"]
 
 
 class Command(BaseCommand):

@@ -337,6 +337,7 @@ SYSTEM_ROLES = [
         "description": "Runs one facility day to day.",
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "visit.schedule",
             "organization.read", "facility.read", "facility.request_change",
             "department.read", "department.manage", "config.read",
             "user.read", "user.invite", "role.read", "role.assign",
@@ -375,6 +376,7 @@ SYSTEM_ROLES = [
         # the point of having both.
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "visit.schedule",
             "facility.read", "department.read",
             "patient.read", "patient.create", "patient.update",
             "encounter.read", "encounter.create",
@@ -395,6 +397,7 @@ SYSTEM_ROLES = [
         # A ward spans departments by construction -- that is what a ward is.
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "visit.schedule",
             "facility.read", "department.read",
             "patient.read", "patient.update",
             "encounter.read", "encounter.create", "stock.read",
@@ -468,6 +471,7 @@ SYSTEM_ROLES = [
         "description": "Registration, appointments and front-desk billing.",
         "max_scope": Scope.FACILITY,
         "permissions": [
+            "visit.schedule",
             "facility.read", "patient.read", "patient.create", "patient.update",
             "encounter.read", "invoice.read", "invoice.create", "payment.record",
         ],

@@ -136,6 +136,19 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("patient.merge", "Merge duplicate patients", "Clinical", is_sensitive=True),
     _p("encounter.read", "View encounters", "Clinical", is_sensitive=True),
     _p("encounter.create", "Record encounters", "Clinical", is_sensitive=True),
+    # Booking is a front-desk act, not a clinical one, and it had been borrowing
+    # `encounter.create` for want of its own permission. That made the diary
+    # unusable by the one role designed for it: `receptionist`'s description
+    # reads "Registration, appointments and front-desk billing" and it could
+    # not make an appointment. Granting it `encounter.create` instead was not
+    # an option -- a permission's scope comes from the *assignment*, so a
+    # facility-scoped receptionist would also have been able to record a blood
+    # transfusion and run emergency triage, both of which check the same code
+    # at facility scope.
+    _p("visit.schedule", "Book appointments and issue queue tokens", "Clinical",
+       "Give a patient a place to be seen: an appointment for a future date, "
+       "or a token in today's queue. Cancelling and recording a no-show are "
+       "the same authority."),
     _p("prescription.create", "Write prescriptions", "Clinical", is_sensitive=True),
     _p("prescription.approve", "Approve prescriptions", "Clinical",
        is_sensitive=True, conflicts_with=("prescription.create",)),

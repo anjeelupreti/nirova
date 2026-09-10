@@ -10405,3 +10405,87 @@ that touched no TypeScript configuration. Untracked and ignored.
 | distinct `<h1>` stylings | 6 → 1 |
 | `tsc --noEmit` and `npm run build` | clean |
 | full backend suite | 225 passed, 9 skipped |
+
+## 261 - Nobody could book an appointment
+
+§20 had twelve items ticked: provider schedules, slot generation, capacity,
+deliberate overbooking, the walk-in reserve held back from online booking,
+schedule exceptions, booking with double-book prevention, cancellation with a
+reason, no-show distinct from cancellation, follow-up linkage, priority,
+waiting-time measurement, facility-wide availability for a date.
+
+**There was no screen.** Not an incomplete one — none. `Appointment`,
+`ProviderSchedule`, `ScheduleException` and the availability endpoint existed and
+no page in the console called any of them. A receptionist could not book an
+appointment, and the only symptom was that nobody ever did.
+
+**And they could not have, even with a screen.** Booking required
+`encounter.create`, which `doctor` and `nurse` hold and `receptionist` does not
+— the role whose own description reads *"Registration, appointments and
+front-desk billing"*. So the one role the feature exists to serve was the one
+role locked out of it.
+
+Granting the receptionist `encounter.create` was not the fix. A permission's
+scope comes from the **assignment**, not the role, so a facility-scoped
+receptionist holding it would also have been able to run emergency triage and
+record a blood transfusion — both check that code at facility scope. Booking a
+patient in is a front-desk act and needed to say so: **`visit.schedule`**, held
+by the receptionist, doctor, nurse and facility manager.
+
+Named for the act rather than the object because the same authority covers
+issuing a queue token, which had the same defect and would otherwise have needed
+a second permission or been left broken. Both are *giving a patient a place to
+be seen*: one for a future date, one in today's line. Four call sites moved,
+not three — the fourth was the queue token, and finding it was the reason to
+count rather than assume.
+
+**The reason nothing caught it: the demo tenant had no receptionist.** `counter@`
+is the *pharmacy* till. The busiest role in a clinic had no demo user, so no
+probe, no audit and no test ever exercised registration, booking or queue tokens
+as the person who does them. `reception@` exists now, in the seeder and in the
+running tenant, and `audit_screens` probes as six accounts rather than five.
+That omission is worth more attention than the permission bug it hid: **an audit
+is only as wide as its cast.**
+
+**The screen is a day, not a month.** A month grid is what people picture when
+they hear "calendar" and it is the wrong tool at a counter: the question at the
+desk is always "when can this patient be seen", which one day's sessions answer
+and a month grid does not. Sessions are columns; each shows **remaining
+capacity** rather than free slot times, because with a slot capacity of two a
+session of nine slots holding four bookings still has nine slots with room in
+them — which reads as an empty diary. Cancelled and no-show appointments stay on
+the day, struck through, because "did that patient come?" is asked the next
+morning.
+
+Free slot times come from the server, never from arithmetic in the browser: they
+account for capacity, existing bookings, the walk-in reserve and schedule
+exceptions, and a diary computed locally would disagree with the one the booking
+service enforces — visible only as a rejected booking.
+
+**Three things I got wrong, all found by running it.**
+
+*The status vocabulary.* I wrote the screen's status map from memory —
+`booked`, `confirmed` — and a new appointment is `scheduled`. The map was missing
+the one status every new appointment has, so a fresh diary would have shown the
+raw string on every row. The test caught it because it asserted the value rather
+than that the request succeeded.
+
+*The weekday convention.* The test fixture grouped schedules by
+`schedule.weekday` and looked them up by `day.weekday()`. This model numbers from
+Sunday; Python numbers from Monday. Every test skipped with "no session in the
+next fortnight" against a tenant holding eighteen. The fix was to stop
+reimplementing `applies_on` and call it.
+
+*Which permission the queue token used.* I asserted three call sites and there
+were four.
+
+**Guard proved by reintroducing the defect**: booking put back on
+`encounter.create` failed five of the nine tests, including the one written for
+it. Restored and verified.
+
+| | |
+|---|---|
+| `tests/test_appointments.py` | 9 passed, 0 skipped |
+| `sync_roles --dry-run` | 5 roles, 1 permission, no strays |
+| `audit_screens --screen Appointments` | 200 for owner, doctor and reception |
+| full backend suite | 234 passed |
