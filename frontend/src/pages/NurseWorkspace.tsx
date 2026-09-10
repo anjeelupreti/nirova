@@ -231,14 +231,14 @@ export default function NurseWorkspacePage() {
   useEffect(() => {
     async function loadMeta() {
       try {
-        const facRes = await api.get<Paginated<Facility>>("/api/org/facilities/");
+        const facRes = await api.get<Paginated<Facility>>("/org/facilities/");
         const facs = facRes.results ?? [];
         setFacilities(facs);
         if (facs.length > 0) {
           setSelectedFacility(facs[0].uuid);
         }
 
-        const wardRes = await api.get<Paginated<Ward>>("/api/ipd/wards/");
+        const wardRes = await api.get<Paginated<Ward>>("/ipd/wards/");
         const wList = wardRes.results ?? [];
         setWards(wList);
       } catch (err) {
@@ -261,7 +261,7 @@ export default function NurseWorkspacePage() {
       if (shiftFilter) params.set("shift", shiftFilter);
       params.set("scope", scope);
 
-      const res = await api.get<NurseWorkspaceSummary>(`/api/ipd/nurse-workspace/summary/?${params.toString()}`);
+      const res = await api.get<NurseWorkspaceSummary>(`/ipd/nurse-workspace/summary/?${params.toString()}`);
       setSummary(res);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -907,7 +907,7 @@ function BedsideRoundModal({
     setSubmitError(null);
 
     try {
-      await api.post("/api/ipd/nurse-workspace/bedside-round/", {
+      await api.post("/ipd/nurse-workspace/bedside-round/", {
         admission: patient.admission_uuid,
         temperature_c: temp ? parseFloat(temp) : null,
         pulse_bpm: pulse ? parseInt(pulse) : null,
@@ -1225,7 +1225,7 @@ function EmarModal({
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get<EmarResponse>(`/api/ipd/nurse-workspace/emar/?admission=${patient.admission_uuid}`);
+      const res = await api.get<EmarResponse>(`/ipd/nurse-workspace/emar/?admission=${patient.admission_uuid}`);
       setEmarData(res);
     } catch (err) {
       setError("Failed to load medication administration record.");
@@ -1255,7 +1255,7 @@ function EmarModal({
     setAdministering(true);
 
     try {
-      await api.post("/api/ipd/nurse-workspace/emar/administer/", {
+      await api.post("/ipd/nurse-workspace/emar/administer/", {
         prescription_line: selectedLineForAdmin.uuid,
         admission: patient.admission_uuid,
         status: adminStatus,
@@ -1589,7 +1589,7 @@ function SbarHandoverModal({
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post("/api/ipd/nurse-workspace/handovers/", {
+      await api.post("/ipd/nurse-workspace/handovers/", {
         admission: patient.admission_uuid,
         code_status: codeStatus,
         situation,
@@ -1610,7 +1610,7 @@ function SbarHandoverModal({
     if (!patient.handover) return;
     setAcknowledging(true);
     try {
-      await api.post(`/api/ipd/nurse-workspace/handovers/${patient.handover.uuid}/acknowledge/`, {});
+      await api.post(`/ipd/nurse-workspace/handovers/${patient.handover.uuid}/acknowledge/`, {});
       onSuccess();
     } catch (err) {
       alert("Failed to acknowledge handover.");
@@ -1766,7 +1766,7 @@ function NursingTasksModal({
     setLoading(true);
     try {
       const res = await api.get<Paginated<NursingTask>>(
-        `/api/ipd/nurse-workspace/tasks/?admission=${patient.admission_uuid}`
+        `/ipd/nurse-workspace/tasks/?admission=${patient.admission_uuid}`
       );
       setTasks(res.results || []);
     } catch (err) {
@@ -1785,7 +1785,7 @@ function NursingTasksModal({
     if (!newTitle.trim()) return;
     setAdding(true);
     try {
-      await api.post("/api/ipd/nurse-workspace/tasks/", {
+      await api.post("/ipd/nurse-workspace/tasks/", {
         admission: patient.admission_uuid,
         title: newTitle,
         category: newCategory,
@@ -1804,7 +1804,7 @@ function NursingTasksModal({
 
   const handleCompleteTask = async (task: NursingTask) => {
     try {
-      await api.post(`/api/ipd/nurse-workspace/tasks/${task.uuid}/complete/`, {
+      await api.post(`/ipd/nurse-workspace/tasks/${task.uuid}/complete/`, {
         notes: "Completed at bedside",
       });
       fetchTasks();
@@ -1942,7 +1942,7 @@ function NurseAssignmentModal({
     if (!selectedWard || !nurseName.trim()) return;
     setSubmitting(true);
     try {
-      await api.post("/api/ipd/nurse-workspace/assignments/", {
+      await api.post("/ipd/nurse-workspace/assignments/", {
         ward: selectedWard,
         admission: selectedAdmission || null,
         nurse_id: "00000000-0000-0000-0000-000000000001",
