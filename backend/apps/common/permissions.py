@@ -102,10 +102,17 @@ class HasPermission(BasePermission):
 
     @classmethod
     def of(cls, code: str, scope: str = Scope.FACILITY, write: str = ""):
+        """`code` may be empty, meaning "anybody signed in may read this".
+
+        That is the right declaration for a published reference list -- leave
+        types, the holiday calendar -- where the read is open and only the
+        *edit* takes authority. `code or "any"` keeps the generated class name
+        readable in a traceback rather than crashing on `None.replace`.
+        """
         return type(
-            f"HasPermission_{code.replace('.', '_')}",
+            f"HasPermission_{(code or 'any').replace('.', '_')}",
             (cls,),
-            {"permission_code": code, "required_scope": scope,
+            {"permission_code": code or "", "required_scope": scope,
              "write_code": write},
         )
 
@@ -113,9 +120,19 @@ class HasPermission(BasePermission):
         authorization = get_authorization(request)
         if authorization is None:
             return False
-        if not self.permission_code:
-            return True
 
+        # An empty read code means the read is open -- but **only the read**.
+        #
+        # This used to `return True` here, which skipped the `write=` check
+        # below entirely. Nothing declared an empty code at the time, so the
+        # hole was latent; the first open reference list opened it. Measured
+        # with that line put back (`tests/test_self_service.py`): the demo
+        # doctor PATCHed a leave type's annual entitlement from 18 days to 97
+        # and got a 200, because `perform_update` has no second check.
+        #
+        # So the empty code skips only the read assertion, and falls through
+        # to the write one.
+        #
         # Reading is the floor. **An unsafe verb needs both** -- the read
         # permission to see the thing and the write permission to change it --
         # rather than the write one instead of the read one.
@@ -126,7 +143,9 @@ class HasPermission(BasePermission):
         # what you cannot see is wrong however narrow the permission is, and
         # requiring both removes the whole class rather than the one instance I
         # happened to notice.
-        if not authorization.has(self.permission_code, self.required_scope):
+        if self.permission_code and not authorization.has(
+            self.permission_code, self.required_scope
+        ):
             self.message = (
                 f"This action requires the '{self.permission_code}' permission."
             )
@@ -255,6 +274,56 @@ def apply_scope_filter(
         return queryset
 
     return queryset.none()
+
+
+def scope_or_own(
+    queryset,
+    request,
+    permission_code: str,
+    employee_attr: str = "employee",
+    facility_attr: str = "facility",
+):
+    """`apply_scope_filter`, except that holding nothing means holding your own.
+
+    **The self-service principle.** An endpoint whose subject and object are
+    the same person should authenticate and then scope to the caller. Asking
+    for `attendance.read` before showing you your own attendance is asking for
+    the permission to see *everybody's* -- so a doctor could not see the days
+    they had worked unless somebody also made them an HR clerk. That is not a
+    safety property, it is an accident of using one permission for two
+    questions.
+
+    The difference from `apply_scope_filter` is one branch: a caller with no
+    grant at all gets their own rows instead of no rows. Everything else --
+    owner, organization, own, facility, the deny fall-through -- is delegated
+    unchanged, because that function's fail-closed default was arrived at the
+    hard way (see its docstring) and is not worth re-deriving here.
+
+    `employee_attr` is a filter path, so a model that reaches its Employee
+    through a relation passes the traversal: `attendance__employee`.
+    """
+    authorization = get_authorization(request)
+    # Only the "holds nothing" case is ours; every other case is already right.
+    if authorization is not None and permission_code in authorization.permissions:
+        return apply_scope_filter(
+            queryset, request, permission_code, employee_attr, facility_attr
+        )
+    if authorization is not None and authorization.is_organization_owner:
+        return queryset
+
+    from apps.hr.models import Employee
+
+    employee = Employee.for_user(request.user.uuid)
+    if employee is None:
+        # Not linked to an employee record: there is no "own" to fall back to.
+        # Empty rather than an error -- the caller asked a reasonable question
+        # and the honest answer is that they have no rows, not that they are
+        # forbidden.
+        return queryset.none()
+    if employee_attr == "self":
+        return queryset.filter(pk=employee.pk)
+    return queryset.filter(**{employee_attr: employee})
+
 
 #: The namespace and key of the switch that turns clinical access control on.
 #: Off by default -- a single-site clinic gets nothing from a care-relationship

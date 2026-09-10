@@ -41,6 +41,8 @@ from apps.hr.attendance_models import (
 from apps.hr.models import (
     WORKING_STATUSES,
     Employee,
+    # Swap peers must be ACTIVE specifically -- see `ShiftSwapViewSet.peers`.
+    EmployeeStatus,
     ProfileCorrectionRequest,
     ProfileCorrectionStatus,
 )
@@ -479,6 +481,113 @@ class ShiftSwapViewSet(viewsets.ReadOnlyModelViewSet):
         if status_param:
             queryset = queryset.filter(status=status_param)
         return queryset.order_by("-created_at")
+
+    @action(detail=False, methods=["get"], url_path="mine")
+    def mine(self, request):
+        """Swaps this person is part of, whatever else they can see.
+
+        **The self-service screen has been calling this route since it was
+        written and it did not exist.** With no `mine` action, the router read
+        `mine` as a record id, failed to parse it as a UUID, and returned a
+        validation error whose message -- before the exception handler was
+        fixed alongside this -- was the wholly unhelpful "The submitted data
+        is not valid." That sentence over a half-loaded screen is what
+        prompted this whole audit.
+
+        It cannot be replaced by the plain list. `get_queryset` narrows to the
+        caller's own swaps *for an ordinary employee*, and deliberately does
+        not for anybody holding `leave.approve` -- so a ward manager opening
+        their own self-service page would see every swap in the facility
+        rather than their own. Named explicitly here, the way
+        `payroll/payslips/mine/` already is.
+        """
+        employee = Employee.for_user(request.user.uuid)
+        if employee is None:
+            # Not an error. Somebody with a login and no employee record has
+            # no shift swaps, and that is a complete answer.
+            return Response({"count": 0, "results": []})
+
+        queryset = (
+            ShiftSwapRequest.objects.filter(
+                models.Q(requester=employee) | models.Q(target_employee=employee)
+            )
+            .select_related(
+                "requester",
+                "target_employee",
+                "requester_entry",
+                "requester_entry__shift",
+                "target_entry",
+                "target_entry__shift",
+            )
+            .order_by("-created_at")
+        )
+        status_param = request.query_params.get("status")
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            return self.get_paginated_response(
+                self.get_serializer(page, many=True).data
+            )
+        return Response(
+            {
+                "count": queryset.count(),
+                "results": self.get_serializer(queryset, many=True).data,
+            }
+        )
+
+    @action(detail=False, methods=["get"], url_path="peers")
+    def peers(self, request):
+        """The colleagues you may offer a swap to: name and code, nothing else.
+
+        **This replaces a call to `/hr/employees/` that the swap form was
+        making to fill one dropdown.** That list is the staff directory --
+        salary band, address, documents, national id -- and it correctly
+        refuses anybody without `employee.read`, so the swap form 403'd for
+        every clinical role. The fix is not to open the directory. It is to
+        answer the smaller question the form was actually asking, with the
+        three fields it actually renders.
+
+        Narrowed to the caller's own facility. Swapping a shift with somebody
+        at another hospital is not a thing that happens, and a nationwide
+        dropdown is unusable at any real size anyway.
+        """
+        employee = Employee.for_user(request.user.uuid)
+        if employee is None:
+            return Response({"count": 0, "results": []})
+
+        # `status`, not an `is_active` flag -- Employee has no such field, and
+        # ACTIVE rather than `WORKING_STATUSES` because somebody on extended
+        # leave is precisely the person who cannot take your shift.
+        queryset = Employee.objects.filter(
+            status=EmployeeStatus.ACTIVE
+        ).exclude(pk=employee.pk)
+        if employee.facility_id:
+            queryset = queryset.filter(facility_id=employee.facility_id)
+
+        search = request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(
+                models.Q(first_name__icontains=search)
+                | models.Q(last_name__icontains=search)
+                | models.Q(employee_code__icontains=search)
+            )
+
+        rows = queryset.order_by("first_name", "last_name")[:200]
+        return Response(
+            {
+                "count": len(rows),
+                "results": [
+                    {
+                        "uuid": str(peer.uuid),
+                        "full_name": f"{peer.first_name} {peer.last_name}".strip(),
+                        "code": peer.employee_code,
+                    }
+                    for peer in rows
+                ],
+            }
+        )
 
     def create(self, request, *args, **kwargs):
         employee = Employee.for_user(request.user.uuid)

@@ -9791,3 +9791,201 @@ Both container images needed rebuilding first: the backend was serving the
 image from before `me_api.py` existed and answered 404. That is the second time
 this week a verification has caught a stale container rather than a bug, which
 is worth remembering as a first thing to check rather than a last.
+
+## 252 - The dark theme was not dark
+
+Dark mode shipped in 251 and the first thing said about it was that it is not
+actually dark: *"its a bit bluish greenish, we need pitch black."*
+
+That was correct, and it was not a matter of taste. The palette was the shadcn
+default, which is built on a blue-tinted slate — `222.2 84% 4.9%` for the
+background. A tint of four or five percent is invisible in isolation and
+unmistakable next to a true black, which is exactly the comparison a user makes
+when they put the application beside their terminal or their phone.
+
+**Why a neutral scale rather than a darker blue.** Lowering the lightness and
+keeping the hue would have produced a darker blue, not a black. So every
+surface token was moved to hue 0, saturation 0 — `--background: 0 0% 0%`, card
+at 5%, popover at 7%, muted and secondary at 12%, accent 14%, border 16%, input
+18%. The steps are lightness only, so surfaces separate by elevation the way
+they are supposed to and nothing carries a colour cast.
+
+**The teal primary stays.** It is the brand, it is the one thing on the screen
+that should be a colour, and against a true black it reads *more* clearly than
+it did against slate. Its foreground became `0 0% 4%` rather than white:
+text on a mid-teal button wants to be dark.
+
+**`--popover` was missing from both palettes**, light included. Anything using
+it fell back to transparent — which is why dropdown menus over a table showed
+the rows behind them. Found while checking the new account menu against the new
+palette, which is the sort of thing a palette rewrite turns up and a colour
+tweak does not.
+
+## 253 - The nurse workspace had never worked, and my sweep said it had
+
+Twelve calls in `NurseWorkspace.tsx` were written `/api/clinical/…`. `request()`
+prepends `/api` itself, so every one of them asked for `/api/api/clinical/…`
+and 404'd. Not some of the screen: the whole screen, from the day it was
+written, and nothing had ever told anybody.
+
+This is the same defect as `SelfService.tsx` in log 236. **I had swept for it
+and reported the codebase clean.** The sweep was a shell grep whose pattern
+contained a backtick inside a double-quoted string; bash consumed the backtick,
+the pattern never matched a template literal, and it found nothing. I reported
+that as "nowhere else does it". It was wrong, and the way it was wrong is worth
+recording: the tool was defeated by the shell before it ever looked at a file,
+and a search that finds nothing looks identical whether the codebase is clean or
+the pattern is broken.
+
+**So it is a test now, not a sweep.** `tests/test_frontend_calls.py` holds two
+static checks over the frontend source — no database, no HTTP — that no call is
+prefixed `/api` twice and that every path starts with a slash. They live in the
+Python suite because the rule is about the *contract between* the two halves,
+and because a check in the suite is run by machinery that cannot be defeated by
+quoting, and runs again tomorrow. Proved by putting one `/api/org/facilities/`
+back and watching it fail.
+
+**And a way to find the next one: `manage.py audit_screens`.** It reads the
+frontend source, extracts every API path each page calls, and probes all of them
+as each of the five demo accounts, printing a matrix. The existing `test_nav.py`
+asks "does this screen open for the role that can see it" and answers with a
+single probe; a screen is not working because its first request succeeded.
+
+It reports rather than asserts, and 403 is rendered amber rather than red,
+because a refusal is often exactly right — a counter assistant should not read
+the employee directory — and colouring correct refusals as faults trains the
+reader to ignore the column. Unsafe verbs are skipped: an audit that posted
+would be an audit somebody has to clean up after.
+
+First full run: **117 endpoint/user pairs failing.**
+
+**The first thing it needed was to stop lying about interpolated paths.** The
+extraction regex stopped at `$`, so `/payroll/payslips/${reference}/document/`
+was recorded and probed as `/payroll/payslips/` — a different endpoint with a
+different permission — and its entirely correct 403 was then reported as a
+failure of the screen. Several of the 117 were that. Those are now marked `~`,
+still probed and still shown (a 500 on one is worth seeing), and excluded from
+the count, because a headline number a reader has learned to discount is worse
+than no number.
+
+## 254 - Every validation error said the same sentence
+
+The screenshot that started this: *"Self-Service Unavailable — The submitted
+data is not valid."* over a half-rendered page.
+
+That sentence was the exception handler's, not the serializer's. Any DRF error
+whose detail was a dict or a list — which is every field error the API can
+produce — was collapsed to one generic string. The server knew exactly what was
+wrong and said none of it, on every screen, for every form, for as long as the
+handler has existed.
+
+So `_readable()` now walks the detail structure and renders it for a person:
+field name, then the message, up to three of them, with "(N more problems.)"
+appended when there are more. `non_field_errors`, `__all__` and `detail` lose
+their prefix, because "Non field errors: …" is machinery leaking into an
+interface. The same screenshot now reads *"Employee: Your account is not linked
+to an employee record."*
+
+Three is a deliberate limit. A form with eleven broken fields produces a toast
+nobody reads; the first three and a count is a message somebody acts on.
+
+## 255 - An employee could not see their own attendance
+
+`audit_screens --screen SelfService` put the real state of the screen on one
+page: **six of its fourteen endpoints returned 403** to the demo doctor, the
+counter assistant and the pharmacist — three of the five roles with the most use
+for a self-service screen. Attendance, leave types, the employee list,
+regularisations, and payslips.
+
+**The cause was one design error repeated.** Self-service was built on
+permissions that answer a different question. `attendance.read` means "may see
+this facility's attendance". `salary.read` means "may see what everybody was
+paid". Requiring either before showing somebody *their own* row means an
+employee can only check their own timesheet if an administrator has also made
+them an HR clerk. The demo doctor holds none of the three, which is why they
+were the right account to measure with — the owner passes every probe no matter
+how broken the scoping is.
+
+The design had assumed everybody also holds the `staff` role, which grants them.
+Even where that is true it is wrong: it grants sight of *everyone's*.
+
+**The fix is the principle already used by `/api/auth/me/`: an endpoint whose
+subject and object are the same person authenticates, then scopes to the
+caller.** `scope_or_own()` is that principle as one function. It delegates
+every case to `apply_scope_filter` unchanged — owner, organization, own,
+facility, and that function's hard-won fail-closed default — and differs in
+exactly one branch: a caller holding no grant at all gets *their own* rows
+instead of *no* rows. One branch, because `apply_scope_filter`'s default was
+arrived at the hard way (three scopes silently returning the whole
+organization, log 198) and is not worth re-deriving.
+
+Applied to attendance and to regularisations, with `?mine=true` kept as a
+narrowing so that a ward manager opening their own timesheet gets their own and
+not the whole ward's. **Leave types** stopped requiring `attendance.read` to
+read: they are published policy — the entitlement and whether leave is paid is
+on the notice board — and making the reference list you need in order to *ask
+for* leave depend on permission to read everybody's attendance is the same
+error in its purest form.
+
+**`/hr/regularisations/` turned out to have no scope filter at all.**
+`attendance.read` was checked and then the queryset was returned whole, so the
+`Scope.OWN` grant the `staff` role hands every employee returned every
+correction request in the organization — reason text included, which is where
+people write "child's surgery". The permission gate made it look guarded. This
+is the pattern worth naming: a check that passes and a filter that was never
+written look identical from outside.
+
+**The staff directory stays shut.** The shift-swap form was filling one dropdown
+from `/hr/employees/`, which 403'd for every clinical role, and the one-line fix
+was to drop that viewset's permission. That list is the HR record: salary band,
+address, citizenship number, documents. So `/hr/shift-swaps/peers/` answers the
+smaller question the form was actually asking — uuid, name, code, active
+colleagues at your own facility, excluding you — and the directory is unchanged.
+There is a test asserting the field set is exactly those three, so a fourth is
+noticed deliberately rather than in a response body.
+
+**Declaring the open read exposed a latent hole, and it was measured rather than
+reasoned about.** `HasPermission.of(None, write="employee.manage")` is the right
+declaration for a published reference list. But `has_permission` returned `True`
+outright on an empty read code, skipping the `write=` branch entirely. Nothing
+had ever declared an empty code, so nothing was ever vulnerable — the first open
+reference list would have been. Put the line back and run the test: **the demo
+doctor PATCHed a leave type's annual entitlement from 18 days to 97 and got a
+200**, because `perform_update` has no second check. An entitlement decides
+accrual, which decides attendance, which decides payroll; that is an employee
+editing their own pay. Removing the line again returned 403 with the value
+untouched.
+
+**Every guard here was proved by reintroducing its defect.** Making
+`scope_or_own` fall through to `return queryset` — the exact mistake
+`apply_scope_filter` once had — failed the two scoping tests with the right
+messages. Restoring the short-circuit above exposed the leave-type write. In
+each case the restore was verified afterwards and the suite re-run, because a
+previous round of this left a guard removed in the working tree.
+
+**One test was wrong about what it proved, which is worth recording.** I wrote
+`test_an_employee_cannot_create_a_leave_type` believing it exercised the
+`write=` declaration. It does not: `perform_create` calls
+`require("config.read")` itself, so the POST is refused even with the
+permission class defeated. The test passes either way — which makes it useless
+as a guard for the thing I claimed. It is kept, because the outcome it pins
+matters, and its docstring now says which layer refuses; the PATCH test is the
+one that exercises the permission class.
+
+**Two other tests failed, both correctly, and both because of this work.**
+
+`test_nav.py` reported `/time` as "hidden but open" for three roles: the screen
+now opens for them and the sidebar still gated its link on `attendance.read`,
+so the one screen those three needed was the one they could not see. The nav
+entry lost its `needs` — attendance and leave are self-service; the screen
+itself still shows the facility's figures only to somebody holding the
+permission. `test_invariants.py` reported `/account` as routed with no way in:
+it is reached from the account menu in the header, where every application puts
+it, and is now listed as deliberately unlinked with that reason.
+
+| | |
+|---|---|
+| `audit_screens --screen SelfService`, before | 6 endpoints 403 for 3 of 5 accounts |
+| after | every endpoint the screen calls answers for every account |
+| `tests/test_self_service.py` | 11 passed |
+| full backend suite | 204 passed, 9 skipped → then 2 real failures fixed |

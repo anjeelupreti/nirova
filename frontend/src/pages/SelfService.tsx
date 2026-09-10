@@ -162,14 +162,13 @@ export default function SelfServicePage() {
       } else if (tab === "swaps") {
         const swapRes = await api.get<Paginated<ShiftSwapRow>>("/hr/shift-swaps/mine/");
         setSwaps(swapRes.results || []);
-        const empRes = await api.get<Paginated<any>>("/hr/employees/");
-        setColleagues(
-          (empRes.results || []).map((e: any) => ({
-            uuid: e.uuid,
-            full_name: `${e.first_name} ${e.last_name}`,
-            code: e.employee_code,
-          }))
+        // Peers, not the staff directory: `/hr/employees/` needs
+        // `employee.read` and 403'd for every clinical role, so this dropdown
+        // was empty for exactly the people who use it.
+        const empRes = await api.get<Paginated<{ uuid: string; full_name: string; code: string }>>(
+          "/hr/shift-swaps/peers/"
         );
+        setColleagues(empRes.results || []);
       } else if (tab === "profile") {
         const corrRes = await api.get<Paginated<ProfileCorrectionRow>>("/hr/profile-corrections/");
         setCorrections(corrRes.results || []);

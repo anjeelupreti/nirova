@@ -26,8 +26,11 @@ from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import (
     HasPermission,
-    apply_scope_filter,
     get_authorization,
+    # Self-service scoping: no grant means your own rows rather than none.
+    # Used by the attendance and regularisation lists, both of which are
+    # things an employee has a right to see about themselves.
+    scope_or_own,
 )
 from apps.hr.attendance import (
     all_balances,
@@ -315,8 +318,19 @@ def _self_or(request, employee_uuid):
         return get_object_or_404(Employee, uuid=employee_uuid)
     employee = Employee.for_user(request.user.uuid)
     if employee is None:
+        # Written for the person reading it, not for the API client. This
+        # fires on the self-service screen for anybody whose login is not
+        # linked to an employee -- an administrator, a platform operator, a
+        # counter account -- and telling them to "name one explicitly" is
+        # advice they cannot act on from a screen with no such field.
         raise serializers.ValidationError(
-            {"employee": "You have no employee record; name one explicitly."}
+            {
+                "employee": (
+                    "Your account is not linked to an employee record, so "
+                    "there is nothing here to show. An administrator can "
+                    "link it from the staff directory."
+                )
+            }
         )
     return employee
 
@@ -428,7 +442,10 @@ class RosterViewSet(viewsets.ReadOnlyModelViewSet):
 
 class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = AttendanceSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("attendance.read", Scope.OWN)]
+    # Authenticated, not `attendance.read`. Seeing your own attendance is not
+    # the same question as seeing the facility's, and `scope_or_own` below is
+    # what keeps them apart: no grant means your own rows, not everybody's.
+    permission_classes = [IsAuthenticated]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         Attendance, relations=["employee", "facility"],
@@ -444,10 +461,21 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
         if end:
             queryset = queryset.filter(date__lte=end)
 
-        # Scope filter: callers with only Scope.OWN see only their own attendance
-        queryset = apply_scope_filter(
+        # Scope filter: Scope.OWN, *and* holding nothing, see only their own.
+        queryset = scope_or_own(
             queryset, self.request, "attendance.read", employee_attr="employee"
         )
+
+        # `?mine=true` narrows to the caller even when they could see more --
+        # the self-service screen asks for it explicitly so that a manager
+        # opening their own timesheet is not handed the whole ward's.
+        if self.request.query_params.get("mine") == "true":
+            employee = Employee.for_user(self.request.user.uuid)
+            queryset = (
+                queryset.filter(employee=employee) if employee
+                else queryset.none()
+            )
+
         return queryset.order_by("-date", "employee__first_name")
 
     # -- marking, which needs no permission beyond having a record ----------
@@ -549,13 +577,28 @@ class AttendanceViewSet(viewsets.ReadOnlyModelViewSet):
 
 class RegularisationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RegularisationSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("attendance.read")]
+    permission_classes = [IsAuthenticated]
     lookup_field = "uuid"
 
     def get_queryset(self):
         queryset = AttendanceRegularisation.objects.select_related(
             "attendance", "attendance__employee"
         )
+
+        # This viewset had no scope filter at all: `attendance.read` at
+        # Scope.OWN -- the grant the `staff` role hands every employee --
+        # returned every correction request in the organization, reason text
+        # included ("hospital visit", "child's surgery"). The permission was
+        # checked and then ignored. A leak of exactly the kind that survives
+        # because the list looks plausible when an admin opens it.
+        queryset = scope_or_own(
+            queryset,
+            self.request,
+            "attendance.read",
+            employee_attr="attendance__employee",
+            facility_attr="attendance__facility",
+        )
+
         if self.request.query_params.get("pending") == "true":
             queryset = queryset.filter(status="pending")
         return queryset.order_by("-created_at")
@@ -576,11 +619,17 @@ class RegularisationViewSet(viewsets.ReadOnlyModelViewSet):
 
 class LeaveTypeViewSet(viewsets.ModelViewSet):
     serializer_class = LeaveTypeSerializer
-    # Same as the holiday calendar, and for the same reason: leave types
-    # carry entitlements and whether the leave is paid.
+    # Readable by anybody signed in; writable only with `employee.manage`.
+    #
+    # It used to require `attendance.read` to read, which made the *reference
+    # list you need in order to request leave* depend on the permission to
+    # read everybody's attendance. A doctor could open the leave form and find
+    # the "type" dropdown empty, with a 403 behind it. Leave types are a
+    # published policy -- the entitlement and whether it is paid is on the
+    # notice board -- so there is nothing here to withhold from staff.
     permission_classes = [
         IsAuthenticated,
-        HasPermission.of("attendance.read", write="employee.manage"),
+        HasPermission.of(None, write="employee.manage"),
     ]
     lookup_field = "code"
 

@@ -2569,6 +2569,12 @@ def test_every_console_route_has_a_way_to_reach_it():
         # Opened from the queue with an encounter in hand. A sidebar link to
         # "the consultation" would have to invent which one.
         "/consultation/:uuid",
+        # Reached from the account menu in the header (`UserMenu.tsx`), which
+        # is where every application puts it and where people look for it. In
+        # the sidebar it would sit in a functional group -- "People",
+        # "Oversight" -- among screens about other people, which is the wrong
+        # place for the one screen that is about you.
+        "/account",
     }
 
     orphans = sorted(routes - linked - reached_from_elsewhere)

@@ -206,7 +206,13 @@ const NAV_GROUPS: {
     label: "People",
     items: [
       { to: "/people", label: "Directory", icon: UserCog, needs: "employee.read", scope: "own" },
-      { to: "/time", label: "Attendance & leave", icon: CalendarClock, needs: "attendance.read", scope: "own" },
+      // No `needs`: attendance and leave are self-service. The screen shows
+      // you your own days and the facility's only if you hold
+      // `attendance.read`, so gating the *link* on that permission hid the
+      // screen from exactly the people with most reason to open it -- a
+      // doctor, a counter assistant and a pharmacist all held none of it, and
+      // all three had to request leave through somebody else.
+      { to: "/time", label: "Attendance & leave", icon: CalendarClock },
       { to: "/payroll", label: "Payroll", icon: Coins, needs: "salary.read", scope: "facility" },
     ],
   },
