@@ -501,6 +501,36 @@ SYSTEM_ROLES = [
         ],
     },
     {
+        "code": "financial_controller",
+        "name": "Financial Controller",
+        "description": (
+            "Keeps the ledger: posts and reverses journal entries, closes "
+            "periods, approves expenses."
+        ),
+        "max_scope": Scope.ORGANIZATION,
+        # **Nobody held `finance.post`.** Not one of the sixteen seeded roles,
+        # so the only account that could post a journal entry or approve an
+        # expense was the organization owner -- who would have had to sign off
+        # every taxi fare in the hospital personally.
+        #
+        # Deliberately *not* `invoice.create`. `apps/finance/api.py` says it
+        # plainly: "the people who raise invoices and the people who keep the
+        # ledger are deliberately not the same people". Widening `accountant`
+        # -- who raises invoices -- would have merged exactly the two jobs that
+        # separation exists to keep apart, which is why this is a new role
+        # rather than three more lines on an existing one.
+        #
+        # And deliberately not `purchase.approve`: that is the buyer's checker,
+        # held by the facility and pharmacy managers who know whether the goods
+        # actually arrived.
+        "permissions": [
+            "facility.read", "organization.read",
+            "finance.post", "finance.close",
+            "purchase.read", "invoice.read",
+            "report.read", "analytics.read",
+        ],
+    },
+    {
         "code": "hr_manager",
         "name": "HR Manager",
         "description": "People, attendance and payroll preparation.",

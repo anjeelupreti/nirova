@@ -258,6 +258,19 @@ class Command(BaseCommand):
             # rather than trusting that roles were kept apart.
             assign_role(requester, "hr_manager", scope="organization",
                         reason="Demo seed")
+
+            # **The ledger keeper.** No seeded role held `finance.post`, so
+            # before this the only account that could post a journal entry or
+            # approve an expense was the owner -- who would have had to sign
+            # off every taxi fare personally. Organization scope, because the
+            # books are one set for the whole organization rather than per
+            # branch.
+            controller = self._user(
+                f"controller@{organization.slug}.test", "Renu Pradhan",
+                organization, False, organization.slug,
+            )
+            assign_role(controller, "financial_controller",
+                        scope="organization", reason="Demo seed")
         self.stdout.write("  roles assigned")
 
     def _assign_counter_roles(self, organization, counter_staff):

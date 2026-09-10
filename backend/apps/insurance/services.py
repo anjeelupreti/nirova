@@ -62,6 +62,7 @@ from apps.insurance.models import (
 # all, and the transaction must open on the tenant connection -- the router
 # refuses to guess, so a bare `transaction.atomic` would protect nothing.
 from apps.tenancy.db import tenant_atomic_method
+from apps.common.references import next_reference
 
 logger = logging.getLogger("nirova.insurance")
 
@@ -235,7 +236,12 @@ def estimate(policy: Policy, amount, category_totals: dict = None,
 
 
 def _next_reference(model, prefix: str) -> str:
-    return f"{prefix}-{model.objects.count() + 1:06d}"
+    """The next reference, from the highest already issued.
+
+    Was `objects.count() + 1`. See `apps/common/references.py` for why
+    that collides after any deletion.
+    """
+    return next_reference(model, prefix)
 
 
 @tenant_atomic_method

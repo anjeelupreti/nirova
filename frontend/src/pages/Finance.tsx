@@ -75,12 +75,23 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { PayablesPanel } from "@/pages/finance/Payables";
 
-type Tab = "statements" | "owed" | "journals" | "periods" | "bank";
+type Tab =
+  | "statements"
+  | "owed"
+  | "payables"
+  | "journals"
+  | "periods"
+  | "bank";
 
 const TABS: { id: Tab; label: string; icon: typeof Scale }[] = [
   { id: "statements", label: "Statements", icon: Scale },
   { id: "owed", label: "Owed", icon: Receipt },
+  // Expenses and supplier invoices had no screen at all: the ledger could be
+  // read and there was no way to put a bill into it. Next to "Owed", which is
+  // what the patients owe *us* -- these two are the other direction.
+  { id: "payables", label: "Payables", icon: Wallet },
   { id: "journals", label: "Journals", icon: BookOpen },
   { id: "periods", label: "Periods", icon: CalendarDays },
   { id: "bank", label: "Bank", icon: Landmark },
@@ -202,6 +213,7 @@ export default function FinancePage() {
 
       {tab === "statements" && <Statements />}
       {tab === "owed" && <Owed />}
+      {tab === "payables" && <PayablesPanel />}
       {tab === "journals" && <Journals onPosted={loadAgreement} />}
       {tab === "periods" && <Periods />}
       {tab === "bank" && <Bank />}

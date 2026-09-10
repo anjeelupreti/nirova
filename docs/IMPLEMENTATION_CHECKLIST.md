@@ -3131,6 +3131,32 @@ service creates the record.*
 
 ---
 
+# Payables, reachable at last `[x]`
+
+*Added after `audit_reach` found six finance endpoints with no screen (log 264).
+Building it turned up a complete deadlock behind them.*
+
+- [x] Claim an expense, and approve one — approval posts it to the ledger in the
+      same step, and is refused to whoever claimed it
+- [x] Record a supplier invoice and approve it, with the supplier **chosen**
+      rather than typed (the model makes supplier and invoice number unique
+      together, which is what stops one bill arriving twice under two spellings)
+- [x] **`financial_controller`** — no seeded role held `finance.post`, so posting
+      a journal entry and approving an expense were the organization owner's
+      personal jobs. Deliberately without `invoice.create`: raising invoices and
+      keeping the ledger are separate on purpose
+- [x] Claiming an expense no longer requires the permission to post it. It did,
+      which meant the only account that could raise a claim was the only account
+      forbidden from approving it — nobody could complete the flow at all
+- [x] Recording and approving a supplier invoice are different permissions
+      again. The class gate covers create, update and delete; the `approve`
+      action carries its own
+- [x] **References are allocated from the highest already issued**, not from
+      `objects.count() + 1`. Soft-deletion drops the count while the unique
+      constraint still sees the deleted row, so any tenant that had ever
+      deleted one of these could never create another
+- [ ] Paying a supplier invoice, and the payment run behind it
+
 # The stockroom, reachable at last `[x]`
 
 *Added after `manage.py audit_reach` found thirteen pharmacy endpoints that no

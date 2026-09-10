@@ -10651,3 +10651,73 @@ only thing in the way.
 | self-approval guard | proved: 200 with a posted adjustment when removed |
 | full backend suite | 243 passed, 9 skipped |
 | `npm run build` | clean |
+
+## 264 - Nobody could complete an expense claim, and references were a headcount
+
+Building the payables screen -- six endpoints `audit_reach` found with no screen
+-- turned up three defects behind them, each worse than the missing screen.
+
+**Nobody could complete an expense claim. Not one role, including the owner.**
+`ExpenseViewSet` asked for `finance.post` on every unsafe verb, so raising a
+claim needed the permission to post it; **not one of the sixteen seeded roles
+held `finance.post`**, so the only account that could raise one was the
+organization owner; and `approve` refuses whoever claimed. The one person who
+could create an expense was the one person forbidden from approving it. A
+complete deadlock, in a feature with no screen, so nobody had ever tried.
+
+Two fixes, neither of them widening a role. Claiming is not posting -- it
+records that money was spent and changes no balance -- so `create` asks for
+`report.read`, the same permission as seeing the screen, while editing and
+deleting keep the stricter one. And a **`financial_controller`** role now holds
+`finance.post` and `finance.close`, deliberately without `invoice.create`:
+`apps/finance/api.py` states that the people who raise invoices and the people
+who keep the ledger are not the same people, and widening `accountant` -- who
+raises invoices -- would have merged exactly the two jobs that separation
+exists to keep apart.
+
+**Supplier invoices had the same pair collapsed the other way.** The viewset
+asked for `purchase.approve` on every write, so the only people who could
+*record* a bill were the people who sign it off -- and `perform_create`'s
+`purchase.create` check was unreachable without also holding the approval. The
+store keeper whose order it was could not enter what arrived. Swapping the class
+gate to `purchase.create` then broke it symmetrically, because `approve` is a
+POST and hit the creator's gate. **A pair of permissions needs a pair of gates**:
+the class gate covers create, update and delete; the `approve` action carries
+its own.
+
+**And a reference allocator that was a headcount.** Every one of these was
+`objects.count() + 1`:
+
+    reference=f"EX-{Expense.objects.count() + 1:06d}"
+
+`BaseModel` soft-deletes -- `objects` filters `deleted_at__isnull=True` while
+the `unique=True` on the column still sees the deleted row -- so deleting one
+expense drops the count, the next claim is allocated a reference that already
+exists, and the insert dies with a `UniqueViolation` behind a 500. **Any tenant
+that had ever deleted one of these could never create another.** It also repeats
+under concurrency: two clerks claiming at once read the same count.
+
+Ten sites used the pattern; the six reading `objects` rather than `all_objects`
+were all live. `apps/common/references.py` reads the highest reference already
+issued, across `all_objects`, so a number once given out is never given out
+again -- which is the property a reference has to have, because it is quoted on
+paper and down a telephone. The residual race is stated rather than papered
+over: two callers can still read the same maximum, and the unique constraint
+turns that into a failed write rather than two documents sharing a number. A
+gapless contended sequence needs a locked counter row, and that is worth
+building when somebody is actually issuing these concurrently.
+
+**How it was found is the part worth keeping.** The payables tests passed alone
+and failed in the full suite. The usual diagnosis for that is test pollution --
+and the usual fix is to make the test tidier, which would have buried a
+production bug under a cleanup helper. What the tests had actually done was
+delete the documents they created, which is exactly what a tenant does, and the
+next run walked into the collision. *A test that only fails alongside others is
+sometimes telling you about the application.*
+
+| | |
+|---|---|
+| `tests/test_payables.py` | 8 passed |
+| reference guard | proved: reissued the deleted document's reference when reverted |
+| full backend suite | 251 passed, 9 skipped |
+| `npm run build` | clean |

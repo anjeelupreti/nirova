@@ -79,6 +79,7 @@ from apps.entitlements.services import require_module
 # at all, and the transaction must open on the tenant connection — the router
 # refuses to guess, so a bare `transaction.atomic` would protect nothing.
 from apps.tenancy.db import tenant_atomic_method
+from apps.common.references import next_reference
 
 logger = logging.getLogger("nirova.bloodbank")
 
@@ -100,7 +101,14 @@ class Incompatible(BloodBankError):
 
 
 def _next_number(model, field: str, prefix: str) -> str:
-    return f"{prefix}-{model.objects.count() + 1:06d}"
+    """The next reference, from the highest already issued.
+
+    Was `objects.count() + 1`, which collides the moment one of these is
+    deleted: the count drops, the reference repeats, and the unique
+    constraint -- which still sees the soft-deleted row -- turns the next
+    donation into a 500. See `apps/common/references.py`.
+    """
+    return next_reference(model, prefix, field=field)
 
 
 # ---------------------------------------------------------------------------

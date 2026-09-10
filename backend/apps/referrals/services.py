@@ -56,6 +56,7 @@ from apps.referrals.models import (
 # router refuses to guess, so a bare `transaction.atomic` would protect
 # nothing.
 from apps.tenancy.db import tenant_atomic_method
+from apps.common.references import next_reference
 
 logger = logging.getLogger("nirova.referrals")
 
@@ -72,7 +73,11 @@ class ReferralError(DomainError):
 
 
 def _next_reference() -> str:
-    return f"REF-{Referral.objects.count() + 1:06d}"
+    """The next referral reference, from the highest already issued.
+
+    Was `objects.count() + 1`. See `apps/common/references.py`.
+    """
+    return next_reference(Referral, "REF")
 
 
 def _log(referral: Referral, event: str, actor=None, detail: str = ""):

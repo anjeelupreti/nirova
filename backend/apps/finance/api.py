@@ -33,6 +33,10 @@ from apps.common.dates import as_date, date_params
 from apps.common.fields import UUIDRelatedField
 from apps.common.filters import uuid_filterset
 from apps.common.permissions import HasPermission, get_authorization
+# The next reference from the highest already issued, not from a row count:
+# `count() + 1` reissues a number the moment one of these is deleted, and
+# the unique constraint still sees the soft-deleted row.
+from apps.common.references import next_reference
 from apps.finance.models import (
     Account,
     AccountingPeriod,
@@ -468,20 +472,53 @@ class JournalViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SupplierInvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = SupplierInvoiceSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("report.read", write="purchase.approve")]
+    # **`purchase.read` and `purchase.create`, not `report.read` and
+    # `purchase.approve`.** The old pair collapsed the very separation
+    # `perform_create` below tries to enforce: recording an invoice required
+    # `purchase.approve`, so the only people who could enter a bill were the
+    # people who sign it off, and `perform_create`'s `purchase.create` check
+    # was unreachable without also holding the approval. The store keeper who
+    # ordered the goods -- the maker -- could not record what arrived.
+    #
+    # `purchase.read` is also the right floor for reading: a supplier invoice
+    # is a purchasing document, and `report.read` let anybody who can open a
+    # report see the hospital's bills while shutting out the store keeper whose
+    # order it was.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("purchase.read", write="purchase.create"),
+    ]
     lookup_field = "reference"
     filterset_class = uuid_filterset(
         SupplierInvoice, relations=["facility"], fields=["status"],
     )
+
+    def get_permissions(self):
+        """`approve` is a POST, and the class gate is the *creator's*.
+
+        Without this the two halves block each other: the class requires
+        `purchase.create` on every unsafe verb, so the approver -- who holds
+        `purchase.approve` and deliberately not `purchase.create` -- was refused
+        at the door of the very action written for them. Swapping the class gate
+        to the approval permission is what the code did before, and that broke
+        it the other way round.
+
+        A pair of permissions needs a pair of gates.
+        """
+        if self.action == "approve":
+            return [
+                IsAuthenticated(),
+                HasPermission.of("purchase.read", write="purchase.approve")(),
+            ]
+        return super().get_permissions()
 
     def get_queryset(self):
         return SupplierInvoice.objects.select_related("facility")
 
     def perform_create(self, serializer):
         get_authorization(self.request).require("purchase.create", Scope.FACILITY)
-        count = SupplierInvoice.objects.count() + 1
         serializer.save(
-            reference=f"SI-{count:06d}",
+            reference=next_reference(SupplierInvoice, "SI"),
             created_by_id=self.request.user.uuid,
         )
 
@@ -519,13 +556,34 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         Expense, relations=["facility", "account"], fields=["status"],
     )
 
+    def get_permissions(self):
+        """**Claiming an expense is not posting one.**
+
+        The class above asks for `finance.post` on every unsafe verb, which
+        deadlocked the whole feature: creating a claim needed the permission to
+        post it, only the organization owner held that, and `approve` refuses
+        the person who claimed. So the one account that could raise an expense
+        was the one account that could not approve it, and nobody could
+        complete the flow at all.
+
+        Claiming is recording that money was spent; it changes no balance and
+        posts nothing. `report.read` -- being able to see this screen -- is the
+        right floor for it, and the ledger is still protected because
+        `approve` is where the posting happens and that keeps `finance.post`.
+
+        Editing and deleting a claim keep the stricter permission: those change
+        a document somebody may already have approved.
+        """
+        if self.action == "create":
+            return [IsAuthenticated(), HasPermission.of("report.read")()]
+        return super().get_permissions()
+
     def get_queryset(self):
         return Expense.objects.select_related("facility", "account")
 
     def perform_create(self, serializer):
-        count = Expense.objects.count() + 1
         serializer.save(
-            reference=f"EX-{count:06d}",
+            reference=next_reference(Expense, "EX"),
             claimed_by_id=self.request.user.uuid,
             claimed_by_name=self.request.user.full_name,
             created_by_id=self.request.user.uuid,
