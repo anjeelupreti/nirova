@@ -36,6 +36,7 @@ import {
   RotateCcw,
   Search,
   ShoppingCart,
+  Undo2,
   Smartphone,
   Trash2,
   Wallet,
@@ -84,6 +85,7 @@ import {
   status,
   useRecordPanel,
 } from "@/components/RecordPanel";
+import { ReturnsPanel } from "@/pages/pos/Returns";
 
 /** One line in the basket, before it is anything the server knows about. */
 interface BasketItem {
@@ -124,7 +126,9 @@ export default function CounterPage() {
   const [session, setSession] = useState<CounterSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"sell" | "sales" | "close">("sell");
+  const [view, setView] = useState<
+    "sell" | "sales" | "returns" | "close"
+  >("sell");
 
   const loadSession = useCallback(async () => {
     setLoading(true);
@@ -167,6 +171,10 @@ export default function CounterPage() {
       />
       {view === "sell" && <SellView session={session} />}
       {view === "sales" && <SalesView session={session} />}
+      {/* Returns had no screen at all: the counter could sell and could not
+          take anything back, which in practice means it happens in cash out of
+          the drawer and the stock ledger never hears about it. */}
+      {view === "returns" && <ReturnsPanel />}
       {view === "close" && (
         <CloseTill session={session} onClosed={() => void loadSession()} />
       )}
@@ -339,7 +347,7 @@ function TillBar({
 }: {
   session: CounterSession;
   view: string;
-  onView: (view: "sell" | "sales" | "close") => void;
+  onView: (view: "sell" | "sales" | "returns" | "close") => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-background px-4 py-3">
@@ -359,6 +367,7 @@ function TillBar({
           [
             ["sell", "Sell", ShoppingCart],
             ["sales", "Today", ReceiptIcon],
+            ["returns", "Returns", Undo2],
             ["close", "Cash up", Banknote],
           ] as const
         ).map(([id, label, Icon]) => (

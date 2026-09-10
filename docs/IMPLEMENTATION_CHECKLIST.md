@@ -3131,6 +3131,28 @@ service creates the record.*
 
 ---
 
+# Returns at the counter, reachable at last `[x]`
+
+*Four endpoints with no screen (log 266). A pharmacy could sell and could not
+take anything back — which in practice means it happens in cash out of the
+drawer and the stock ledger never hears about it.*
+
+- [x] Raise a return against a sale, line by line, with the condition each item
+      came back in
+- [x] `returnable_quantity` comes from the server, never computed in the
+      browser: a line already partly returned can only give back the remainder,
+      and a browser-side subtraction would disagree with the service at the
+      moment the goods are already over the counter
+- [x] Decide it: approve with a refund method, or refuse with a reason
+- [x] Raising and approving are different permissions — `sale.return` at the
+      counter, `sale.return_approve` for the manager — **and no role holds
+      both**
+- [x] Approving is refused to whoever raised it, which is the only control that
+      binds the organization owner (who bypasses every permission check)
+- [x] Restocking is a separate question from refunding. Money can go back
+      without the goods going back on the shelf: a cold-chain vial that sat on
+      a counter is refundable and not sellable
+
 # Payables, reachable at last `[x]`
 
 *Added after `audit_reach` found six finance endpoints with no screen (log 264).

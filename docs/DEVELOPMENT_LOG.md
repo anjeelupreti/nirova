@@ -10787,3 +10787,86 @@ the database, and the prefetch above them keeps looking like it is working.
 | `/api/blood/donations/` | 23 → 14, flat |
 | `/api/ipd/nurse-workspace/summary/` | 41 → 20, no longer per patient |
 | full backend suite | 252 passed, 9 skipped |
+
+## 266 - A pharmacy could sell and could not take anything back
+
+Four POS endpoints with no screen: raising a return, listing them, deciding one.
+The counter could take money and had no way to give it back -- which in practice
+means it happens in cash out of the drawer and the stock ledger never hears
+about it.
+
+**A return is a request, not an act.** Whoever takes the goods back records what
+came in and why; somebody else decides whether the money goes out. The screen
+shows those as two steps rather than one form with an "approve" tick, because a
+refund is the classic route for taking money out of a till.
+
+**`returnable_quantity` comes from the server and is never recomputed here.** A
+line already partly returned can only give back the remainder. A browser-side
+subtraction would disagree with the service at the worst possible moment --
+after the goods are already over the counter -- and the disagreement would be
+visible only as a rejected return.
+
+**Restocking is a separate question from refunding**, and the form asks both. A
+cold-chain vial that sat on a counter for an hour is refundable and not
+sellable; a screen that made one imply the other would put it back on the shelf.
+
+**The separation here is cleaner than the stock count's.** `pharmacy_counter`
+holds `sale.return`; `pharmacy_manager` holds `sale.return_approve`; **no role
+holds both**. Which means every role-based actor is stopped at the permission
+gate and never reaches `assert_different_actors` -- so the only actor for whom
+that guard is the thing standing in the way is the **organization owner**, who
+bypasses permission checks entirely and is, not incidentally, the one person who
+could otherwise refund themselves out of a till unobserved. The test is written
+as the owner for exactly that reason, and proved by removing the guard: the
+owner approved their own refund and it came back `completed`.
+
+**And a bug in how I read the roles.** I first wrote that test as the pharmacy
+manager, on the strength of a check that asked whether `"sale.return"` was
+*in* the permission list -- which is true of `"sale.return_approve"` as a
+substring. The test failed at the raise step, which is how it surfaced. Every
+role claim in this session's tests is now made with an exact match; re-checking
+the stock one under the same method confirmed `pharmacy_manager` genuinely does
+hold both `stock.count` and `stock.approve_adjustment`, so that test was right
+for the reason it claimed.
+
+`p in perms` reads like set membership and is substring matching. It is the same
+class of mistake as the shell that ate a backtick and the regex that could not
+see a chained call: **a check that silently answers the wrong question and looks
+like it answered the right one.**
+
+## 267 - 502, and why the running stack was two sessions behind
+
+The app answered `502 Bad Gateway`. Two causes, stacked, and both are recurring.
+
+**The tenant row pointed at `localhost`.** `TenantDatabase` records a host per
+tenant, and this session's host-side work had retargeted it so that `pytest` and
+the audit commands could reach Postgres on the published port. Inside the
+backend container `localhost` is the container itself, so bootstrap failed with
+exactly the error it is written to give: *"the tenant row records a hostname
+(localhost) that resolves somewhere else"*. `retarget_tenants --host postgres
+--apply`, run inside the container where that name resolves, and a restart.
+
+**And the images were stale.** With the backend up and healthy, `/api/health/`
+answered and `/api/import/kinds/` returned 404 -- the image predated
+`apps/dataimport`, and the frontend image predated every screen built since. A
+health check that passes proves the container is running, not that it is running
+*this* code.
+
+That is now the third time a stale image has cost a verification in this
+project, and the second time this week. Rebuilt, brought up, and checked through
+nginx rather than against the local process: login, then `/api/import/kinds/`,
+`/api/clinical/appointments/`, `/api/pos/returns/`, `/api/finance/expenses/` and
+`/api/pharmacy/counts/` -- 200 apiece.
+
+**The retarget is a genuine friction and worth naming as one.** Host tooling
+needs `localhost`; containers need `postgres`; the value lives in the database,
+so whichever was set last wins and the other breaks. It is recorded in the
+checklist rather than papered over, because the fix is a design change -- the
+host belongs in configuration per process, not in a row shared by both.
+
+| | |
+|---|---|
+| `tests/test_returns.py` | 8 passed |
+| same-actor guard | proved: owner refunded themselves when removed |
+| full backend suite | 260 passed, 9 skipped |
+| running stack | rebuilt; five new endpoints answering through nginx |
