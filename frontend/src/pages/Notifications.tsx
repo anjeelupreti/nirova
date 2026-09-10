@@ -65,6 +65,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { Link } from "react-router-dom";
 
 type Tab = "waiting" | "all" | "preferences";
 
@@ -326,7 +327,30 @@ export default function Notifications() {
                         )}
                         {row.dismissed_at && <Badge variant="outline">Cleared</Badge>}
                       </div>
-                      <p className="font-medium">{row.title}</p>
+                      {/*
+                        **The notification points somewhere, and the screen was
+                        throwing that away.** Every row carries a `link` -- a
+                        console route like `/diagnostics` or `/payroll` -- and
+                        nothing rendered it, so a critical potassium result told
+                        you about bed 12 and gave you no way to get there. Being
+                        told about something you cannot then open is the least
+                        useful shape a notification can take.
+
+                        Only linked when there *is* a link. Several
+                        notifications are raised without one, and a link to
+                        nowhere is worse than plain text: it looks like the way
+                        through and is not.
+                      */}
+                      {row.link ? (
+                        <Link
+                          to={row.link}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {row.title}
+                        </Link>
+                      ) : (
+                        <p className="font-medium">{row.title}</p>
+                      )}
                       {row.body && (
                         <p className="text-muted-foreground text-sm">{row.body}</p>
                       )}

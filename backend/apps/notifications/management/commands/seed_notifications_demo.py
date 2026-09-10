@@ -164,6 +164,12 @@ class Command(BaseCommand):
                 source="seed_demo", event="licence_expiring",
                 category=NotificationCategory.REMINDER,
                 title="NMC registration expires in 21 days",
+                # A notification with no link tells somebody about a
+                # thing and gives them no way to open it. The real
+                # raisers all set one; the demo did not, so the seeded
+                # rows were the ones a reviewer saw first and the ones
+                # that looked like dead ends.
+                link="/people",
                 recipients=[first], dedupe_key="seed:licence:EMP-0001",
             )
         self.expect("rows after twelve sweeps", Notification.objects.filter(
@@ -179,6 +185,7 @@ class Command(BaseCommand):
             source="seed_demo", event="licence_expiring",
             category=NotificationCategory.REMINDER,
             title="NMC registration expires in 21 days",
+            link="/people",
             recipients=[first], dedupe_key="seed:licence:EMP-0001",
         )
         self.expect("a new one may now be raised", Notification.objects.filter(
@@ -213,6 +220,7 @@ class Command(BaseCommand):
         notify(source="seed_demo", event="approval_waiting",
                category=NotificationCategory.APPROVAL,
                title="Purchase order PO-0042 needs approval",
+               link="/procurement",
                recipients=[first])
         before = summary(first["id"])
         mark_all_read(first["id"])

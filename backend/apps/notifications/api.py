@@ -130,7 +130,21 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         can widen it back.
         """
         return (
-            NotificationReceipt.objects.filter(recipient_id=self.request.user.uuid)
+            NotificationReceipt.objects.filter(
+                recipient_id=self.request.user.uuid,
+                # **A deleted notification must leave the inbox with it.**
+                # This lists *receipts*, and a receipt is a plain foreign key to
+                # its notification -- soft-deleting the notification hides it
+                # from `Notification.objects` and leaves every receipt pointing
+                # at it still listed. Deleting a notification therefore did
+                # nothing visible to the people who had been told.
+                #
+                # Found because `seed_notifications_demo` deletes its own rows
+                # to be re-runnable, and three runs left three copies of every
+                # notice in the demo inbox. The seed was doing exactly the right
+                # thing; the read was ignoring it.
+                notification__deleted_at__isnull=True,
+            )
             .select_related("notification", "notification__facility")
             .order_by("-delivered_at")
         )

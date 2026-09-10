@@ -267,7 +267,15 @@ def inbox(
     the same as unread -- a thing can be read three times and still be waiting.
     """
     queryset = (
-        NotificationReceipt.objects.filter(recipient_id=owner_id)
+        NotificationReceipt.objects.filter(
+            recipient_id=owner_id,
+            # A receipt outlives the deletion of its notification unless this
+            # says otherwise -- a plain foreign key is not affected by the
+            # parent's `deleted_at`. The inbox, the badge and the API listing
+            # all need the same clause, and all three had to be found
+            # separately, which is the argument for a manager that carries it.
+            notification__deleted_at__isnull=True,
+        )
         .select_related("notification", "notification__facility")
     )
     if unread_only:
@@ -298,7 +306,15 @@ def summary(owner_id) -> dict:
     """
     now = timezone.now()
     live = (
-        NotificationReceipt.objects.filter(recipient_id=owner_id)
+        NotificationReceipt.objects.filter(
+            recipient_id=owner_id,
+            # The same hole the inbox listing had: a receipt is a plain foreign
+            # key, so soft-deleting a notification left it counted in the badge
+            # as well as listed. A badge that counts something the inbox cannot
+            # show is the worst of both -- it sends somebody looking for a row
+            # that is not there.
+            notification__deleted_at__isnull=True,
+        )
         .filter(
             models.Q(notification__expires_at__isnull=True)
             | models.Q(notification__expires_at__gt=now)

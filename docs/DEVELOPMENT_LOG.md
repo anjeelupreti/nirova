@@ -10942,3 +10942,52 @@ outside the image).
 | suite, in the container | 256 passed, 13 skipped |
 | suite, on the host with the override | 82 passed for the frontend-reading modules |
 | served bundle | rebuilt and confirmed to contain the sticky sidebar |
+
+## 270 - A notification told you about something and gave you no way to reach it
+
+Every notification carries a `link` -- a console route like `/diagnostics` or
+`/procurement` -- and the notification centre rendered the title as plain text
+and threw the link away. A critical potassium result told you about bed 12 and
+offered no way to get there. Being told about something you cannot then open is
+the least useful shape a notification can take.
+
+Linked now, and **only when there is a link**: several are raised without one,
+and a link to nowhere is worse than plain text because it looks like the way
+through and is not.
+
+**Half the demo's notifications had no link, and that was the seed rather than
+the product.** The real raisers all set one -- `apps/procurement/services.py`
+passes `link="/procurement"` three lines under the title -- but
+`seed_notifications_demo` omitted them, so the rows a reviewer sees first were
+exactly the ones that looked like dead ends.
+
+**And re-running that seed left three copies of everything.** Its comment says
+it must be re-runnable, and it deletes `Notification.objects.filter(
+source="seed_demo")` to be so. The seed was right. **All three reads were
+wrong**: the inbox lists *receipts*, and a receipt is a plain foreign key that
+does not notice its notification being soft-deleted. So deleting a notification
+did nothing at all for the people who had been told.
+
+Three places needed the same clause and each had to be found separately: the
+API's list queryset, `inbox()`, and `summary()` -- the badge. The badge was the
+worst of the three, because a count that includes something the list cannot show
+sends somebody looking for a row that is not there, and they conclude the list
+is broken.
+
+This is the same shape as the reference allocator two logs ago: **a soft delete
+hides a row from its own manager and from nothing else.** Anything reached
+through a foreign key, a count, or a constraint still sees it. That is now twice
+in one week, in unrelated modules, and the argument for a manager that carries
+the clause rather than three queries that each remember it.
+
+**How it surfaced is worth keeping.** Not from a bug report -- from re-running a
+seed and noticing the demo inbox had grown. The seed's own assertion (`the list
+is the summary, up to a page`) then caught the inbox and the badge disagreeing
+while I was fixing them one at a time. A seed that verifies itself found a
+production bug that no test was looking for.
+
+| | |
+|---|---|
+| demo inbox | 21 rows with 8 links → 11 rows with 10 |
+| `tests/test_notifications.py` | 5 passed; both leaks proved by reverting |
+| full backend suite | 265 passed, 9 skipped |
