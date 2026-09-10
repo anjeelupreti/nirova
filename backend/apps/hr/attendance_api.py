@@ -740,9 +740,46 @@ class LeaveBalanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        employee = _self_or(request, request.query_params.get("employee"))
-        if request.query_params.get("employee"):
+        named = request.query_params.get("employee")
+        if named:
             get_authorization(request).require("employee.read", Scope.FACILITY)
+            employee = _self_or(request, named)
+        else:
+            # **A read answers emptily rather than failing.** This used to go
+            # through `_self_or`, which raises a 400 for a caller with no
+            # employee record -- an owner, an administrator, a platform
+            # operator. The Time screen loads four endpoints with
+            # `Promise.all`, so that one 400 rejected the lot and the whole
+            # screen failed for exactly the people who are not employees. They
+            # were not asking for their own balance; they were opening a page.
+            #
+            # 200 with a null employee rather than 204, because the reason is
+            # worth carrying: the screen can say why the card is empty instead
+            # of leaving a blank. Matches `/hr/attendance/me/` and
+            # `/payroll/payslips/mine/`, which both answer emptily for the
+            # same caller. POST still refuses -- a write genuinely cannot
+            # proceed without knowing whose leave year to open.
+            employee = Employee.for_user(request.user.uuid)
+            if employee is None:
+                return Response(
+                    {
+                        "employee": None,
+                        "employee_name": "",
+                        "balances": [],
+                        "detail": (
+                            "Your account is not linked to an employee "
+                            "record, so you have no leave balance. An "
+                            "administrator can link it from the staff "
+                            "directory."
+                        ),
+                    }
+                )
+
+        # The permission check above deliberately precedes `_self_or`: asking
+        # for somebody else's balance by uuid should be refused for lacking
+        # the permission, not answered with 404 for a uuid that does not
+        # exist. The old order let a caller probe which employee uuids are
+        # real by reading the difference between 404 and 403.
         return Response(
             {
                 "employee": employee.employee_code,

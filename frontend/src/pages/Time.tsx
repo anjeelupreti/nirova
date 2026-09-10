@@ -33,6 +33,9 @@ import {
 } from "lucide-react";
 
 import HrSetup from "@/pages/hr/Setup";
+// `can` gates the tabs below, for the same reason the sidebar gates screens:
+// an interface should not offer something it knows answers "forbidden".
+import { useSession } from "@/hooks/useSession";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -72,14 +75,32 @@ import {
 
 type Tab = "mine" | "roster" | "leave" | "attendance" | "setup";
 
-const TABS: { id: Tab; label: string; icon: typeof Clock }[] = [
+/**
+ * `needs` gates the tab the way the sidebar gates the screen.
+ *
+ * The screen itself is open to everybody, because "my time" is self-service —
+ * you may always see your own days and request your own leave. The other four
+ * tabs are about *other people*, and every one of them 403s for somebody who
+ * does not hold the permission. Showing a tab that answers "forbidden" when
+ * clicked is the same fault as a sidebar entry that opens onto an error: the
+ * interface is offering something it knows will not work.
+ *
+ * No `needs` means the tab is open to anybody signed in.
+ */
+const TABS: {
+  id: Tab;
+  label: string;
+  icon: typeof Clock;
+  needs?: string;
+  scope?: string;
+}[] = [
   { id: "mine", label: "My time", icon: Clock },
-  { id: "roster", label: "Roster", icon: CalendarRange },
-  { id: "leave", label: "Away", icon: Plane },
-  { id: "attendance", label: "Attendance", icon: Users },
+  { id: "roster", label: "Roster", icon: CalendarRange, needs: "employee.read", scope: "facility" },
+  { id: "leave", label: "Away", icon: Plane, needs: "employee.read", scope: "facility" },
+  { id: "attendance", label: "Attendance", icon: Users, needs: "attendance.read", scope: "facility" },
   // Last: the calendar, the shift patterns and the leave types are configured
   // once a year and read every day by everything above them.
-  { id: "setup", label: "Setup", icon: Settings2 },
+  { id: "setup", label: "Setup", icon: Settings2, needs: "employee.manage", scope: "facility" },
 ];
 
 const STATUS_TONE: Record<string, string> = {
@@ -111,6 +132,9 @@ export default function TimePage() {
   const [tab, setTab] = useState<Tab>("mine");
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facility, setFacility] = useState("");
+  const { can } = useSession();
+
+  const tabs = TABS.filter((entry) => !entry.needs || can(entry.needs, entry.scope));
 
   useEffect(() => {
     void api
@@ -148,7 +172,7 @@ export default function TimePage() {
       </div>
 
       <div className="flex gap-1 border-b">
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -190,33 +214,54 @@ function MyTime() {
   const [applying, setApplying] = useState(false);
   const [ledgerFor, setLedgerFor] = useState<string | null>(null);
 
+  /**
+   * Four independent loads, settled independently.
+   *
+   * This was `Promise.all`, which rejects on the first failure and discards
+   * the other three answers — so one endpoint returning 400 blanked the whole
+   * tab, including the three cards that had loaded perfectly well. That is
+   * how `/hr/leave-balance/` returning 400 for anybody without an employee
+   * record took out attendance, leave and the roster with it.
+   *
+   * `allSettled` is the right shape here because these four are genuinely
+   * independent: they fill four separate cards and no card needs another
+   * card's data. A screen made of parts should fail in parts.
+   */
   const load = useCallback(async () => {
-    try {
-      const [attendance, balance, leave, roster] = await Promise.all([
-        api.get<AttendanceRecord[] | null>("/hr/attendance/me/?days=30"),
-        api.get<LeaveBalances>("/hr/leave-balance/"),
-        api.get<Paginated<LeaveRequest>>("/hr/leave/?mine=true"),
-        api.get<Paginated<RosterEntry>>(
-          `/hr/roster/?mine=true&from=${today()}&to=${inDays(14)}`,
-        ),
-      ]);
-      // A 204 means the caller has no employee record — a platform admin,
-      // legitimately. Not an error, but there is nothing to show.
-      if (attendance === null) {
-        setNoRecord(true);
-        return;
-      }
-      setRecords(attendance);
-      setBalances(balance);
-      setMyLeave(leave.results);
-      setShifts(roster.results);
+    const [attendance, balance, leave, roster] = await Promise.allSettled([
+      api.get<AttendanceRecord[] | null>("/hr/attendance/me/?days=30"),
+      api.get<LeaveBalances>("/hr/leave-balance/"),
+      api.get<Paginated<LeaveRequest>>("/hr/leave/?mine=true"),
+      api.get<Paginated<RosterEntry>>(
+        `/hr/roster/?mine=true&from=${today()}&to=${inDays(14)}`,
+      ),
+    ]);
+
+    // Attendance is the one that decides whether there is anything here at
+    // all: a 204 (null) means the caller has no employee record — a platform
+    // administrator legitimately does not. The other three are cards.
+    if (attendance.status === "fulfilled" && attendance.value === null) {
+      setNoRecord(true);
+      return;
+    }
+    setNoRecord(false);
+
+    if (attendance.status === "fulfilled") setRecords(attendance.value ?? []);
+    if (balance.status === "fulfilled") setBalances(balance.value);
+    if (leave.status === "fulfilled") setMyLeave(leave.value.results);
+    if (roster.status === "fulfilled") setShifts(roster.value.results);
+
+    // Report a problem only if everything failed. One card short is a card
+    // short, and an error banner across a working screen teaches people to
+    // ignore error banners.
+    const failures = [attendance, balance, leave, roster].filter(
+      (result) => result.status === "rejected",
+    );
+    if (failures.length === 4) {
+      const first = (failures[0] as PromiseRejectedResult).reason;
+      setProblem(first instanceof ApiError ? first.message : "Could not load.");
+    } else {
       setProblem(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 400) {
-        setNoRecord(true);
-        return;
-      }
-      setProblem(err instanceof ApiError ? err.message : "Could not load.");
     }
   }, []);
 
