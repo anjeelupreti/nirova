@@ -213,3 +213,36 @@ def test_an_unbounded_list_endpoint_is_still_capped_somewhere(owner, tenant):
     )
     assert body["summary"]["pending_total"] >= body["returned"]
     assert body["truncated"] is (body["summary"]["pending_total"] > body["returned"])
+
+
+def test_the_nurse_workspace_summary_does_not_query_per_patient(owner, tenant):
+    """The worst place in the product to put a loop of queries.
+
+    This endpoint issued a query per admission for each of five things: the
+    latest vitals, active prescription lines, today's administrations, pending
+    tasks and the most recent handover -- plus another for the bed, because the
+    queryset prefetched `bed_assignments` under the default name while
+    `Admission.current_bed` reads `open_bed_assignments`, so the prefetch was
+    paid for and never used.
+
+    41 queries for three patients. A forty-bed ward is roughly five hundred
+    round trips, on the screen every nurse opens at the start of every shift.
+
+    Expressed as a bound relative to the census rather than as a fixed number:
+    the invariant is "not per patient", and a fixed budget would be edited
+    upwards the first time somebody adds a legitimate join.
+    """
+    from apps.inpatient.models import Admission
+
+    owner.get("/api/auth/me/")
+    census = Admission.objects.filter(
+        status__in=["admitted", "discharge_initiated"]
+    ).count()
+    if census < 2:
+        pytest.skip(f"only {census} in-house admissions; nothing to scale with")
+
+    queries, _ = _measure(owner, "/api/ipd/nurse-workspace/summary/")
+    assert queries < census + 20, (
+        f"{queries} queries for {census} in-house patients -- close enough to "
+        "one per patient to be worth reading the loop again"
+    )

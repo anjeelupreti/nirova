@@ -481,24 +481,45 @@ def separate_components(
     return made
 
 
-def release_blockers(donation: Donation) -> list:
+#: Distinguishes "no screening was passed" from "a screening was passed and it
+#: is None". `screening=None` is a meaningful answer -- this donation has not
+#: been screened -- and must not be confused with the default.
+_UNREAD = object()
+
+
+def release_blockers(donation: Donation, screening=_UNREAD) -> list:
     """Everything stopping this donation's units from being used.
 
     Sentences, and they distinguish untested from reactive because the two
     demand opposite responses: one is a laboratory that lost a sample, the
     other is a donor who must be told.
+
+    `screening` lets a caller that has *just* read it hand it in rather than
+    have this read it again. See the note below for when that is safe.
     """
     blockers = []
 
     group, problems = confirmed_group(donation)
     blockers.extend(problems)
 
-    # Read the screening from the database rather than from the instance's
-    # cached relation. A donation object held across a re-screen carries the
-    # old result, and this function is the gate between a bag of blood and a
-    # patient — the one place where reading a stale row is unacceptable in
+    # **Read the screening rather than trusting the instance's cached
+    # relation.** A donation object held across a re-screen carries the old
+    # result, and this function is the gate between a bag of blood and a
+    # patient -- the one place where reading a stale row is unacceptable in
     # either direction.
-    screening = Screening.objects.filter(donation=donation).first()
+    #
+    # A caller may pass one in, and exactly one kind of caller should: a list
+    # endpoint that built its queryset with `select_related("screening")` a
+    # moment ago. That row came out of the database in the same query as the
+    # donation, which is *fresher* than a separate query issued afterwards, not
+    # staler. Without this, rendering a page of donations cost one query per
+    # donation -- measured at +7 queries for +7 rows -- to re-read rows that had
+    # already been fetched microseconds earlier.
+    #
+    # The default is unchanged, so every caller that holds a donation across a
+    # re-screen still gets the fresh read it needs by doing nothing.
+    if screening is _UNREAD:
+        screening = Screening.objects.filter(donation=donation).first()
     if screening is None:
         blockers.append("No screening has been recorded for this donation.")
     else:

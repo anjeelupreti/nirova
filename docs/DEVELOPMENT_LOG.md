@@ -10721,3 +10721,69 @@ sometimes telling you about the application.*
 | reference guard | proved: reissued the deleted document's reference when reverted |
 | full backend suite | 251 passed, 9 skipped |
 | `npm run build` | clean |
+
+## 265 - Three N+1s that a wider net caught
+
+Fixing the extractor (log 262) took `audit_queries` from 69 endpoints to 136 --
+it can now see chained calls and query templates -- and the wider net caught
+three more, none of them in code written this week.
+
+**`/api/diagnostics/tests/`: 42 queries for 11 tests, growing by 23 for another
+nine.** Two causes, and both are the same lesson wearing different clothes.
+
+`get_component_codes` did `obj.components.values_list("code", flat=True)` while
+the viewset four lines away did `prefetch_related("components")`. **A
+`values_list` builds a new queryset and goes back to the database**, silently
+ignoring the prefetch that was paid for. `.all()` reads the cache;
+`.values_list()` does not; nothing at the call site says which.
+
+And `department` and `parent` are published by uuid, which reaches the related
+object -- with no `select_related` for either. The prefetch covered the
+collections and left the foreign keys uncovered, which is the half nobody
+checks. 42 → **14, flat**.
+
+**`/api/blood/donations/`: a query per donation, deliberately.**
+`release_blockers` reads the screening from the database rather than from the
+instance's cached relation, and its comment explains why: a donation object held
+across a re-screen carries the old result, and this function is the gate between
+a bag of blood and a patient.
+
+That reasoning is right and I did not weaken it. What was wrong was paying it
+while *browsing*: the list already builds its queryset with
+`select_related("screening")`, so that row came out of the database **in the same
+query as the donation** -- fresher than a separate query issued afterwards, not
+staler. `release_blockers` now accepts a screening from a caller that has just
+read one, and the default is unchanged, so every caller holding a donation
+across a re-screen still gets its fresh read by doing nothing. 23 → **14, flat**.
+
+The sentinel matters: `screening=None` means "this donation has not been
+screened", which is a finding, and must not be confused with "no screening was
+passed in".
+
+**And the nurse workspace summary: 41 queries for three patients.** A query per
+admission for each of five things -- latest vitals, active prescription lines,
+today's administrations, pending tasks, the most recent handover -- plus a sixth
+for the bed. That last one is the sharpest: the queryset *did*
+`prefetch_related("bed_assignments__bed__ward")`, and `Admission.current_bed`
+reads `open_bed_assignments`, so the prefetch was paid for and never read. Even
+had the names matched, `bed_assignments.filter(...)` inside the property would
+have built a new queryset and ignored it anyway.
+
+Five bulk maps keyed by admission, one `Prefetch(..., to_attr=)` the property
+actually reads, and the loop reads memory. 41 → **20**, and no longer per
+patient. A forty-bed ward was roughly five hundred round trips on the screen
+every nurse opens at the start of every shift -- the worst place in the product
+to have put a loop of queries.
+
+**The pattern across all three is one sentence:** *a prefetch is only used by
+the exact call that reads its cache.* `.all()` reads it. `.values_list()`,
+`.filter()`, `.count()` and `.first()` each build a new queryset and go back to
+the database, and the prefetch above them keeps looking like it is working.
+
+| | |
+|---|---|
+| endpoints `audit_queries` can see | 69 → 136 |
+| `/api/diagnostics/tests/` | 42 → 14, flat |
+| `/api/blood/donations/` | 23 → 14, flat |
+| `/api/ipd/nurse-workspace/summary/` | 41 → 20, no longer per patient |
+| full backend suite | 252 passed, 9 skipped |

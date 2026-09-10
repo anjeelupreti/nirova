@@ -8,6 +8,9 @@ from typing import Any, Dict, List, Optional
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+# `Count` aggregates the nurse workspace summary's per-patient counts into one
+# query each rather than one per patient. See `get_nurse_workspace_summary`.
+from django.db.models import Count, Prefetch
 from django.utils import timezone
 
 from apps.encounters.models import Encounter, VitalSigns
@@ -15,6 +18,7 @@ from apps.inpatient.models import (
     AdministrationStatus,
     Admission,
     Bed,
+    BedAssignment,
     CodeStatusChoice,
     MedicationAdministration,
     NurseAssignment,
@@ -653,7 +657,24 @@ def get_nurse_workspace_summary(
             status__in=["admitted", "discharge_initiated"],
         )
         .select_related("patient", "encounter")
-        .prefetch_related("bed_assignments__bed__ward", "rounds")
+        .prefetch_related(
+            # **`to_attr` matters here.** `Admission.current_bed` reads
+            # `open_bed_assignments` when it is present and falls back to
+            # querying when it is not -- and `prefetch_related(
+            # "bed_assignments__bed__ward")` alone populates the *default*
+            # relation cache under a different name, which
+            # `bed_assignments.filter(...)` then ignores anyway by building a
+            # new queryset. The prefetch was paid for and never used, once per
+            # patient.
+            Prefetch(
+                "bed_assignments",
+                queryset=BedAssignment.objects.filter(
+                    vacated_at__isnull=True
+                ).select_related("bed", "bed__ward"),
+                to_attr="open_bed_assignments",
+            ),
+            "rounds",
+        )
     )
 
     if ward_id:
@@ -681,6 +702,69 @@ def get_nurse_workspace_summary(
     patients_list = []
     admissions = list(admissions_qs.order_by("admitted_at"))
 
+    # **Five lookups for the whole ward, not five per patient.**
+    #
+    # This loop used to issue a query per admission for each of: the latest
+    # vitals, the count of active prescription lines, today's administrations,
+    # the pending tasks, and the most recent handover. Measured with
+    # `manage.py audit_queries`: 41 queries for three patients. A forty-bed
+    # ward is roughly five hundred round trips, on the screen every nurse
+    # opens at the start of every shift -- the single worst place in the
+    # product to put a loop of queries.
+    #
+    # Each map below is one query keyed by admission, and the loop reads them
+    # instead. The output is unchanged; only the number of trips is.
+    admission_ids = [adm.id for adm in admissions]
+    encounter_ids = [adm.encounter_id for adm in admissions if adm.encounter_id]
+
+    # Latest vitals per encounter. Fetched newest-first and kept only the first
+    # seen per encounter, which is the same row `.order_by("-recorded_at")
+    # .first()` returned per admission.
+    latest_vitals: Dict[Any, Any] = {}
+    if encounter_ids:
+        for vital in VitalSigns.objects.filter(
+            encounter_id__in=encounter_ids
+        ).order_by("encounter_id", "-recorded_at"):
+            latest_vitals.setdefault(vital.encounter_id, vital)
+
+    active_rx_counts: Dict[Any, int] = {}
+    if encounter_ids:
+        active_rx_counts = {
+            row["prescription__encounter_id"]: row["total"]
+            for row in PrescriptionLine.objects.filter(
+                prescription__encounter_id__in=encounter_ids,
+                status=PrescriptionLineStatus.ACTIVE,
+            )
+            .values("prescription__encounter_id")
+            .annotate(total=Count("id"))
+        }
+
+    administrations_today: Dict[Any, int] = {}
+    pending_task_counts: Dict[Any, int] = {}
+    latest_handovers: Dict[Any, Any] = {}
+    if admission_ids:
+        administrations_today = {
+            row["admission_id"]: row["total"]
+            for row in MedicationAdministration.objects.filter(
+                admission_id__in=admission_ids, administered_at__date=s_date
+            )
+            .values("admission_id")
+            .annotate(total=Count("id"))
+        }
+        pending_task_counts = {
+            row["admission_id"]: row["total"]
+            for row in NursingTask.objects.filter(
+                admission_id__in=admission_ids,
+                status__in=[TaskStatus.PENDING, TaskStatus.IN_PROGRESS],
+            )
+            .values("admission_id")
+            .annotate(total=Count("id"))
+        }
+        for handover in NursingHandover.objects.filter(
+            admission_id__in=admission_ids
+        ).order_by("admission_id", "-created_at"):
+            latest_handovers.setdefault(handover.admission_id, handover)
+
     for adm in admissions:
         bed = adm.current_bed
         ward = bed.ward if bed else None
@@ -691,9 +775,7 @@ def get_nurse_workspace_summary(
             continue
 
         # 1. Latest Vitals & NEWS2
-        latest_vital = None
-        if adm.encounter:
-            latest_vital = adm.encounter.vitals.order_by("-recorded_at").first()
+        latest_vital = latest_vitals.get(adm.encounter_id)
 
         news2 = calculate_news2(latest_vital)
 
@@ -707,26 +789,16 @@ def get_nurse_workspace_summary(
         fluid_balance_24h = intake_24h - output_24h
 
         # 3. Active Prescriptions / eMAR Count
-        active_rx_count = 0
-        if adm.encounter:
-            active_rx_count = PrescriptionLine.objects.filter(
-                prescription__encounter=adm.encounter,
-                status=PrescriptionLineStatus.ACTIVE,
-            ).count()
+        active_rx_count = active_rx_counts.get(adm.encounter_id, 0)
 
         # Administrations today
-        adms_today_count = adm.medication_administrations.filter(
-            administered_at__date=s_date
-        ).count()
+        adms_today_count = administrations_today.get(adm.id, 0)
 
         # 4. Nursing Tasks for shift
-        tasks = adm.nursing_tasks.filter(
-            status__in=[TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
-        ).order_by("due_at")
-        pending_tasks_count = tasks.count()
+        pending_tasks_count = pending_task_counts.get(adm.id, 0)
 
         # 5. Latest Handover
-        latest_handover = adm.handovers.order_by("-created_at").first()
+        latest_handover = latest_handovers.get(adm.id)
         handover_data = None
         if latest_handover:
             handover_data = {

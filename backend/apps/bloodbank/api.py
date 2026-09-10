@@ -174,7 +174,15 @@ class DonationSerializer(serializers.ModelSerializer):
         return confirmed_group(obj)[0]
 
     def get_blockers(self, obj) -> list:
-        return release_blockers(obj)
+        """Hands in the screening the queryset already fetched.
+
+        `DonationViewSet.get_queryset` uses `select_related("screening")`, so
+        `obj.screening` came out of the database in the same query as the
+        donation. Passing it in turns one query per donation into none -- and
+        it is not a weaker read: it is the same row, fetched a moment earlier
+        in one round trip instead of a moment later in many.
+        """
+        return release_blockers(obj, screening=getattr(obj, "screening", None))
 
     def get_units(self, obj) -> list:
         return [

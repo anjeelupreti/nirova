@@ -70,9 +70,14 @@ class TestDefinitionViewSet(viewsets.ModelViewSet):
     ordering_fields = ["modality", "name"]
 
     def get_queryset(self):
-        queryset = TestDefinition.objects.prefetch_related(
-            "reference_ranges", "components"
-        )
+        queryset = TestDefinition.objects.select_related(
+            # Both are published by uuid, and `UUIDRelatedField` reaches the
+            # related object to read it. Without these, a catalogue of eleven
+            # tests cost a query per department and another per panel parent --
+            # the prefetch two lines below covered the collections and left the
+            # foreign keys uncovered, which is the half nobody checks.
+            "department", "parent",
+        ).prefetch_related("reference_ranges", "components")
         # Panel members are noise in an ordering list: a clinician orders the
         # liver function test, not its bilirubin component.
         if self.request.query_params.get("orderable") == "true":
