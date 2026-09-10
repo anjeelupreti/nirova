@@ -28,6 +28,7 @@ from django.test import Client
 # The path extraction is shared with `audit_queries`, which needs the same
 # answer to the same question. A second copy of that regex would drift from
 # this one silently -- the exact failure it exists to prevent.
+from apps.common.fixtures_for_audit import fill, resolve_values
 from apps.common.screens import paths_by_page
 
 #: Demo accounts, in the order a reviewer would think about them.
@@ -62,15 +63,36 @@ class Command(BaseCommand):
                 continue
             clients[name] = client
 
+        # Real values for `?facility=${facility}` and the rest, resolved once
+        # from the tenant. Without these the probe reaches the route with no
+        # parameter, `get_object_or_404` answers 404, and a working endpoint is
+        # reported as a missing one.
+        #
+        # Bound explicitly: the probes below get their tenant from the
+        # `X-Organization` header through the middleware, but this runs in the
+        # command's own process with no request behind it, so without a context
+        # every one of these queries would go to the control plane and answer
+        # nothing -- silently, which would put the audit right back where it
+        # was.
+        values = self._resolve_values(options["org"])
+
         broken = 0
         inferred = 0
+        unprobeable = 0
         for page, paths in sorted(pages.items()):
             rows = []
             for path in sorted(paths):
                 only_inferred = paths[path]
+                target = fill(path, values) if "${" in path else path
+                if target is None:
+                    # A placeholder this tenant has no row for. Reported as
+                    # unprobeable rather than guessed at: a made-up uuid would
+                    # produce a 404 indistinguishable from a broken route.
+                    unprobeable += 1
+                    continue
                 results = {}
                 for name, client in clients.items():
-                    results[name] = self._probe(client, path)
+                    results[name] = self._probe(client, target)
                 worst = max(results.values())
                 if options["failures"] and worst < 400:
                     continue
@@ -114,6 +136,11 @@ class Command(BaseCommand):
             if broken
             else self.style.SUCCESS("Every endpoint answered for every user.")
         )
+        if unprobeable:
+            self.stdout.write(
+                f"({unprobeable} skipped: they need a value -- a facility, a "
+                f"ward -- that this tenant has no row for.)"
+            )
         if inferred:
             self.stdout.write(
                 f"({inferred} marked ~ are not calls this command can make: "
@@ -122,6 +149,24 @@ class Command(BaseCommand):
             )
 
     # -- internals --------------------------------------------------------
+
+    def _resolve_values(self, slug: str) -> dict:
+        """Parameter values, read inside the tenant's own database."""
+        from apps.tenancy.connections import context_for_organization
+        from apps.tenancy.context import tenant_context
+        from apps.tenancy.models import Organization
+
+        organization = Organization.objects.filter(slug=slug).first()
+        if organization is None:
+            return {}
+        try:
+            with tenant_context(context_for_organization(organization)):
+                return resolve_values()
+        except Exception as error:  # noqa: BLE001 - an unprovisioned tenant
+            self.stdout.write(
+                self.style.WARNING(f"  could not read parameter values: {error}")
+            )
+            return {}
 
     def _client(self, email: str, org: str):
         from rest_framework_simplejwt.tokens import RefreshToken

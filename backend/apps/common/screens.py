@@ -64,23 +64,42 @@ def paths_by_page(only: str | None = None) -> dict[str, dict[str, bool]]:
             if not raw.startswith("/"):
                 continue
 
-            interpolated = "$" in raw
-            path = raw.split("$", 1)[0] if interpolated else raw
-            if interpolated:
-                # Keep only a clean collection prefix. `/hr/leave/` from
-                # `/hr/leave/${ref}/decide/` is at least a real route, whereas
-                # `/hr/attendance/?from=` is not a path at all.
-                path = path.split("?", 1)[0]
-                if not path.endswith("/"):
+            # **An interpolation in the query string is not the same as one in
+            # the path, and treating them alike hid a fifth of the console from
+            # this audit.**
+            #
+            # `/hr/leave/${ref}/decide/` has a *route* that depends on a value:
+            # there is nothing to probe without inventing a reference.
+            # `/ed/board/?facility=${f}` has a fully determined route and a
+            # dynamic *value* -- it is a real call the screen makes on every
+            # load. The first version dropped the query string from both, so
+            # `/ed/board/` was probed with no facility, the view's
+            # `get_object_or_404(Facility, ...)` answered 404, and that 404 was
+            # written off as an artifact. The ED board, the ICU board, the
+            # outpatient queue and the laboratory worklist -- four of the
+            # busiest screens in the product -- were being reported on without
+            # ever being called.
+            route, _, query = raw.partition("?")
+            if "$" in route:
+                # A detail route. Keep the collection prefix so a reader sees
+                # the module was reached, but it is a different endpoint from
+                # the one the screen calls and is not counted.
+                prefix = route.split("$", 1)[0]
+                if not prefix.endswith("/") or UNSAFE.search(prefix):
                     continue
-
-            if UNSAFE.search(path):
+                full = "/api" + prefix
+                paths[full] = paths.get(full, True) and True
                 continue
 
-            full = "/api" + path
-            # A path seen literally anywhere on the page is a real call,
-            # whatever else truncated to the same prefix.
-            paths[full] = paths.get(full, True) and interpolated
+            if UNSAFE.search(route):
+                continue
+
+            # The query template is kept whole, `${...}` included. The command
+            # fills the placeholders with real values at probe time; keeping the
+            # template rather than the resolved path means the row prints as the
+            # screen wrote it, which is what a reader is looking for.
+            full = "/api" + route + (f"?{query}" if query else "")
+            paths[full] = False
 
         if paths:
             pages[name] = paths

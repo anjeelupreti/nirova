@@ -389,6 +389,30 @@ class EmarView(APIView):
         )
 
 
+class AdministerDoseView(EmarView):
+    """`/emar/administer/`: recording a dose, and only that.
+
+    Both URLs used to point at `EmarView`, so `GET /emar/administer/` returned
+    the medication record — a URL that says "administer a dose" answering a
+    read. Harmless in practice, because the frontend only ever POSTs here, and
+    wrong in the way that eventually bites: a route's verb set is its contract,
+    and one that accepts a read it does not mean is a read somebody will
+    eventually rely on.
+
+    Narrowed with `http_method_names` rather than by setting `get = None`.
+    DRF's `dispatch` does `getattr(self, "get", http_method_not_allowed)`,
+    which *finds* an attribute set to None and then calls it — a 500 where a
+    405 was wanted. `http_method_names` is checked before that lookup.
+
+    This also lets `audit_screens` classify the route correctly. It had been
+    reported as a failing endpoint on every run, because the shared view
+    answered 400 (the eMAR read wants `?admission=`) rather than the 405 the
+    audit reads as "the screen reaches this with a different verb".
+    """
+
+    http_method_names = ["post", "options"]
+
+
 class NursingHandoverViewSet(viewsets.ModelViewSet):
     """SBAR shift handovers between outgoing and incoming nurses."""
 

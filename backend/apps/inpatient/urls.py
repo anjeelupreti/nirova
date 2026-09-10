@@ -10,6 +10,7 @@ from apps.inpatient.api import (
     WardViewSet,
 )
 from apps.inpatient.nursing_api import (
+    AdministerDoseView,
     BedsideRoundView,
     EmarView,
     NurseAssignmentViewSet,
@@ -34,6 +35,6 @@ urlpatterns = [
     path("nurse-workspace/summary/", NurseWorkspaceSummaryView.as_view(), name="nurse-workspace-summary"),
     path("nurse-workspace/bedside-round/", BedsideRoundView.as_view(), name="nurse-workspace-bedside-round"),
     path("nurse-workspace/emar/", EmarView.as_view(), name="nurse-workspace-emar"),
-    path("nurse-workspace/emar/administer/", EmarView.as_view(), name="nurse-workspace-emar-administer"),
+    path("nurse-workspace/emar/administer/", AdministerDoseView.as_view(), name="nurse-workspace-emar-administer"),
     path("", include(router.urls)),
 ]

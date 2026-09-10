@@ -10266,3 +10266,67 @@ Two layers, and the first exists for the message.
 | `manage.py sync_roles --dry-run` | 1 role, 1 permission, no strays |
 | `audit_screens --screen DataImport` | 200 owner, 403 the other four — correct |
 | full backend suite | 225 passed, 9 skipped |
+
+## 259 - The audit was not calling a fifth of the console
+
+`audit_screens` had been reporting on the emergency board, the ICU board, the
+outpatient queue, the laboratory worklist, the procurement dashboard and the
+counter's sales summary without ever calling them. Every one answered 404 on
+every run, and I had written all of them off as artifacts of probing a detail
+route -- because that is what the tool said they were.
+
+**The mistake was conflating two different interpolations.**
+`/hr/leave/${ref}/decide/` has a *route* that depends on a value: there is
+nothing to probe without inventing a reference. `/ed/board/?facility=${f}` has a
+fully determined route and a dynamic *value* -- it is a real call the screen
+makes on every load. The extractor dropped the query string from both, so the
+board was probed with no facility, `get_object_or_404(Facility, uuid=None)`
+answered 404, and the 404 was dismissed as expected. A tool that explains away
+its own blind spot is worse than one with an obvious gap.
+
+So the extractor now splits on `?` first and only treats interpolation *in the
+route* as unprobeable, and the audits fill the query placeholders from real
+rows in the tenant -- one facility, one ward, one admission. One row, not a
+search: the point is to reach the endpoint's code path, not to exercise its
+data.
+
+**Keyed on the query parameter's name, not the expression in the braces.** The
+first version matched by substring, which reads well and is wrong:
+`?from=${today()}` matched the `to` key, because "to" is inside "today()", and
+`?to=${inDays(14)}` matched `days` and became `to=30`. The roster then answered
+400 for all five users and the audit reported a working screen as broken -- a
+false failure invented by the tool built to find real ones, which is the worst
+thing this tool can do. The parameter name is the API's own contract and the
+frontend has to spell it the server's way, so it is the one part of the call
+that cannot drift.
+
+An unresolvable placeholder yields no probe at all rather than a partial
+substitution: half a fill leaves `?facility=${facility}&ward=w-1`, which the
+server reads as a facility literally named `${facility}` -- a 404 that looks
+like a broken endpoint and is a broken probe.
+
+**Two things it then found were mine, not the application's.** The patient
+search refuses a single character with "Enter at least two characters", which is
+correct; the fixture was one character. And `/emar/administer/` shared its view
+with `/emar/`, so a URL that says "administer a dose" answered a read -- 400
+rather than the 405 that would have classified it. Given its own view narrowed
+with `http_method_names`, which is also the correct contract: a route's verb set
+is what it promises, and one accepting a read it does not mean is a read
+somebody eventually relies on. `http_method_names` rather than `get = None`,
+because DRF's `dispatch` does `getattr(self, "get", ...)`, *finds* an attribute
+set to None, and calls it -- a 500 where a 405 was wanted.
+
+**The result is the end of this audit as a bug-finding exercise.** 107 rows
+probed, 77 counted failures, and **every one of them a pure 403** -- no 400, no
+404, no 500 anywhere in the console. The count is higher than the 54 of log 253
+because the audit now reaches twenty endpoints it previously could not call at
+all, and those turned out to refuse correctly for the roles that cannot see
+their screens. `test_nav.py` independently holds the other half of that claim:
+nothing is hidden that opens, and nothing is shown that refuses.
+
+| | |
+|---|---|
+| `audit_screens`, first run (log 253) | 117 failing pairs |
+| after the self-service fixes | 54 |
+| now, with real parameter values | 77 counted, **0 that are not refusals** |
+| full backend suite | 225 passed, 9 skipped |
