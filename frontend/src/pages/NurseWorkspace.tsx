@@ -65,6 +65,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 /* -------------------------------------------------------------------------- */
 /* Helper Functions                                                           */
@@ -306,26 +307,30 @@ export default function NurseWorkspacePage() {
       {/* Top Header & Workstation Bar                                         */}
       {/* -------------------------------------------------------------------- */}
       <div className="flex flex-col gap-4 border-b pb-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Nurse Workspace</h1>
-            {summary && (
-              <Badge
-                variant="outline"
-                className={cn("px-2.5 py-0.5 font-medium", SHIFT_LABELS[summary.shift]?.color || "bg-muted")}
-              >
-                <Clock className="mr-1.5 h-3.5 w-3.5" />
-                {SHIFT_LABELS[summary.shift]?.label || summary.shift}
+        {/* The controls beside this stay where they are: there are six of them
+            and they belong to the workstation bar, not to the heading. Only
+            the title block moves to `PageHeader`, so this screen's heading
+            matches the other twenty-nine. */}
+        <PageHeader
+          title="Nurse workspace"
+          meta={
+            <>
+              {summary && (
+                <Badge
+                  variant="outline"
+                  className={cn("px-2.5 py-0.5 font-medium", SHIFT_LABELS[summary.shift]?.color || "bg-muted")}
+                >
+                  <Clock className="mr-1.5 h-3.5 w-3.5" />
+                  {SHIFT_LABELS[summary.shift]?.label || summary.shift}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="font-mono text-xs">
+                {new Date().toLocaleDateString("en-NP", { weekday: "short", month: "short", day: "numeric" })}
               </Badge>
-            )}
-            <Badge variant="secondary" className="font-mono text-xs">
-              {new Date().toLocaleDateString("en-NP", { weekday: "short", month: "short", day: "numeric" })}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Bedside rounding console: assigned patients, vital sign rounds with NEWS2 alerts, eMAR, and shift handover.
-          </p>
-        </div>
+            </>
+          }
+          description="Bedside rounding console: assigned patients, vital sign rounds with NEWS2 alerts, eMAR, and shift handover."
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           {facilities.length > 1 && (

@@ -25,6 +25,7 @@ import {
   CardTitle,
   Progress,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const FACILITY_LABELS: Record<string, string> = {
   hospital: "Hospitals",
@@ -153,13 +154,15 @@ export default function CapacityPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Facility capacity</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          What the <span className="font-medium">{data.plan}</span> plan allows,
-          and how much of it is in use.
-        </p>
-      </div>
+      <PageHeader
+        title="Facility capacity"
+        description={
+          <>
+            What the <span className="font-medium">{data.plan}</span> plan allows,
+            and how much of it is in use.
+          </>
+        }
+      />
 
       {!data.is_entitled && (
         <Alert variant="destructive">

@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# TypeScript incremental build cache. Machine-specific, rewritten by every
+# build, and committed once by accident -- it turned up as a modified file in
+# the diff of a change that touched no TypeScript configuration at all.
+tsconfig.tsbuildinfo
+*.tsbuildinfo

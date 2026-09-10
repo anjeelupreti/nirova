@@ -51,6 +51,7 @@ import {
 import { useSession } from "@/hooks/useSession";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/layout";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -207,20 +208,20 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
-          <p className="text-sm text-muted-foreground">
-            Who can sign in to this organization, and what each of them may do.
-          </p>
-        </div>
-        {mayInvite && (
-          <Button onClick={() => setInviting(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Invite someone
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Staff"
+        description="Who can sign in to this organization, and what each of them may do."
+        actions={
+          <>
+            {mayInvite && (
+              <Button onClick={() => setInviting(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Invite someone
+              </Button>
+            )}
+          </>
+        }
+      />
 
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

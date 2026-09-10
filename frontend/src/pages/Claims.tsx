@@ -72,6 +72,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "claims" | "preauth" | "payers" | "analysis";
 
@@ -151,12 +152,10 @@ export default function ClaimsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Claims</h1>
-        <p className="text-sm text-muted-foreground">
-          What was asked for, what was allowed, and the difference.
-        </p>
-      </div>
+      <PageHeader
+        title="Claims"
+        description="What was asked for, what was allowed, and the difference."
+      />
 
       {/* Predictable a week ahead, so it is said a week ahead. */}
       {expiring.length > 0 && (

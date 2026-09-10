@@ -49,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const PAYMENT_METHODS = [
   ["cash", "Cash"],
@@ -235,25 +236,25 @@ export default function BillingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Billing</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Charge, invoice and take payment at the counter.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          value={facilityUuid}
-          onChange={(e) => setFacilityUuid(e.target.value)}
-        >
-          {facilities.map((facility) => (
-            <option key={facility.uuid} value={facility.uuid}>
-              {facility.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Billing"
+        description="Charge, invoice and take payment at the counter."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              value={facilityUuid}
+              onChange={(e) => setFacilityUuid(e.target.value)}
+            >
+              {facilities.map((facility) => (
+                <option key={facility.uuid} value={facility.uuid}>
+                  {facility.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       {!patient ? (
         <Card>

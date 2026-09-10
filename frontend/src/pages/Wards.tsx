@@ -84,6 +84,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "board" | "patients" | "census" | "setup";
 
@@ -162,26 +163,26 @@ export default function WardsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Wards</h1>
-          <p className="text-sm text-muted-foreground">
-            Who is in which bed, and what is stopping them going home.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Wards"
+        description="Who is in which bed, and what is stopping them going home."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

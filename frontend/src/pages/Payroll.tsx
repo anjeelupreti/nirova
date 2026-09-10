@@ -78,6 +78,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "runs" | "mine" | "rates" | "setup";
 
@@ -120,12 +121,10 @@ export default function PayrollPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Payroll</h1>
-        <p className="text-sm text-muted-foreground">
-          What people earn, what is deducted, and what they are paid.
-        </p>
-      </div>
+      <PageHeader
+        title="Payroll"
+        description="What people earn, what is deducted, and what they are paid."
+      />
 
       <div className="flex gap-1 border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

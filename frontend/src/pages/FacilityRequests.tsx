@@ -52,6 +52,7 @@ import {
   useRecordPanel,
   words,
 } from "@/components/RecordPanel";
+import { PageHeader } from "@/components/ui/layout";
 
 const FACILITY_TYPES = [
   ["clinic", "Clinic"],
@@ -222,15 +223,10 @@ export default function FacilityRequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">
-          Facility changes
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Opening or closing a facility is reviewed before it takes effect, so
-          the estate stays deliberate and every change has a reason attached.
-        </p>
-      </div>
+      <PageHeader
+        title="Facility changes"
+        description="Opening or closing a facility is reviewed before it takes effect, so the estate stays deliberate and every change has a reason attached."
+      />
 
       <div className="grid gap-6 lg:grid-cols-5">
         <Card className="lg:col-span-2">

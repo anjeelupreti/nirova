@@ -57,6 +57,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Values = { facility: string; since: string; until: string; days: string };
 
@@ -195,14 +196,10 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">
-          Each of these was written beside the module that understands it. There
-          is no query builder, deliberately — a number assembled by hand is a
-          number nobody can reproduce and everybody quotes.
-        </p>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Each of these was written beside the module that understands it. There is no query builder, deliberately — a number assembled by hand is a number nobody can reproduce and everybody quotes."
+      />
 
       {error ? (
         <Alert variant="destructive">

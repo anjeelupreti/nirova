@@ -48,6 +48,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const SEVERITY_STYLE: Record<string, string> = {
   critical: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -861,21 +862,27 @@ export default function ConsultationPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <PageHeader
+        title={
+          <>
             <Stethoscope className="h-5 w-5 text-muted-foreground" />
             {summary.patient.name}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          </>
+        }
+        description={
+          <>
             {summary.patient.mrn} · {summary.patient.age ?? "age unknown"} ·{" "}
             {summary.patient.gender} · {encounter.reference}
-          </p>
-        </div>
-        <Badge variant={encounter.is_open ? "warning" : "success"}>
-          {encounter.status.replace(/_/g, " ")}
-        </Badge>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <Badge variant={encounter.is_open ? "warning" : "success"}>
+              {encounter.status.replace(/_/g, " ")}
+            </Badge>
+          </>
+        }
+      />
 
       <SafetyBanner summary={summary} />
 

@@ -78,6 +78,7 @@ import {
   status,
   useRecordPanel,
 } from "@/components/RecordPanel";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "accounts" | "proxies" | "messages" | "corrections" | "adoption";
 
@@ -140,12 +141,10 @@ export default function PortalPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Patient portal</h1>
-        <p className="text-sm text-muted-foreground">
-          Invitations, proxy access, messages and demographic corrections.
-        </p>
-      </div>
+      <PageHeader
+        title="Patient portal"
+        description="Invitations, proxy access, messages and demographic corrections."
+      />
 
       <Alert>
         <KeyRound className="h-4 w-4" />

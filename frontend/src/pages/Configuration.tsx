@@ -34,6 +34,7 @@ import {
 import MasterData, { type MasterSpec } from "@/components/MasterData";
 import SystemSettings from "@/components/SystemSettings";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/layout";
 
 const PAYER_KINDS = ["insurer", "government", "corporate", "ngo", "self_pay",
                      "other"];
@@ -375,13 +376,10 @@ export default function ConfigurationPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Configuration</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The lists the daily screens depend on. Set up once, edited when
-          something changes.
-        </p>
-      </div>
+      <PageHeader
+        title="Configuration"
+        description="The lists the daily screens depend on. Set up once, edited when something changes."
+      />
 
       <div className="flex flex-wrap gap-1.5">
         {SECTIONS.map(({ id, label, icon: Icon }) => (

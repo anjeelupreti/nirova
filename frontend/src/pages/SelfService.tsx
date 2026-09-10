@@ -381,7 +381,11 @@ export default function SelfServicePage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center rounded-md bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-100 ring-1 ring-inset ring-blue-400/30">
-                Staff Portal · §95
+                {/* Was "Staff Portal · §95". A specification section number
+                    on a screen a ward attendant opens every morning means
+                    nothing to them and tells them the product is unfinished.
+                    The only one that had reached the interface. */}
+                Staff portal
               </span>
               {emp?.department && (
                 <span className="text-xs text-blue-200">· {emp.department}</span>

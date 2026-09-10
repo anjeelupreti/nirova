@@ -76,6 +76,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "shelf" | "processing" | "requests" | "donors" | "safety";
 
@@ -143,26 +144,26 @@ export default function BloodPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Blood bank</h1>
-          <p className="text-sm text-muted-foreground">
-            What is on the shelf, what is not safe yet, and who it went to.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Blood bank"
+        description="What is on the shelf, what is not safe yet, and who it went to."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       <div className="flex gap-1 overflow-x-auto border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

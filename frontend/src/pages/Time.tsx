@@ -72,6 +72,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "mine" | "roster" | "leave" | "attendance" | "setup";
 
@@ -148,28 +149,28 @@ export default function TimePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Time</h1>
-          <p className="text-sm text-muted-foreground">
-            Your day, the roster, and who is away.
-          </p>
-        </div>
-        {tab !== "mine" && facilities.length > 0 && (
-          <Select
-            className="h-9 w-auto"
-            aria-label="Facility"
-            value={facility}
-            onChange={(event) => setFacility(event.target.value)}
-          >
-            {facilities.map((row) => (
-              <option key={row.uuid} value={row.uuid}>
-                {row.name}
-              </option>
-            ))}
-          </Select>
-        )}
-      </div>
+      <PageHeader
+        title="Time"
+        description="Your day, the roster, and who is away."
+        actions={
+          <>
+            {tab !== "mine" && facilities.length > 0 && (
+              <Select
+                className="h-9 w-auto"
+                aria-label="Facility"
+                value={facility}
+                onChange={(event) => setFacility(event.target.value)}
+              >
+                {facilities.map((row) => (
+                  <option key={row.uuid} value={row.uuid}>
+                    {row.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {tabs.map(({ id, label, icon: Icon }) => (

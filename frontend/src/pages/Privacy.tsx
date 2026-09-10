@@ -58,6 +58,7 @@ import {
   Label,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Outcome = "appropriate" | "queried" | "escalated";
 
@@ -164,15 +165,10 @@ export default function Privacy() {
 
   return (
     <div className="space-y-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Emergency access
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Records opened by somebody who was not treating that patient. Every
-          one is reviewed by hand.
-        </p>
-      </header>
+      <PageHeader
+        title="Emergency access"
+        description="Records opened by somebody who was not treating that patient. Every one is reviewed by hand."
+      />
 
       {error && (
         <Alert variant="destructive">

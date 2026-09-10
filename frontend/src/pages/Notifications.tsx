@@ -64,6 +64,7 @@ import {
   Label,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "waiting" | "all" | "preferences";
 
@@ -203,12 +204,10 @@ export default function Notifications() {
   return (
     <div className="space-y-6 p-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
-          <p className="text-muted-foreground text-sm">
-            Everything from every module that wants something from you.
-          </p>
-        </div>
+        <PageHeader
+          title="Notifications"
+          description="Everything from every module that wants something from you."
+        />
         {summary && (
           <div className="flex items-center gap-2">
             {summary.critical > 0 && (

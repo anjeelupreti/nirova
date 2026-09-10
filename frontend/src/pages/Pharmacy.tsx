@@ -61,6 +61,7 @@ import {
   dateTime,
   useRecordPanel,
 } from "@/components/RecordPanel";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "dispense" | "stock" | "expiry" | "reorder" | "catalogue";
 
@@ -773,41 +774,43 @@ export default function PharmacyPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <PageHeader
+        title={
+          <>
             <Package className="h-5 w-5 text-muted-foreground" />
             Pharmacy
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Dispensing takes the earliest-expiring batch first.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Select
-            className="h-9 w-auto"
-            value={facilityUuid}
-            onChange={(e) => setFacilityUuid(e.target.value)}
-          >
-            {facilities.map((facility) => (
-              <option key={facility.uuid} value={facility.uuid}>
-                {facility.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            className="h-9 w-auto"
-            value={locationUuid}
-            onChange={(e) => setLocationUuid(e.target.value)}
-          >
-            {locations.map((location) => (
-              <option key={location.uuid} value={location.uuid}>
-                {location.code} — {location.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
+          </>
+        }
+        description="Dispensing takes the earliest-expiring batch first."
+        actions={
+          <>
+            <div className="flex gap-2">
+              <Select
+                className="h-9 w-auto"
+                value={facilityUuid}
+                onChange={(e) => setFacilityUuid(e.target.value)}
+              >
+                {facilities.map((facility) => (
+                  <option key={facility.uuid} value={facility.uuid}>
+                    {facility.name}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                className="h-9 w-auto"
+                value={locationUuid}
+                onChange={(e) => setLocationUuid(e.target.value)}
+              >
+                {locations.map((location) => (
+                  <option key={location.uuid} value={location.uuid}>
+                    {location.code} — {location.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

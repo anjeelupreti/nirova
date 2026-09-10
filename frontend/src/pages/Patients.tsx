@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 interface DuplicateCandidate {
   uuid: string;
@@ -342,18 +343,18 @@ export default function PatientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Patients</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Search by name, MRN, phone or document number.
-          </p>
-        </div>
-        <Button onClick={() => setShowForm((open) => !open)}>
-          <UserPlus className="h-4 w-4" />
-          {showForm ? "Close" : "Register patient"}
-        </Button>
-      </div>
+      <PageHeader
+        title="Patients"
+        description="Search by name, MRN, phone or document number."
+        actions={
+          <>
+            <Button onClick={() => setShowForm((open) => !open)}>
+              <UserPlus className="h-4 w-4" />
+              {showForm ? "Close" : "Register patient"}
+            </Button>
+          </>
+        }
+      />
 
       {showForm && (
         <Card>

@@ -80,6 +80,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "overview" | "directory" | "positions";
 
@@ -121,27 +122,27 @@ export default function PeoplePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">People</h1>
-          <p className="text-sm text-muted-foreground">
-            The workforce, the jobs, and who may practise.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          <option value="">All facilities</option>
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="People"
+        description="The workforce, the jobs, and who may practise."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              <option value="">All facilities</option>
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

@@ -81,6 +81,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "board" | "performance";
 
@@ -218,44 +219,42 @@ export default function IcuPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Intensive care
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            The board, the chart, and what the score could not see.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Select
-            className="h-9 w-auto"
-            aria-label="Facility"
-            value={facility}
-            onChange={(event) => setFacility(event.target.value)}
-          >
-            {facilities.map((row) => (
-              <option key={row.uuid} value={row.uuid}>
-                {row.name}
-              </option>
-            ))}
-          </Select>
-          {wards.length > 1 && (
-            <Select
-              className="h-9 w-auto"
-              aria-label="Unit"
-              value={ward}
-              onChange={(event) => setWard(event.target.value)}
-            >
-              {wards.map((row) => (
-                <option key={row.uuid} value={row.uuid}>
-                  {row.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Intensive care"
+        description="The board, the chart, and what the score could not see."
+        actions={
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Select
+                className="h-9 w-auto"
+                aria-label="Facility"
+                value={facility}
+                onChange={(event) => setFacility(event.target.value)}
+              >
+                {facilities.map((row) => (
+                  <option key={row.uuid} value={row.uuid}>
+                    {row.name}
+                  </option>
+                ))}
+              </Select>
+              {wards.length > 1 && (
+                <Select
+                  className="h-9 w-auto"
+                  aria-label="Unit"
+                  value={ward}
+                  onChange={(event) => setWard(event.target.value)}
+                >
+                  {wards.map((row) => (
+                    <option key={row.uuid} value={row.uuid}>
+                      {row.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {(

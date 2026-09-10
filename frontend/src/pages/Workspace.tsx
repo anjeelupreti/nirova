@@ -46,6 +46,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 function waitingFor(since: string | null): string {
   if (!since) return "";
@@ -92,36 +93,38 @@ export default function WorkspacePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            What needs you
-          </h1>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        title="What needs you"
+        description={
+          <>
             {data?.today.has_employee_record
-              ? [data.today.employee, data.today.department, data.today.facility]
-                  .filter(Boolean)
-                  .join(" · ")
-              : "Signed in without an employee record."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {data?.notifications.unread ? (
-            <Link to="/notifications">
-              <Badge variant="outline" className="gap-1">
-                <Bell className="h-3 w-3" />
-                {data.notifications.unread} unread
-              </Badge>
-            </Link>
-          ) : null}
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCw
-              className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")}
-            />
-            Refresh
-          </Button>
-        </div>
-      </div>
+            ? [data.today.employee, data.today.department, data.today.facility]
+                .filter(Boolean)
+                .join(" · ")
+            : "Signed in without an employee record."}
+          </>
+        }
+        actions={
+          <>
+            <div className="flex items-center gap-2">
+              {data?.notifications.unread ? (
+                <Link to="/notifications">
+                  <Badge variant="outline" className="gap-1">
+                    <Bell className="h-3 w-3" />
+                    {data.notifications.unread} unread
+                  </Badge>
+                </Link>
+              ) : null}
+              <Button variant="outline" size="sm" onClick={() => void load()}>
+                <RefreshCw
+                  className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")}
+                />
+                Refresh
+              </Button>
+            </div>
+          </>
+        }
+      />
 
       {error ? (
         <Alert variant="destructive">

@@ -70,12 +70,24 @@ export interface Crumb {
  */
 export function PageHeader({
   title,
+  meta,
   description,
   actions,
   breadcrumbs,
   className,
 }: {
   title: React.ReactNode;
+  /**
+   * Badges that belong *with* the title rather than opposite it: the shift a
+   * nurse is on, whether an encounter is open, today's date.
+   *
+   * A separate slot because the alternative was putting them in `actions`,
+   * which throws them to the far side of the screen and reads as controls, or
+   * inside `title`, which nests a `<Badge>` in an `<h1>`. They are neither:
+   * they are part of identifying the thing the page is about, and they belong
+   * beside its name.
+   */
+  meta?: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
   breadcrumbs?: Crumb[];
@@ -114,7 +126,13 @@ export function PageHeader({
           a page nobody can identify. */}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          {/* The badges wrap under the title on a narrow screen rather than
+              squeezing it, because the title is what the page is and the
+              badges are what state it is in. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+            {meta}
+          </div>
           {description && (
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               {description}

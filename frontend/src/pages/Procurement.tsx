@@ -76,6 +76,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "queue" | "requisitions" | "orders" | "receipts" | "suppliers";
 
@@ -134,26 +135,26 @@ export default function ProcurementPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Procurement</h1>
-          <p className="text-sm text-muted-foreground">
-            Requisition through to stock on the shelf.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Procurement"
+        description="Requisition through to stock on the shelf."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       {error && (
         <Alert variant="destructive">

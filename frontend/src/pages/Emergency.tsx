@@ -70,6 +70,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "board" | "performance";
 
@@ -152,26 +153,26 @@ export default function EmergencyPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Emergency</h1>
-          <p className="text-sm text-muted-foreground">
-            Sickest first, then longest waiting.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Emergency"
+        description="Sickest first, then longest waiting."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       <div className="flex gap-1 border-b">
         {(

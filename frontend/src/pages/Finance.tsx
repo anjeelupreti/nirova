@@ -74,6 +74,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "statements" | "owed" | "journals" | "periods" | "bank";
 
@@ -140,12 +141,10 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Finance</h1>
-        <p className="text-sm text-muted-foreground">
-          The ledger, and the two questions it must be able to answer.
-        </p>
-      </div>
+      <PageHeader
+        title="Finance"
+        description="The ledger, and the two questions it must be able to answer."
+      />
 
       {/* The headline. Not a tab, not a footnote. */}
       {agreement && (

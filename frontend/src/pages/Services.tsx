@@ -47,6 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const CATEGORIES = ["consultation", "registration", "procedure", "laboratory",
                     "radiology", "pharmacy", "consumable", "bed", "nursing",
@@ -169,23 +170,20 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Services and prices
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Everything a patient can be charged for. Nothing can be billed that
-            is not on this list.
-          </p>
-        </div>
-        {mayEdit ? (
-          <Button onClick={() => { setOpen(null); setDraft({ ...BLANK }); }}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add a service
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Services and prices"
+        description="Everything a patient can be charged for. Nothing can be billed that is not on this list."
+        actions={
+          <>
+            {mayEdit ? (
+              <Button onClick={() => { setOpen(null); setDraft({ ...BLANK }); }}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add a service
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {error && draft === null ? (
         <Alert variant="destructive">

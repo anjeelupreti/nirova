@@ -54,6 +54,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const REFRESH_MS = 20000;
 
@@ -616,42 +617,43 @@ export default function DiagnosticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <PageHeader
+        title={
+          <>
             <FlaskConical className="h-5 w-5 text-muted-foreground" />
             Diagnostics
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Worklist in the order work should be picked up — STAT first, then
-            urgent, then oldest.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Select
-            className="h-9 w-auto"
-            value={modality}
-            onChange={(e) => setModality(e.target.value)}
-          >
-            <option value="">All modalities</option>
-            <option value="laboratory">Laboratory</option>
-            <option value="xray">X-ray</option>
-            <option value="ultrasound">Ultrasound</option>
-            <option value="ct">CT</option>
-          </Select>
-          <Select
-            className="h-9 w-auto"
-            value={facilityUuid}
-            onChange={(e) => setFacilityUuid(e.target.value)}
-          >
-            {facilities.map((facility) => (
-              <option key={facility.uuid} value={facility.uuid}>
-                {facility.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
+          </>
+        }
+        description="Worklist in the order work should be picked up — STAT first, then urgent, then oldest."
+        actions={
+          <>
+            <div className="flex gap-2">
+              <Select
+                className="h-9 w-auto"
+                value={modality}
+                onChange={(e) => setModality(e.target.value)}
+              >
+                <option value="">All modalities</option>
+                <option value="laboratory">Laboratory</option>
+                <option value="xray">X-ray</option>
+                <option value="ultrasound">Ultrasound</option>
+                <option value="ct">CT</option>
+              </Select>
+              <Select
+                className="h-9 w-auto"
+                value={facilityUuid}
+                onChange={(e) => setFacilityUuid(e.target.value)}
+              >
+                {facilities.map((facility) => (
+                  <option key={facility.uuid} value={facility.uuid}>
+                    {facility.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </>
+        }
+      />
 
       <CriticalAlerts alerts={alerts} onChanged={() => void load()} />
 

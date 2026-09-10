@@ -10330,3 +10330,78 @@ nothing is hidden that opens, and nothing is shown that refuses.
 | after the self-service fixes | 54 |
 | now, with real parameter values | 77 counted, **0 that are not refusals** |
 | full backend suite | 225 passed, 9 skipped |
+
+## 260 - Thirty-four screens, six different headings
+
+Measured before touching anything: **3 of 36 screens used the design system's
+`PageHeader`; 33 built their own heading.** Across those 33, the `<h1>` came in
+six variants -- `text-xl font-semibold`, `text-2xl font-semibold`, `text-2xl
+font-bold`, one with `text-foreground` appended, one with `mt-1`, and three
+wrapping the title in a flex row with an icon. Three sizes and two weights for
+the same element.
+
+Nothing is *wrong* on any single screen. That is exactly what makes it worth
+fixing: the title changes size when you move between pages, so the product
+reads as thirty-four small applications rather than one, and no individual
+screen looks broken enough for anybody to raise it.
+
+**Converted with a script, because 33 screens by hand is 33 chances to
+introduce a difference.** The script reports before it writes, and the writing
+is the easy half -- getting the reporting honest took four rounds:
+
+*The tag matcher never matched.* `</?div` matches `</div` **without the
+closing bracket**, so the equality check against `"</div>"` never fired and all
+33 screens reported as "heading row is not balanced". A regex that finds
+nothing and a codebase with nothing to find look identical -- the same lesson
+as the backtick-in-a-shell-string sweep of log 253, two months apart, in a
+different language.
+
+*It anchored on the wrong element.* Anchoring on the first
+`justify-between` row in the file finds a row belonging to a helper component
+defined above the screen, and cannot see a heading that has no row at all
+(`Reports`, `Finance`, `Configuration`). Anchored on the `<h1>` and walking
+outwards, every shape in the console converts: 14 screens became 28.
+
+*It silently deleted a line of the interface.* The description pattern required
+plain text, so `Workspace`'s subtitle -- an expression joining employee,
+department and facility -- did not match, and fell out with the wrapper it lived
+in. It type-checked. It looked right in the diff. **A transformation that
+quietly deletes content is worse than one that refuses to run**, so every
+conversion is now checked token by token against the block it replaces and
+refused if anything would be lost. Three screens' JSX titles and descriptions
+are passed through as `ReactNode` rather than flattened to strings.
+
+*It flattened the indentation.* Valid JSX that nobody can read, in a codebase
+whose whole point is that it can be. Two separate bugs there: the generated
+indent was added on top of the original line's leading whitespace, which was
+never consumed; and the dedent baseline was the minimum indent across the block,
+which is zero whenever the first line sat on the same line as its opening tag,
+leaving every continuation hanging four levels right.
+
+**`PageHeader` gained a `meta` slot.** The nurse workspace shows the shift and
+the date beside its title; the alternative placements were `actions`, which
+throws them to the far side of the screen and reads as controls, or inside
+`title`, which nests a `<Badge>` in an `<h1>`. They are neither: they identify
+what the page is about and belong beside its name.
+
+**Three screens keep their own heading, each for a stated reason.** `Login` is
+not a console screen. `Counter` is a full-screen till with no heading at all.
+`SelfService` has a deliberate gradient hero -- a personal screen that looks
+personal is a real design choice, common in HR products, and flattening it would
+be a judgement dressed up as a cleanup.
+
+**One thing found while reading it: `Staff Portal · §95`.** A specification
+section number rendered on the screen a ward attendant opens every morning. The
+only one that had reached the interface -- the other four are in comments, where
+they belong.
+
+`frontend/tsconfig.tsbuildinfo` was tracked and turned up modified in a change
+that touched no TypeScript configuration. Untracked and ignored.
+
+| | |
+|---|---|
+| screens on `PageHeader`, before | 3 of 36 |
+| after | 33 of 36 |
+| distinct `<h1>` stylings | 6 → 1 |
+| `tsc --noEmit` and `npm run build` | clean |
+| full backend suite | 225 passed, 9 skipped |

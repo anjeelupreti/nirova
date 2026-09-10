@@ -63,6 +63,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "overview" | "customers" | "subscriptions" | "plans";
 
@@ -99,13 +100,10 @@ export default function PlatformPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Platform</h1>
-        <p className="text-sm text-muted-foreground">
-          Every customer, every subscription, without opening a tenant
-          database.
-        </p>
-      </div>
+      <PageHeader
+        title="Platform"
+        description="Every customer, every subscription, without opening a tenant database."
+      />
 
       <div className="flex gap-1 border-b">
         {TABS.map(({ id, label, icon: Icon }) => (

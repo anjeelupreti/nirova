@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "secondary"> = {
   active: "success",
@@ -73,20 +74,20 @@ export default function FacilitiesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Facilities</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Every business unit in this organization.
-          </p>
-        </div>
-        <Button asChild>
-          <Link to="/facility-requests">
-            <Plus className="h-4 w-4" />
-            Request a change
-          </Link>
-        </Button>
-      </div>
+      <PageHeader
+        title="Facilities"
+        description="Every business unit in this organization."
+        actions={
+          <>
+            <Button asChild>
+              <Link to="/facility-requests">
+                <Plus className="h-4 w-4" />
+                Request a change
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>

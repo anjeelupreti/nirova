@@ -72,6 +72,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { PageHeader } from "@/components/ui/layout";
 
 type Tab = "worklist" | "unanswered" | "performance" | "providers";
 
@@ -160,27 +161,27 @@ export default function ReferralsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Referrals</h1>
-          <p className="text-sm text-muted-foreground">
-            The handoff, and whether anybody ever closed the loop.
-          </p>
-        </div>
-        <Select
-          className="h-9 w-auto"
-          aria-label="Facility"
-          value={facility}
-          onChange={(event) => setFacility(event.target.value)}
-        >
-          <option value="">All facilities</option>
-          {facilities.map((row) => (
-            <option key={row.uuid} value={row.uuid}>
-              {row.name}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <PageHeader
+        title="Referrals"
+        description="The handoff, and whether anybody ever closed the loop."
+        actions={
+          <>
+            <Select
+              className="h-9 w-auto"
+              aria-label="Facility"
+              value={facility}
+              onChange={(event) => setFacility(event.target.value)}
+            >
+              <option value="">All facilities</option>
+              {facilities.map((row) => (
+                <option key={row.uuid} value={row.uuid}>
+                  {row.name}
+                </option>
+              ))}
+            </Select>
+          </>
+        }
+      />
 
       <div className="flex gap-1 overflow-x-auto border-b">
         {TABS.map(({ id, label, icon: Icon }) => (
