@@ -144,9 +144,64 @@ def api_exception_handler(exc, context):
         message = str(detail["detail"])
         code = getattr(detail["detail"], "code", "error")
         detail = {}
-    elif isinstance(detail, dict):
-        message = "The submitted data is not valid."
+    elif isinstance(detail, (dict, list)):
+        # **Say what was actually wrong.**
+        #
+        # This used to be the flat sentence "The submitted data is not valid."
+        # for every field error in the product. The real messages were right
+        # there in `detail` -- and every screen renders `error.message`, so
+        # what a user saw when anything failed validation was six words that
+        # told them nothing about which field or why.
+        #
+        # It was found from a screenshot of the self-service screen reading
+        # "Self-Service Unavailable / The submitted data is not valid." The
+        # actual cause was "You have no employee record", which the server
+        # knew and threw away on the way out.
+        message = _readable(detail)
         code = "validation_error"
 
     response.data = {"error": {"code": code, "message": message, "detail": detail}}
     return response
+
+
+def _readable(detail, limit: int = 3) -> str:
+    """Turn DRF's `{field: [messages]}` into a sentence somebody can act on.
+
+    Field names are safe to show: they are the keys the client itself sent,
+    so naming them leaks nothing the caller did not already know, and *which*
+    field is the single most useful thing a validation message can carry.
+
+    `non_field_errors` is unprefixed -- it is about the request as a whole,
+    and "Non field errors: ..." is worse than the bare sentence.
+    """
+    problems = []
+
+    def collect(value, field=""):
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                collect(nested, key if not field else f"{field}.{key}")
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                collect(item, field)
+        else:
+            text = str(value).strip()
+            if not text:
+                return
+            if field in ("", "non_field_errors", "__all__", "detail"):
+                problems.append(text)
+            else:
+                label = field.replace("_", " ").replace(".", " ").strip()
+                problems.append(f"{label[:1].upper()}{label[1:]}: {text}")
+
+    collect(detail)
+    if not problems:
+        return "The submitted data is not valid."
+
+    shown = problems[:limit]
+    remaining = len(problems) - len(shown)
+    sentence = " ".join(
+        part if part.endswith((".", "?", "!")) else f"{part}." for part in shown
+    )
+    if remaining:
+        sentence += f" ({remaining} more problem{'s' if remaining > 1 else ''}.)"
+    return sentence
