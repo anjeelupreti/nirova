@@ -160,6 +160,13 @@ rather than redesigning around it.
 - [x] Numeric limits per plan
 - [x] Add-ons with quantity
 - [x] Trial → active → past-due → grace → suspended → cancelled lifecycle
+- [x] **One live subscription per organization**, as a partial unique
+      constraint over the entitled statuses. Nothing enforced this, and the
+      demo tenant ended up on `enterprise` *and* `professional` at once:
+      entitlement resolution picked the narrower and the hospital module
+      silently vanished, while the subscription screen showed a healthy active
+      plan. A duplicate row that reads as valid is worse than a missing one
+      (log 272)
 - [x] Subscription event stream (the basis for MRR movement)
 - [x] Monthly, quarterly, half-yearly, annual and custom intervals
 - [x] Discount percentage
@@ -671,6 +678,14 @@ nothing else would have, kept here so they are not quietly dropped.*
 
 ## §20 Appointment management `[~]`
 
+> **Provider schedules could be defined by nobody until log 272.** The write
+> gate named `facility.manage`, which is not a permission — the catalogue has
+> `facility.read`, `facility.request_change` and `facility.approve_change`.
+> Now `department.manage`, held by the organization administrator and the
+> facility manager: defining a consultant's weekly clinic is service
+> administration, deliberately narrower than `visit.schedule`, because a
+> receptionist books *into* a clinic template rather than redrawing it.
+
 *The diary screen was built after this section was written. Every item below was
 ticked and **none of it was reachable** — there was no appointment screen at all,
 so a receptionist could not book. Worse, they could not have: booking required
@@ -710,6 +725,12 @@ should always have had (log 261).*
 - [ ] Appointment reminders
 
 ## §21 Queue management `[x]`
+
+> **Anybody who could see the queue could move it, until log 272.** `call-next`,
+> `recall`, `start` and `complete` inherited the viewset's `encounter.read`,
+> so a lab technician could complete somebody's consultation and so could a
+> read-only auditor. Moving the queue now takes `visit.schedule` — the same
+> authority issuing a token already asserted.
 
 - [x] Token issue with department prefix
 - [x] Daily numbering per facility
@@ -792,6 +813,13 @@ should always have had (log 261).*
 - [ ] Licensed interaction database (a small curated set today)
 
 ## §24 Referral management 🔷
+
+> **The provider directory could be edited by the front desk until log 272.**
+> `perform_create` asserted `department.manage`, but a `ModelViewSet` answers
+> PUT, PATCH and DELETE as well and neither `perform_update` nor
+> `perform_destroy` was overridden — so *adding* a provider took a manager and
+> *changing the address a referral is sent to* took `encounter.read`. The
+> authority is now declared on the class, which covers verbs added later.
 
 **Shapes**
 - [x] Internal, outbound and inbound as three genuinely different workflows
@@ -1092,6 +1120,15 @@ should always have had (log 261).*
 
 ## §33 Laboratory / LIMS `[x]`
 
+> **Collection, result entry and verification took only `encounter.read` until
+> log 272** — the permission the front desk holds for the appointment diary.
+> Now `diagnostic.process` (collect, receive, reject, enter) and
+> `diagnostic.verify` (release to the chart, notify a critical value), kept
+> apart because that is the maker-checker pair a laboratory is built around.
+> The service layer already refused the *individual* who entered the values;
+> it said nothing about whether the second individual is qualified to release
+> anything.
+
 **Catalogue**
 - [x] Test definitions
 - [x] Panels with component analytes
@@ -1153,6 +1190,19 @@ should always have had (log 261).*
 - [ ] Scheduling against modality capacity
 
 ## §36 Blood bank 🔷
+
+> **Every tick below was true of the domain logic and false of the product,
+> until log 272.** Every write in this module called
+> `require("pharmacy.dispense")` — a permission code that has never existed.
+> `require()` does not validate that a code is real, so the guard refused
+> *everybody, forever*: donor registration, collection, grouping, screening,
+> separation, release, issue and discard were all unreachable from outside.
+> The module's own tests passed throughout, because they run as the
+> organization owner, who is exempt from every permission check.
+>
+> Writing now takes `blood.process` (the bank's own work, up to release) or
+> `blood.issue` (the ward's use of what was released), split so the technician
+> who screened a unit is not the person who hangs it.
 
 **Donors**
 - [x] A donor is not a patient — different record, different consent,
@@ -1654,6 +1704,7 @@ should always have had (log 261).*
 > login. Everything built on `Employee.user_id` — self-service (§95), every
 > employee-addressed notification, `Scope.OWN` filtering — was inert for the
 > rest. The features were not wrong; they reached nobody, and nothing said so.
+
 - [x] `give_login()` creates or attaches the account, adds the membership and
       the base `staff` role, and refuses a second login for the same person
 - [x] No password is set: the account is unusable until one is set through the
@@ -1982,6 +2033,18 @@ should always have had (log 261).*
 
 ## §28 Nursing `[~]`
 
+> **Nursing writes took only `patient.clinical.read` until log 272** — allocating
+> a nurse to a bed, writing an SBAR handover and closing a bedside task were
+> open to everybody who can *read* clinical data, which includes the medical
+> director and the read-only auditor. All three now take `encounter.create`,
+> the permission that already means "record clinical data" and that the doctor
+> and the nurse hold. A ward round recorded through `AdmissionViewSet.rounds`
+> had the same hole for a subtler reason: the action answers GET *and* POST
+> through one handler, so reading the rounds and charting one shared a guard.
+>
+> The demo tenant had no `nurse@` account until log 272, so every probe of
+> these four screens had run as a doctor or the owner.
+
 - [x] Ward census
 - [x] Nurse assignment
 - [x] Nursing rounds
@@ -2059,6 +2122,12 @@ should always have had (log 261).*
 - [ ] Time-to-first-analgesia and other condition-specific measures
 
 ## §30 ICU 🔷
+
+> **The unit summary was reachable by nobody until log 272.** It asked for
+> `report.view`; the catalogue's code is `report.read`. A one-word slip that
+> no test could see, because a permission code is a string and nothing checked
+> it against the catalogue. Charting itself was correctly guarded throughout —
+> `encounter.create`, asserted in a `_writable()` helper.
 
 **The stay**
 - [x] An ICU episode is an interval on the admission, not a flag — a patient
@@ -2895,6 +2964,12 @@ because three modules were already working around its absence.*
 
 ## §122 Document management 🔷
 
+> **Uploading and archiving took only `patient.read` until log 272.** Attaching
+> a document to a patient's record is an edit to that record and now takes
+> `patient.update`; reading stays at `patient.read`, because the pharmacist and
+> the counter both need to open a scanned prescription without being able to
+> add to it.
+
 *Built. `apps/documents`, mounted at `/api/documents/`.*
 
 - [x] Upload, with an allow-list of content types and a 50 MB limit
@@ -3161,6 +3236,138 @@ permissions that were too coarse (log 271).*
       escape. The machinery exists (`apps/rbac/relationships.py`, break-glass,
       the privacy queue) and is off by default
 
+# A read permission that was a licence to write `[x]`
+
+*Found by chasing the one cell log 271 left unexplained — the receptionist's 403
+on `/api/clinical/encounters/` — which turned out to be **correct**. The Queue
+screen reads `/clinical/queue/` and `/clinical/availability/`, both of which the
+front desk can open; it touches `/clinical/encounters/` only when a clinician
+opens a chart. Four other things were wrong (log 272).*
+
+## The defect class
+
+- [x] **`HasPermission.of(..., write=...)` on every route that changes
+      something.** DRF's `@action(methods=["post"])` inherits the viewset's
+      `permission_classes`, so a class declaring only a read permission guarded
+      its writes with it. `QueueViewSet` was the example: `call-next`, `recall`,
+      `start` and `complete` — the four verbs that move a waiting room — behind
+      `encounter.read`. A lab technician could complete somebody's
+      consultation, and so could an **auditor**, whose role description is
+      "read-only oversight across the organization"
+- [x] **`manage.py audit_writes`** — the same question asked repeatably rather
+      than by a one-off script. Walks the URLconf, resolves each route's guard
+      *the way DRF does* (instantiating the view and setting `self.action`, so a
+      per-action `get_permissions()` is read rather than guessed), follows
+      guards factored into a `self._writable()` helper, and respects
+      `http_method_names`. Reports **0**
+- [x] **Two exemption tables, each entry carrying a written reason.**
+      `OPEN_BY_DESIGN` (signing in, your own inbox, break-glass) and
+      `READ_SHAPED_POST` (a duplicate check, a price preview, a till quotation,
+      a change preview — questions that arrive as POSTs because they do not fit
+      in a query string). Named individually, never pattern-matched on
+      "preview", because a pattern is a loophole waiting for somebody to call an
+      endpoint `preview_and_apply`
+- [x] Where the 81 went: the queue → `visit.schedule`; laboratory collection and
+      result entry → `diagnostic.process`; verification and critical-value
+      notification → `diagnostic.verify`; nursing assignments, SBAR handover and
+      bedside tasks → `encounter.create`; a ward round recorded through a
+      dual-verb action → `encounter.create`; the referral provider directory →
+      `department.manage`; documents on a patient → `patient.update`; a
+      requisition sent for approval → `purchase.create`; a donor's record after
+      deferral → `blood.process`
+
+## Permission codes that had never existed
+
+- [x] **`tests/test_permission_codes.py`** — `require(code, scope)` takes a
+      string and never checked it against the catalogue, so a typo refused
+      **everybody, forever**: the worst failure mode a permission check has,
+      because it looks exactly like security working. Three codes, eight call
+      sites, all of them dead:
+      - `pharmacy.dispense` (six sites) — every write in the blood bank. Donor
+        registration, collection, grouping, screening, separation, release,
+        issue, discard. The whole module, unusable by anybody
+      - `facility.manage` — provider schedules, so nobody could define a
+        consultant's clinic
+      - `report.view` — the ICU unit summary
+- [x] Every affected module's own tests passed throughout, because they run as
+      the organization owner, who is exempt from every permission check by
+      design. **A suite that only ever acts as the owner cannot see an
+      authorization defect at all**
+- [x] Found by probing the running stack as the auditor and noticing the
+      refusals were *too uniform to be real*. A 403 where a 403 belongs proves
+      nothing on its own
+- [x] Second test in the same file: permissions **no seeded role grants**, with
+      an exemption table. A permission held by nobody is the same outage
+      arriving by a different road
+
+## Two permissions where there had been one
+
+- [x] **`blood.process` / `blood.issue`** — the bank's own work up to release,
+      and the ward's use of what was released. The technician who screened a
+      unit is not the person who hangs it
+- [x] **`diagnostic.process` / `diagnostic.verify`** — entering a result and
+      releasing it to a chart. The service layer already refused the person who
+      entered the values, which is a check between two *individuals*; it said
+      nothing about whether the second person is qualified to release anything,
+      so "a second pair of eyes" meant any second pair of eyes in the building
+- [ ] A small lab that wants one senior technician doing both grants it in a
+      role of its own. Deliberately a customer's decision, and visible because
+      it is two permissions rather than one
+
+## The tenant was on two plans at once
+
+- [x] **`Subscription`: one live subscription per organization**, as a partial
+      unique constraint over the entitled statuses, excluding soft-deleted rows.
+      A customer's history is a stack of cancelled subscriptions and it must stay
+- [x] `seed_demo` keys its subscription lookup on the **customer**, not on the
+      customer *and the plan*. Keyed on both, it did not find the `enterprise`
+      subscription the tenant had been upgraded to, and made a second live one
+      on `professional`. Entitlement resolution picked the narrower of the two
+      and the demo hospital silently lost the `hospital` module — six seed tests
+      failing with "module not entitled" against a subscription screen showing a
+      healthy active plan
+- [x] **A seed must be safe to re-run against a tenant somebody has changed
+      since.** Re-running is the whole point of a seed; an untouched tenant is
+      the easy case
+- [x] The duplicate was cancelled with a reason and a subscription event, not
+      deleted. It is a billing record
+
+## Demo accounts that should have existed from the start
+
+- [x] **`auditor@`** — the account that makes "read-only" provable. A role whose
+      whole value is what it *cannot* do needs an account, or the claim is
+      decoration
+- [x] **`nurse@`** — four screens exist whose only intended user is a nurse
+      (workspace, eMAR, handover, bedside rounds) and every probe of them had
+      run as a doctor or the owner
+- [x] **`lab@`** — `lab_technician`'s ceiling moved from department to facility.
+      Departments are created by the module seeds, which run *after* roles are
+      bound, so a department-scoped assignment had nothing to name and was
+      refused outright. A role nobody can be given describes an organisation
+      chart rather than a job
+- [x] **`tests/test_write_authority.py`** is written as the auditor, and
+      deliberately: for every route in it, the missing write check is the *only*
+      obstacle. The same test written as a receptionist would pass several of
+      them for the wrong reason — refused for lack of the read permission,
+      never reaching the write check
+- [x] It resolves each path before probing it. The first draft aimed at
+      `/api/lab/orders/.../verify/`; the route is under `/api/diagnostics/`, so
+      it 404ed. The assertion is "403 and only 403", so the typo failed loudly —
+      but under a looser "not 2xx" it would have been green forever against a
+      URL that does not exist
+
+## Verified against the running stack, not only the source
+
+- [x] The auditor is refused all eight probed writes (`403` on every one; two
+      answered `400`/`404` before, meaning they had got past the gate)
+- [x] And the other half, which matters more: the receptionist can call the next
+      patient, the nurse can open the workspace and reserve a blood unit, the
+      technician can collect a sample and defer a donor, the doctor can verify a
+      result — while the technician is **refused** verification
+- [x] `NIROVA_TENANT_DB_HOST` is in `backend/.env` *and* set explicitly in
+      `infra/docker-compose.yml`. The override existed and nobody remembered to
+      export it, which is the same as not existing
+
 # Returns at the counter, reachable at last `[x]`
 
 *Four endpoints with no screen (log 266). A pharmacy could sell and could not
@@ -3366,7 +3573,7 @@ that one click can make system up" and "app build should not make me wait"
 were the whole verification mechanism, which worked only because somebody
 remembered to run them twice by hand.*
 
-- [x] `pytest` + `pytest-django`, 127 tests
+- [x] `pytest` + `pytest-django`, 288 tests (279 pass, 9 skip)
 - [x] Every seed run twice, in dependency order, as separate parametrised
       tests — so a failure says whether it never worked or only worked once
 - [x] One invariant test per numbered development-log entry. That is the
@@ -3392,12 +3599,26 @@ remembered to run them twice by hand.*
       whatever the runner happens to have. Four tests were passing vacuously
       because the demo doctor held no role and a user who sees nothing
       satisfies every assertion about not seeing too much (log 231)
-- [x] 65 of 76 catalogue permissions are now enforced at an endpoint, up from
-      59. The seven staff-administration codes were the largest single block
-      (log 235); 11 remain unreachable: `analytics.read`, `audit.export`,
+- [x] **73 of 83** catalogue permissions are checked somewhere in `apps/`, up
+      from 65 of 76. `subscription.read` joined them with Capacity (log 271);
+      `blood.process`, `blood.issue`, `diagnostic.process` and
+      `diagnostic.verify` are new and enforced from the start (log 272).
+      **10 remain unreachable**: `analytics.read`, `audit.export`,
       `organization.read/update`, `patient.safety.read`,
       `prescription.approve`, `refund.create`, `report.build`, `role.manage`,
-      `stock.transfer`, `subscription.read`
+      `stock.transfer`
+- [x] **Every code a guard names is declared** — `tests/test_permission_codes.py`.
+      Three were not, and each refused everybody rather than failing loudly
+      (log 272)
+- [x] **No write route takes only a read permission** —
+      `tests/test_write_authority.py` plus `manage.py audit_writes`, asserted at
+      zero. Written as the auditor, because that is the actor for whom the
+      missing check is the *only* obstacle (log 272)
+- [ ] A test that acts as somebody other than the organization owner for every
+      module. The owner bypasses every permission check by design, so a suite
+      that only ever acts as the owner cannot see an authorization defect at
+      all — which is why three dead permission codes survived for months with
+      green tests (log 272)
 - [ ] Coverage measurement
 - [ ] A hermetic unit layer for the pure calculations (NEWS2, tax slabs,
       ageing buckets) that needs no database
@@ -3419,6 +3640,25 @@ breaking one in a new module breaks the platform.
 - [ ] Every state-changing action writes an audit event.
 - [ ] Every maker-checker pair declares `conflicts_with` on its permissions.
 - [ ] Permission scope filters querysets; it does not only refuse requests.
+- [ ] **A viewset that answers an unsafe verb declares `write=`.** A DRF
+      `@action(methods=["post"])` inherits `permission_classes`, so a class
+      declaring only a read permission guards its writes with it — and the
+      missing line looks like nothing at all. `manage.py audit_writes` is the
+      check; an exception goes in its exemption tables with a reason (log 272).
+- [ ] **A permission code is checked against the catalogue, not trusted.**
+      `require()` takes a string and never validated it, so a typo refused
+      everybody forever — which looks exactly like security working, and hid
+      three dead modules behind green tests (log 272).
+- [ ] **An authorization test names an actor for whom the missing check is the
+      only obstacle.** A test as the owner proves nothing (they are exempt);
+      a test as somebody lacking the *read* permission never reaches the write
+      check and passes for the wrong reason (log 272).
+- [ ] **A maker-checker split is two permissions as well as two people.**
+      Refusing the individual who entered a value says nothing about whether
+      the second individual is qualified to release it (log 272).
+- [ ] **A seed is safe to re-run against a tenant somebody has changed since.**
+      Keyed on the wrong tuple, `seed_demo` gave one customer two live
+      subscriptions and silently removed a module (log 272).
 - [ ] Records with clinical, financial or legal weight are versioned, not
       overwritten.
 - [ ] A value shown to a clinician is formatted so it cannot be misread —
