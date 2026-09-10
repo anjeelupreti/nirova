@@ -306,7 +306,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-muted/20">
-      <header className="border-b bg-background">
+      {/*
+        **Sticky, because a header that scrolls away takes the search and the
+        organization switcher with it.** Both are things you reach for *while*
+        looking at something further down a long list, and having to scroll back
+        to the top to use them is what makes people stop using them.
+      */}
+      <header className="sticky top-0 z-40 border-b bg-background">
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
           <div className="flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
@@ -391,7 +397,19 @@ export default function App() {
           across a header, and the ones that get pushed off the end are the
           ones nobody finds.
         */}
-        <nav className="hidden w-52 shrink-0 space-y-5 lg:block">
+        {/*
+          **Sticky and scrolling on its own, which it was not.** The sidebar was
+          a plain flex child, so it scrolled away with the page: on a long ward
+          list, navigation simply disappeared and getting anywhere else meant
+          scrolling back to the top first.
+
+          `top-14` clears the header, which is `h-14`. The height is the
+          viewport less that, so a sidebar taller than the screen scrolls
+          *itself* rather than pushing the page. `overscroll-contain` stops a
+          scroll that reaches the end of the sidebar from continuing into the
+          page behind it -- the small thing that makes a fixed panel feel fixed.
+        */}
+        <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-52 shrink-0 space-y-5 overflow-y-auto overscroll-contain pb-6 pt-1 lg:block">
           {visibleGroups.map((group) => (
             <div key={group.label}>
               <p className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">

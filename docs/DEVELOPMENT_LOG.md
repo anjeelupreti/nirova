@@ -10870,3 +10870,75 @@ host belongs in configuration per process, not in a row shared by both.
 | same-actor guard | proved: owner refunded themselves when removed |
 | full backend suite | 260 passed, 9 skipped |
 | running stack | rebuilt; five new endpoints answering through nginx |
+
+## 268 - The sidebar scrolled away, and nothing looked clickable
+
+Three reports, three different causes, and none of them was access.
+
+**The sidebar scrolled with the page** because nothing said otherwise: it was
+`<nav className="hidden w-52 shrink-0 ...">`, a plain flex child. On a long ward
+list the navigation simply left the screen, and getting anywhere else meant
+scrolling back to the top first. The header had the same problem, taking the
+search box and the organization switcher with it -- both things you reach for
+*while* looking at something further down.
+
+Now `sticky top-0` on the header and `sticky top-14` on the sidebar, with
+`h-[calc(100vh-3.5rem)] overflow-y-auto` so a sidebar taller than the screen
+scrolls itself rather than pushing the page, and `overscroll-contain` so a
+scroll that reaches its end does not continue into the page behind it.
+
+**"Most things are unclickable" was almost the opposite of the truth.** Eighteen
+of the thirty-four screens with tables open a record when a row is clicked. What
+they did not do is *say so*: `TableRow` gave `hover:bg-muted/50` to every row,
+clickable or not, so the hover signal carried no information at all and a row
+that opens a patient looked exactly like a row that does nothing.
+
+The affordance now follows the behaviour, derived from `onClick` rather than
+from a new prop -- so the eighteen screens already passing one get the pointer,
+the stronger hover and a focus ring without being edited, and a row that does
+nothing gets a hover faint enough to read as "you are on this line".
+
+**And those rows were unreachable from a keyboard**, which is the part I would
+not have found by looking. A `<tr>` with a click handler is invisible to Tab, so
+every one of those records could only be opened with a mouse. `role="button"`
+and `tabIndex` fix it; the Enter and Space handler fires only when the row
+itself has focus, so a button inside a row is not double-triggered.
+
+**Answering the question directly: it is not access.** An organization owner
+bypasses every permission check -- `authorization.is_organization_owner` returns
+true before any code is consulted -- and `audit_screens` shows 200 for the owner
+on every endpoint the console calls. Nothing in this product is hidden from
+them.
+
+## 269 - The 502, and the flip-flop that caused it
+
+`502 Bad Gateway`. Two causes stacked, both recurring, and the second is the
+more embarrassing.
+
+**The tenant row pointed at `localhost`.** `TenantDatabase` stores a host per
+tenant, and this session's host-side work had pointed it at the published port
+so `pytest` and the audits could reach Postgres. Inside the backend container
+`localhost` is the container, so bootstrap failed with exactly the message it is
+written to give. Retargeted and restarted.
+
+**Then the backend was healthy and still wrong.** `/api/health/` answered 200
+and `/api/import/kinds/` returned 404: the image predated `apps/dataimport`, and
+the frontend image predated every screen built since. **A health check proves
+the container is running, not that it is running this code.** Third time a stale
+image has cost a verification here.
+
+**And the flip-flop is now fixed rather than flipped again.** The stored host is
+a fact about the database; how to reach it is a fact about the *process*, and
+storing only the first made them fight -- whichever was written last worked and
+the other broke. `NIROVA_TENANT_DB_HOST` overrides the row for the process that
+sets it and changes nothing for anybody else. The container keeps its stored
+`postgres`; host tooling exports `localhost` once. Verified both ways: the suite
+runs in the container against `postgres` (256 passed) and on the host with the
+override (82 passed for the three frontend-reading modules that only exist
+outside the image).
+
+| | |
+|---|---|
+| suite, in the container | 256 passed, 13 skipped |
+| suite, on the host with the override | 82 passed for the frontend-reading modules |
+| served bundle | rebuilt and confirmed to contain the sticky sidebar |

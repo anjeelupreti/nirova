@@ -181,14 +181,35 @@ class TenantDatabase(BaseModel):
         return f"{self.alias} ({self.get_status_display()})"
 
     def as_connection_settings(self) -> dict:
+        """Where this tenant's database is, from *this process's* point of view.
+
+        **The stored host is a fact about the database; how to reach it is a
+        fact about the process.** Those are not the same thing, and storing only
+        the first made them fight: the container reaches Postgres at `postgres`
+        and the host reaches the same server at `localhost`, so whichever was
+        written last worked and the other broke. It cost a 502 and a debugging
+        session twice in one day, each time ending in `retarget_tenants`
+        flipping the row back.
+
+        `NIROVA_TENANT_DB_HOST` (and `..._PORT`) override the row for the
+        process that sets it, without changing what every other process sees.
+        The container keeps using the stored `postgres`; host-side tooling
+        exports `localhost` once and stops flipping the database back and
+        forth.
+
+        Deliberately not a settings key: it is per-invocation, and a value in
+        `settings.py` would be one more thing to remember to change.
+        """
+        import os
+
         from django.conf import settings
 
         template = settings.TENANT_DATABASE
         return {
             "ENGINE": template["ENGINE"],
             "NAME": self.db_name,
-            "HOST": self.host,
-            "PORT": self.port,
+            "HOST": os.environ.get("NIROVA_TENANT_DB_HOST") or self.host,
+            "PORT": os.environ.get("NIROVA_TENANT_DB_PORT") or self.port,
             "USER": self.db_user,
             "PASSWORD": self.db_password,
             "CONN_MAX_AGE": template.get("CONN_MAX_AGE", 60),

@@ -307,16 +307,60 @@ export function TableBody(props: React.HTMLAttributes<HTMLTableSectionElement>) 
   return <tbody className="[&_tr:last-child]:border-0" {...props} />;
 }
 
+/**
+ * A table row, which behaves like a button when it is one.
+ *
+ * **Every row used to get `hover:bg-muted/50`, clickable or not**, so the hover
+ * signal meant nothing: eighteen screens open a record when you click a row and
+ * looked exactly like the eleven that do not. "Most things are unclickable" was
+ * the report, and the truth was worse — most things *were* clickable and
+ * nothing said so.
+ *
+ * So the affordance follows the behaviour. A row with an `onClick` gets the
+ * pointer, a stronger hover and a focus ring; a row without gets a hover so
+ * faint it reads as "you are on this line" rather than "this does something".
+ * Derived from `onClick` rather than from a prop, so the eighteen screens
+ * already passing one get it without being edited — and any new screen gets it
+ * by writing the handler it was going to write anyway.
+ *
+ * **And it is reachable from a keyboard**, which it was not. A `<tr>` with a
+ * click handler is invisible to Tab, so every one of those records could only
+ * be opened with a mouse. `role="button"` and `tabIndex` fix that; the Enter
+ * and Space handler fires only when the row itself has focus, so a button
+ * inside the row is not double-triggered by its own keypress.
+ */
 export function TableRow({
   className,
+  onClick,
+  onKeyDown,
   ...props
 }: React.HTMLAttributes<HTMLTableRowElement>) {
+  const interactive = Boolean(onClick);
+
   return (
     <tr
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b transition-colors data-[state=selected]:bg-muted",
+        interactive
+          ? "cursor-pointer hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          : "hover:bg-muted/30",
         className,
       )}
+      onClick={onClick}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={(event) => {
+        onKeyDown?.(event);
+        if (!interactive || event.defaultPrevented) return;
+        // Only when the row itself has focus. A button inside the row handles
+        // its own Enter, and firing both would open the record *and* do
+        // whatever the button does.
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.(event as unknown as React.MouseEvent<HTMLTableRowElement>);
+        }
+      }}
       {...props}
     />
   );
