@@ -8,6 +8,10 @@ which is a permission of its own precisely so that it can be given to few
 people and audited on all of them.
 """
 
+# `Count`/`Q` annotate a ward's bed count in one query rather than one per
+# ward; `Prefetch` fetches every bed's current occupant in one query rather
+# than four per bed. Both were measured with `manage.py audit_queries`.
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -326,7 +330,18 @@ class WardViewSet(viewsets.ModelViewSet):
     )
 
     def get_queryset(self):
-        return Ward.objects.select_related("facility").order_by("name")
+        # `active_bed_count` rather than one COUNT per ward. `filter=` inside
+        # the aggregate rather than a `.filter()` on the queryset, which would
+        # drop wards that have no active beds -- a ward mid-refurbishment is
+        # still a ward, and a list that quietly omitted it would be worse than
+        # a slow one.
+        return (
+            Ward.objects.select_related("facility")
+            .annotate(
+                active_bed_count=Count("beds", filter=Q(beds__is_active=True))
+            )
+            .order_by("name")
+        )
 
     def perform_create(self, serializer):
         get_authorization(self.request).require(
@@ -359,8 +374,24 @@ class BedViewSet(viewsets.ModelViewSet):
     )
 
     def get_queryset(self):
-        queryset = Bed.objects.select_related("ward").order_by(
-            "ward__name", "code"
+        queryset = (
+            Bed.objects.select_related("ward")
+            .prefetch_related(
+                # One query for every bed's occupant instead of four per bed.
+                # `select_related` down to the patient because the serializer
+                # renders the occupant's name, so fetching the assignment
+                # without the admission and patient would only move the N+1
+                # one level down -- which is the mistake that makes a
+                # prefetch look like it did not work.
+                Prefetch(
+                    "assignments",
+                    queryset=BedAssignment.objects.filter(
+                        vacated_at__isnull=True
+                    ).select_related("admission", "admission__patient"),
+                    to_attr="open_assignments",
+                )
+            )
+            .order_by("ward__name", "code")
         )
         if self.request.query_params.get("available") == "true":
             facility = self.request.query_params.get("facility")
@@ -427,8 +458,24 @@ class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         queryset = Admission.objects.select_related(
             "patient", "facility", "department", "encounter"
+        ).prefetch_related(
+            # The occupied bed, for every action including the list. This used
+            # to be prefetched only when `action != "list"`, which is the one
+            # case where it does not matter: a detail view walks the relation
+            # once, a list walks it once per row. `bed__ward` because
+            # `ward_name` reads through the bed, and stopping at the bed would
+            # only move the N+1 down a level.
+            Prefetch(
+                "bed_assignments",
+                queryset=BedAssignment.objects.filter(
+                    vacated_at__isnull=True
+                ).select_related("bed", "bed__ward"),
+                to_attr="open_bed_assignments",
+            )
         )
         if self.action != "list":
+            # The detail view renders the whole assignment history, not just
+            # the open one, so it needs the real relation as well.
             queryset = queryset.prefetch_related(
                 "bed_assignments__bed", "bed_assignments__ward", "clearances"
             )

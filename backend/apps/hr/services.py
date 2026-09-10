@@ -947,7 +947,11 @@ def team_of(manager: Employee) -> list:
     seen, queue, result = {manager.pk}, [manager], []
     while queue:
         current = queue.pop()
-        for report in current.direct_reports.filter(
+        # `select_related("department")` because every caller of this renders
+        # the department name per person -- the manager queue's team strip did,
+        # at one query each. One join on a query that is already being issued
+        # costs nothing; the alternative was a round trip per report.
+        for report in current.direct_reports.select_related("department").filter(
             status__in=WORKING_STATUSES
         ):
             if report.pk in seen:

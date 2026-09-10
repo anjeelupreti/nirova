@@ -17,6 +17,9 @@ postings — anything else is a number somebody typed.
 keeping the document's own date, and says so in the response.
 """
 
+# `Count` annotates each period's journal-entry count in the list query rather
+# than issuing one COUNT per period. Measured with `manage.py audit_queries`.
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
@@ -92,7 +95,11 @@ class AccountSerializer(serializers.ModelSerializer):
 
 class PeriodSerializer(serializers.ModelSerializer):
     accepts_postings = serializers.BooleanField(read_only=True)
-    entries = serializers.IntegerField(source="entries.count", read_only=True)
+    #: Was `IntegerField(source="entries.count")`, which is a `COUNT` query per
+    #: period -- 24 periods, 24 queries, measured at 1.5 queries per row on
+    #: `/api/finance/periods/`. A fiscal year is twelve periods and a system
+    #: keeps years, so this grows forever and never looks wrong.
+    entries = serializers.SerializerMethodField()
 
     class Meta:
         model = AccountingPeriod
@@ -102,6 +109,19 @@ class PeriodSerializer(serializers.ModelSerializer):
             "accepts_postings", "entries",
         ]
         read_only_fields = fields
+
+    def get_entries(self, period) -> int:
+        """The annotation when the queryset provided one, else a count.
+
+        The fallback is not dead code: `open-year` serializes periods it has
+        just created, which never went through `get_queryset` and carry no
+        annotation. A serializer that assumed the annotation would raise there
+        -- on a write path, after the write had already happened.
+        """
+        annotated = getattr(period, "entry_count", None)
+        if annotated is not None:
+            return annotated
+        return period.entries.count()
 
 
 class JournalLineSerializer(serializers.ModelSerializer):
@@ -353,7 +373,9 @@ class PeriodViewSet(viewsets.ReadOnlyModelViewSet):
     )
 
     def get_queryset(self):
-        return AccountingPeriod.objects.order_by("-starts_on")
+        return AccountingPeriod.objects.annotate(
+            entry_count=Count("entries")
+        ).order_by("-starts_on")
 
     @action(detail=False, methods=["post"], url_path="open-year")
     def open_fiscal_year(self, request):

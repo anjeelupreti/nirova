@@ -131,6 +131,18 @@ class Ward(BaseModel):
 
     @property
     def bed_count(self) -> int:
+        """Active beds in this ward.
+
+        A `COUNT` per ward unless the queryset annotated it -- which is one
+        query per row on any screen listing wards, measured at exactly 1.0/row
+        on `/api/ipd/wards/`. `WardViewSet` annotates `active_bed_count`; the
+        annotation cannot be called `bed_count` because a `property` is a data
+        descriptor and wins over an instance attribute of the same name, so the
+        annotation would be set and then never read.
+        """
+        annotated = getattr(self, "active_bed_count", None)
+        if annotated is not None:
+            return annotated
         return self.beds.filter(is_active=True).count()
 
     @property
@@ -239,7 +251,31 @@ class Bed(BaseModel):
 
     @property
     def current_assignment(self):
-        """Who is in it now, or None."""
+        """Who is in it now, or None.
+
+        **Reads a prefetch when the caller arranged one.** This is a querying
+        property, and `BedSerializer` reaches it four times per bed --
+        `is_occupied`, `is_assignable`, `occupant_name`, `occupant_admission`
+        -- each of which then walks `admission.patient`. Measured with
+        `manage.py audit_queries --screen Setup --compare`: `/api/ipd/beds/`
+        issued **86 queries for 16 beds, and +64 more for +14 beds**. That is
+        4.6 queries per bed, so a 500-bed hospital asks for one screen and
+        gets two and a half thousand round trips.
+
+        The fix goes here rather than in the serializer because every caller
+        pays the same cost -- `is_assignable` is used by the admission
+        services too -- and a serializer-only fix would leave them all slow
+        while looking fixed.
+
+        `open_assignments` is set by `Prefetch(..., to_attr="open_assignments")`
+        in `BedViewSet.get_queryset`. `to_attr` rather than overriding the
+        default `assignments` cache, because a filtered prefetch under the
+        real relation name makes `bed.assignments.all()` silently mean "open
+        assignments" for every later reader, and that is a trap.
+        """
+        prefetched = getattr(self, "open_assignments", None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
         return self.assignments.filter(vacated_at__isnull=True).first()
 
     @property
@@ -391,6 +427,23 @@ class Admission(BaseModel):
 
     @property
     def current_bed(self):
+        """The bed this admission occupies now, or None.
+
+        Reads a prefetch when one was arranged, for the same reason
+        `Bed.current_assignment` does. `AdmissionListSerializer` reaches this
+        twice per row -- `bed_code` and `ward_name` -- and the second walks
+        `bed.ward`, so a ward list cost about three queries per patient.
+        Measured on `/api/ipd/admissions/`: 50 queries for 7 admissions, and
+        +26 for +5 more.
+
+        `open_bed_assignments` is set by `AdmissionViewSet.get_queryset`, which
+        previously prefetched bed assignments for the *detail* action and not
+        for the list -- the wrong way round, since the list is the only place
+        the cost is multiplied.
+        """
+        prefetched = getattr(self, "open_bed_assignments", None)
+        if prefetched is not None:
+            return prefetched[0].bed if prefetched else None
         assignment = self.bed_assignments.filter(vacated_at__isnull=True).first()
         return assignment.bed if assignment else None
 

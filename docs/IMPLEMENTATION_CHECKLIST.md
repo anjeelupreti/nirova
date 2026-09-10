@@ -2636,6 +2636,17 @@ peer shift swaps exchange roster entries atomically, and payslips export cleanly
       no HR permission — the permission model expresses "mine" through `Scope.OWN`
       and dedicated self-service summary endpoints without granting tenant-wide `employee.read`
 
+      **This was ticked and was not true, and the way it was untrue is worth
+      keeping.** `Scope.OWN` filtering only helps somebody who *holds* the
+      permission at own scope. The demo doctor, counter assistant and
+      pharmacist hold no `attendance.read`, `employee.read` or `salary.read`
+      at any scope, so six of the self-service screen's fourteen endpoints
+      returned 403 to them — measured with `manage.py audit_screens`, not
+      noticed by reading. The design had assumed every employee also holds
+      the `staff` role. `scope_or_own()` closed it: no grant means your own
+      rows rather than no rows (log 255). Ticked again, and this time with
+      `tests/test_self_service.py` behind it.
+
 **My profile**
 - [x] Read: position, department, employment type, joining date, reporting
       line, contract
@@ -3030,6 +3041,15 @@ because three modules were already working around its absence.*
 ## §131 Platform observability `[~]`
 - [x] Health and readiness endpoints
 - [x] Tenant database status reporting
+- [x] **`manage.py audit_screens`** — reads the frontend source for every API
+      path each page calls and probes all of them as each demo account,
+      printing a status matrix. Reports rather than asserts: a 403 is often
+      correct, so it is rendered amber and the judgement stays with a person.
+      Paths it cannot honestly probe — interpolated detail routes truncated to
+      a collection prefix, and anything answering 405 because the screen uses
+      a verb other than GET — are marked `~` and excluded from the count.
+      First run 117 failing endpoint/user pairs; 54 after the artifacts were
+      classified and self-service was fixed (logs 253, 255)
 - [ ] API, database and queue health
 - [ ] Background job monitoring
 - [ ] Error log aggregation

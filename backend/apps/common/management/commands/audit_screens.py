@@ -22,22 +22,16 @@ refusals are wrong stays with a person. What it removes is the *finding*.
     manage.py audit_screens --failures      # only what did not answer 2xx
 """
 
-import re
-from pathlib import Path
-
-from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.test import Client
 
+# The path extraction is shared with `audit_queries`, which needs the same
+# answer to the same question. A second copy of that regex would drift from
+# this one silently -- the exact failure it exists to prevent.
+from apps.common.screens import paths_by_page
+
 #: Demo accounts, in the order a reviewer would think about them.
 DEMO_USERS = ["owner", "doctor", "manager", "counter", "pharmacy"]
-
-#: Paths whose call would change data. Read-only verbs only: an audit that
-#: posted would be an audit that has to be cleaned up after.
-UNSAFE = re.compile(
-    r"/(create|approve|reject|void|cancel|close|open|start|complete|"
-    r"dispense|check-in|check-out|call-next|decide|submit|issue|post|pay)/?$"
-)
 
 
 class Command(BaseCommand):
@@ -54,7 +48,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        pages = self._paths_by_page(options.get("screen"))
+        pages = paths_by_page(options.get("screen"))
         if not pages:
             self.stdout.write(self.style.ERROR("No frontend pages found."))
             return
@@ -87,7 +81,16 @@ class Command(BaseCommand):
                     # failure of the screen, because the screen never asks for
                     # it. Counting it made the headline number untrustworthy,
                     # and a number a reader discounts is worse than no number.
-                    if only_inferred:
+                    #
+                    # 405 is the same kind of statement about the audit rather
+                    # than the application: this command only ever sends GET,
+                    # so "method not allowed" means the screen calls the path
+                    # with a verb that is deliberately not probed -- `/quote/`,
+                    # `/announce/`, `/read-all/`, `/invite/`. The `UNSAFE`
+                    # pattern catches most of those by name, and a pattern
+                    # listing verbs will always trail the routes somebody
+                    # adds. The response code says it without a list.
+                    if only_inferred or worst == 405:
                         inferred += 1
                     else:
                         broken += 1
@@ -101,7 +104,8 @@ class Command(BaseCommand):
             self.stdout.write(f"  {'endpoint':<46}{header}")
             for path, results, only_inferred in rows:
                 cells = " ".join(self._cell(results[name]) for name in clients)
-                label = f"~ {path}" if only_inferred else path
+                uncounted = only_inferred or max(results.values()) == 405
+                label = f"~ {path}" if uncounted else path
                 self.stdout.write(f"  {label[:46]:<46}    {cells}")
 
         self.stdout.write("")
@@ -112,70 +116,12 @@ class Command(BaseCommand):
         )
         if inferred:
             self.stdout.write(
-                f"({inferred} marked ~ are collection prefixes of interpolated "
-                f"detail routes, not calls the screen makes. Not counted.)"
+                f"({inferred} marked ~ are not calls this command can make: "
+                f"collection prefixes of interpolated detail routes, or paths "
+                f"the screen reaches with a verb other than GET. Not counted.)"
             )
 
     # -- internals --------------------------------------------------------
-
-    def _paths_by_page(self, only: str | None) -> dict:
-        """Every `/api/...` path each page calls, read out of the source.
-
-        Regex over the frontend rather than a hand-kept list, for the reason
-        the nav probe map had to learn (log 236): a list maintained by hand
-        drifts from the code, and it drifts silently.
-        """
-        root = Path(settings.BASE_DIR).parent / "frontend" / "src" / "pages"
-        if not root.exists():
-            return {}
-
-        # The whole quoted path, interpolations included, so that a path built
-        # with `${id}` can be told apart from one written out in full.
-        call = re.compile(r"""api\.(?:get|post|patch|del|put)[^(]*\(\s*[`"']([^`"']*)""")
-
-        pages = {}
-        for file in sorted(root.rglob("*.tsx")):
-            name = file.stem
-            if only and only.lower() not in name.lower():
-                continue
-
-            #: path -> whether every sighting of it was a truncated detail
-            #: route. Starts True and is cleared by the first literal sighting.
-            paths: dict[str, bool] = {}
-            for match in call.finditer(file.read_text(encoding="utf-8")):
-                raw = match.group(1)
-                if not raw.startswith("/"):
-                    continue
-
-                # **Truncation, made visible instead of silent.** The first
-                # version of this regex stopped at `$`, so
-                # `/payroll/payslips/${reference}/document/` was recorded and
-                # probed as `/payroll/payslips/` -- a different endpoint with
-                # a different permission. It then reported that endpoint's
-                # entirely correct 403 as a failure of the screen. Several of
-                # the 117 failures in the first full run were this, and each
-                # one cost a real triage read.
-                interpolated = "$" in raw
-                path = raw.split("$", 1)[0] if interpolated else raw
-                if interpolated:
-                    # Keep only a clean collection prefix; a fragment like
-                    # `/hr/leave/` from `/hr/leave/${ref}/decide/` is at least
-                    # a real route, whereas `/hr/attendance/?from=` is not.
-                    path = path.split("?", 1)[0]
-                    if not path.endswith("/"):
-                        continue
-
-                if UNSAFE.search(path):
-                    continue
-
-                full = "/api" + path
-                # A path seen literally anywhere on the page is a real call,
-                # whatever else truncated to the same prefix.
-                paths[full] = paths.get(full, True) and interpolated
-
-            if paths:
-                pages[name] = paths
-        return pages
 
     def _client(self, email: str, org: str):
         from rest_framework_simplejwt.tokens import RefreshToken

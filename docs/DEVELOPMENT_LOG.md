@@ -9989,3 +9989,137 @@ it, and is now listed as deliberately unlinked with that reason.
 | after | every endpoint the screen calls answers for every account |
 | `tests/test_self_service.py` | 11 passed |
 | full backend suite | 204 passed, 9 skipped → then 2 real failures fixed |
+
+## 256 - The Time screen failed for anybody who is not an employee
+
+`/api/hr/leave-balance/` went through `_self_or`, which raises a 400 for a
+caller with no employee record — an owner, an administrator, a platform
+operator. That much was deliberate. What was not: the screen loads four
+endpoints with `Promise.all`, which rejects on the first failure and **discards
+the other three answers**. So one 400 took out attendance, leave and the roster
+with it, for exactly the people who are not employees, and they were not asking
+for their own balance — they were opening a page.
+
+**The read now answers emptily.** 200 with a null employee and a sentence
+saying why, rather than 204, because the reason is worth carrying: the screen
+can say the card is empty and why instead of leaving a blank. It matches
+`/hr/attendance/me/` and `/payroll/payslips/mine/`, which both answer emptily
+for the same caller. POST still refuses — a write genuinely cannot proceed
+without knowing whose leave year to open.
+
+**And the screen now settles its loads independently.** `Promise.allSettled`,
+with each card filled from its own result and a problem reported only if all
+four failed. A screen made of parts should fail in parts; an error banner
+across three working cards teaches people to ignore error banners.
+
+**The permission check moved ahead of the lookup.** Asking for somebody else's
+balance by uuid was refused *after* `get_object_or_404`, so the difference
+between 404 and 403 told an unauthorised caller which employee uuids are real.
+
+**The tabs are gated now.** Opening `/time` to everybody (log 255) meant a
+doctor landed on a screen with five tabs, four of which 403 — Roster, Away,
+Attendance and Setup are all about other people. A tab that answers "forbidden"
+when clicked is the same fault as a sidebar entry that opens onto an error.
+"My time" has no gate, because self-service has none.
+
+## 257 - Every screen was one query per row away from being unusable at scale
+
+The instruction was to focus on data management, scalability and UI. So the
+same method that found the permission faults was pointed at cost:
+**`manage.py audit_queries`** measures every endpoint each screen calls —
+queries issued, rows returned, milliseconds, bytes — and names what scales.
+
+**Why this has to be measured and cannot be reviewed.** An N+1 is invisible in
+the code that causes it. `bed.is_occupied` is one attribute access; whether it
+is free or a query depends on a `select_related` in a different file, and
+neither file says which. It is equally invisible in use: on a demo tenant with
+16 beds every screen is instant, and the same endpoint in a 500-bed hospital is
+two and a half thousand round trips. Nobody finds this by clicking, and nobody
+finds it by reading.
+
+**The identification is honest about what it knows.** Queries per row is a
+heuristic, so it is labelled one; `--compare` probes the same endpoint at two
+page sizes and reports whether the count actually moved, which is the
+difference between a suspicion and a measurement. 14 ratio-based suspects became
+**4**, and a measurement now outranks the ratio: an endpoint whose count is flat
+across page sizes is not listed however high its ratio, because
+`/api/ipd/beds/` sits at 0.8/row after its fix purely from fixed cost spread
+over 16 rows. Three findings are reported separately — proved, unsettled, and
+unbounded — because lumping a measurement in with a ratio makes the strong
+claim look like the weak one.
+
+**The first thing it caught was itself.** `/api/ipd/admissions/` measured 6
+queries as the first row of a run and 50 as a later one. The tenant's database
+alias is registered by the request that first needs it, so the first
+measurement was counting only control-plane queries. A measurement that depends
+on its position in the run is not a measurement; one throwaway request now runs
+first. Both connections are counted, too — authentication and permission
+resolution run against the control plane, so watching only the tenant
+connection would hide a per-row query aimed at the other database, which is
+precisely what `test_staff_admin` had to catch once already.
+
+**What it found, all five the same shape — a property or serializer field that
+issues a query, read once per row:**
+
+| endpoint | before | after |
+|---|---|---|
+| `/api/ipd/beds/` | 86 queries for 16 beds, **+64 for +14** | 13, flat |
+| `/api/ipd/admissions/` | 50 for 7, **+26 for +5** | 13, flat |
+| `/api/ipd/wards/` | 16 for 4, +2 for +2 | 12, flat |
+| `/api/finance/periods/` | 36 for 24 | 12, flat |
+| `/api/hr/manager-queue/` | 33 for 8 | 21, and no longer per-member |
+
+`BedSerializer` reaches `current_assignment` **four times per bed** —
+`is_occupied`, `is_assignable`, `occupant_name`, `occupant_admission` — and the
+last two then walk `admission.patient`. `AdmissionListSerializer` reaches
+`current_bed` twice, and `ward_name` walks through it again.
+
+**The fix went into the properties, not the serializers.** `current_assignment`
+and `current_bed` read a prefetch when the caller arranged one and fall back to
+querying when nobody did. A serializer-only fix would have left every other
+caller slow — `is_assignable` is used by the admission services too — while
+looking fixed. `to_attr` rather than overriding the default relation cache,
+because a filtered prefetch under the real relation name makes
+`bed.assignments.all()` silently mean "open assignments" for every later
+reader, and that is a trap rather than an optimisation.
+
+`Ward.bed_count` and `PeriodSerializer.entries` were `COUNT` per row, now
+annotations — and both keep the fallback, which is not dead code: `open-year`
+serializes periods it has just created, which never went through
+`get_queryset`. A serializer assuming the annotation would raise there, on a
+write path, after the write.
+
+**`AdmissionViewSet` prefetched bed assignments for the detail action and not
+for the list** — the wrong way round, since a detail view walks the relation
+once and a list walks it once per row.
+
+**The manager queue was the worst and the least visible.** `Attendance.objects.
+filter(employee=m, date=today).first()` inside a loop over thirty team members,
+plus a department lookup each. One query for the team's attendance now, and
+`select_related("department")` in `team_of` — which every caller of that
+function benefits from. It was also **entirely unbounded**: every pending
+request in the organization, built into a dict each and sorted in Python. Capped
+at 50 per kind, per kind rather than overall so that a hundred leave requests
+cannot hide the one profile correction that has waited a week. `pending_total`
+now comes from `.count()` on the unsliced querysets with `returned` and
+`truncated` alongside it — it used to be `len(items)`, which agreed with the
+list only because nothing was ever truncated. A manager acting on "8 pending"
+when 60 are waiting is worse served by a tidy number than an honest one.
+
+**Guarded by growth, not by a number.** `tests/test_query_budget.py` asserts
+that asking for more rows does not cost more queries. A test asserting "13
+queries" fails the next time somebody adds a legitimate join and gets edited
+upwards until it asserts nothing; the invariant that lasts is the shape of the
+cost, not its size. All four prefetch-and-annotation reads were reverted
+together and the four tests failed together; restored, and the restore verified
+before committing.
+
+Across 69 endpoints: **986 queries down to 833, and no endpoint whose cost grows
+with its rows.**
+
+| | |
+|---|---|
+| `audit_queries --compare`, before | 14 ratio suspects, 1 proved N+1 per screen |
+| after | 0 proved, 2 unsettled ratios (both read, both fixed cost) |
+| `tests/test_query_budget.py` | 6 passed, 4 proved by reverting the fix |
+| full backend suite | 212 passed, 9 skipped |

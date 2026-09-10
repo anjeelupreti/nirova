@@ -55,6 +55,20 @@ from apps.hr.services import (
 )
 from apps.rbac.permissions import Scope
 
+#: Most items of each kind the manager queue will return.
+#:
+#: The queue had no limit at all. On the demo tenant that is eight rows; in a
+#: 400-bed hospital the Monday morning leave queue alone is hundreds, and this
+#: endpoint builds a dict per row in Python and sorts the lot. The summary
+#: counts are still the true totals -- they come from `.count()` on the
+#: unsliced querysets -- so a manager sees "47 pending" and the most recent 50
+#: of each kind rather than a number that silently disagrees with the list.
+#:
+#: 50 per kind rather than 50 overall, because the four kinds are different
+#: work: a hundred pending leave requests should not hide the one profile
+#: correction that has been waiting a week.
+QUEUE_LIMIT = 50
+
 # ---------------------------------------------------------------------------
 # Serializers
 # ---------------------------------------------------------------------------
@@ -738,12 +752,22 @@ class ManagerQueueView(APIView):
                 status=ProfileCorrectionStatus.PENDING
             )
             tracked_members = team_members or list(
-                Employee.objects.filter(status__in=WORKING_STATUSES)[:50]
+                # `select_related("department")`: the team strip below renders
+                # each person's department, which without this is one query per
+                # employee -- fifty of them on a broad grant.
+                Employee.objects.select_related("department")
+                .filter(status__in=WORKING_STATUSES)
+                .order_by("first_name", "last_name")[:50]
             )
 
         items = []
 
-        for l in leave_qs.select_related("employee", "leave_type"):
+        for l in leave_qs.select_related(
+            # `employee__department` because the row renders the department
+            # name: selecting the employee and stopping there left one query
+            # per request, in all four of these loops.
+            "employee", "employee__department", "leave_type"
+        ).order_by("-created_at")[:QUEUE_LIMIT]:
             items.append(
                 {
                     "id": str(l.uuid),
@@ -764,7 +788,10 @@ class ManagerQueueView(APIView):
                 }
             )
 
-        for r in reg_qs.select_related("attendance", "attendance__employee"):
+        for r in reg_qs.select_related(
+            "attendance", "attendance__employee",
+            "attendance__employee__department",
+        ).order_by("-created_at")[:QUEUE_LIMIT]:
             items.append(
                 {
                     "id": str(r.uuid),
@@ -789,8 +816,9 @@ class ManagerQueueView(APIView):
             )
 
         for s in swap_qs.select_related(
-            "requester", "target_employee", "requester_entry__shift", "target_entry__shift"
-        ):
+            "requester", "requester__department", "target_employee",
+            "requester_entry__shift", "target_entry__shift",
+        ).order_by("-created_at")[:QUEUE_LIMIT]:
             subtitle = (
                 f"With {s.target_employee.full_name} "
                 f"({s.target_entry.shift.name if s.target_entry else 'Cover'})"
@@ -815,7 +843,9 @@ class ManagerQueueView(APIView):
                 }
             )
 
-        for c in corr_qs.select_related("employee"):
+        for c in corr_qs.select_related(
+            "employee", "employee__department"
+        ).order_by("-created_at")[:QUEUE_LIMIT]:
             changes_summary = ", ".join(c.fields_payload.keys())
             items.append(
                 {
@@ -840,9 +870,24 @@ class ManagerQueueView(APIView):
         items.sort(key=lambda x: x["submitted_at"], reverse=True)
 
         today = timezone.localdate()
+        shown_members = tracked_members[:30]
+
+        # **One query for the whole team's attendance, not one per person.**
+        # This was `Attendance.objects.filter(employee=m, date=today).first()`
+        # inside the loop -- thirty queries for thirty people, plus a
+        # department lookup each, which is most of the 33 queries this endpoint
+        # issued for 8 items. A manager's queue is opened every morning by
+        # every manager in the hospital, so it is the last place to put a loop
+        # of round trips.
+        marked = {
+            row.employee_id: row
+            for row in Attendance.objects.filter(
+                employee__in=shown_members, date=today
+            )
+        }
         team_status = []
-        for m in tracked_members[:30]:
-            att = Attendance.objects.filter(employee=m, date=today).first()
+        for m in shown_members:
+            att = marked.get(m.pk)
             team_status.append(
                 {
                     "employee_code": m.employee_code,
@@ -854,16 +899,26 @@ class ManagerQueueView(APIView):
                 }
             )
 
+        # The counts come from the unsliced querysets, so `pending_total` is
+        # the real number of things waiting rather than the number returned.
+        # `len(items)` was both, which was fine only while nothing was ever
+        # truncated. A manager acting on "8 pending" when 60 are waiting is
+        # worse served by a tidy number than by an honest one.
+        counts = {
+            "leave_count": leave_qs.count(),
+            "regularisation_count": reg_qs.count(),
+            "swap_count": swap_qs.count(),
+            "correction_count": corr_qs.count(),
+        }
         return Response(
             {
                 "is_manager": True,
                 "summary": {
-                    "pending_total": len(items),
-                    "leave_count": leave_qs.count(),
-                    "regularisation_count": reg_qs.count(),
-                    "swap_count": swap_qs.count(),
-                    "correction_count": corr_qs.count(),
+                    "pending_total": sum(counts.values()),
+                    **counts,
                 },
+                "returned": len(items),
+                "truncated": sum(counts.values()) > len(items),
                 "team_status_today": team_status,
                 "items": items,
             }
