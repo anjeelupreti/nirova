@@ -245,7 +245,22 @@ class NotesSerializer(serializers.Serializer):
 
 class ProviderViewSet(viewsets.ModelViewSet):
     serializer_class = ProviderSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read")]
+    # **The directory of who you can refer to is master data.**
+    #
+    # `perform_create` asserted `department.manage` -- but a `ModelViewSet`
+    # answers PUT, PATCH and DELETE too, and neither `perform_update` nor
+    # `perform_destroy` was overridden. So creating a provider took a manager
+    # and *editing* one took `encounter.read`, which the front desk holds.
+    # Changing the address a referral is sent to is the same act as adding it;
+    # deleting one is worse.
+    #
+    # Declared on the class so it covers every verb at once, which is the
+    # point of `write=`: a guard written per method is a guard somebody
+    # forgets on the fourth method.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("encounter.read", write="department.manage"),
+    ]
     lookup_field = "code"
     filterset_class = uuid_filterset(
         ExternalProvider, fields=["provider_type", "is_active", "district"],

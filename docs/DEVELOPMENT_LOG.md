@@ -11059,3 +11059,185 @@ rows as `<button>`. Thirty of thirty-six screens open a record.
 | doctor, after | the clinical boards; not the ledger, not the subscription |
 | receptionist, before | ICU, theatre, blood bank, nurse workspace |
 | receptionist, after | the queue, appointments, patients, billing |
+
+## 272 - Three permissions that did not exist, and a read that was a licence to write
+
+**Where this started.** Log 271 ended with one cell unexplained: the
+receptionist got a 403 on `/api/clinical/encounters/`, which is the outpatient
+queue they must have. Chasing that cell found four defects, none of them the one
+I was looking for.
+
+**The receptionist's 403 was correct.** The Queue screen reads
+`/clinical/queue/` and `/clinical/availability/`, both of which the receptionist
+can open; it touches `/clinical/encounters/` only in `openConsultation`, which
+is a *clinician* opening a chart. Probed as the receptionist against the running
+stack: `queue=200 availability=200`. Nothing to fix, and worth saying plainly
+rather than quietly dropping — I had called it "a problem" the session before.
+
+### A read permission was the whole guard on 81 write routes
+
+`QueueViewSet` declared `HasPermission.of("encounter.read", scope=Scope.OWN)`
+and nothing else. DRF's `@action(methods=["post"])` inherits the class's
+permission classes, so `call-next`, `recall`, `start` and `complete` — the four
+verbs that move a waiting room — were guarded by a **read** permission. A lab
+technician could complete somebody's consultation. So could an **auditor**,
+whose role description is "read-only oversight across the organization".
+
+`HasPermission.of(..., write=...)` exists precisely so this is stated rather
+than defaulted, and its docstring records a one-off measurement that once found
+31 such routes. A one-off script is not a guard. **`manage.py audit_writes`** is
+the same question asked repeatably: it walks the URLconf, resolves each route's
+guard *the way DRF does* — instantiating the view and setting `self.action`, so
+a per-action `get_permissions()` is read correctly rather than guessed at — and
+parses handler bodies for inline `require()`.
+
+**Three of my own defects inflated its first answers, and each is recorded in
+the command.** It reported 33 routes (read `initkwargs` instead of the
+callback's `actions`, so every viewset fell through the APIView branch and a
+viewset has no `post` attribute). Then 245 (`inspect.cleandoc` computes its
+margin from the lines *after* the first, which for a class is the body — so
+every parse raised `SyntaxError` and every inline `require()` went unseen).
+Then 118 (guards factored into a `_writable()` helper, as the blood bank, the
+ICU and the theatre all do, were invisible because only the action body was
+read). Then 81, once `http_method_names` was respected: a router maps every
+verb, and a viewset that answers only `get` and `post` cannot be attacked
+through `DELETE`.
+
+**81 was the real number.** A tool that over-reports gets ignored, including
+when it is right, so the intermediate numbers are in the docstrings next to the
+fix.
+
+What the 81 were, and what they take now:
+
+| what | authority |
+|---|---|
+| the queue: call, recall, start, complete | `visit.schedule` |
+| the laboratory: collect, receive, reject, enter | `diagnostic.process` |
+| the laboratory: verify, notify a critical value | `diagnostic.verify` |
+| nursing: assignments, SBAR handover, bedside tasks | `encounter.create` |
+| a ward round recorded through a dual-verb action | `encounter.create` |
+| the referral provider directory | `department.manage` |
+| documents attached to a patient | `patient.update` |
+| a requisition sent for approval | `purchase.create` |
+| a donor's record after deferral | `blood.process` |
+
+`diagnostic.process` and `diagnostic.verify` are new and deliberately two, not
+one: entering a result and releasing it to a chart is the maker-checker pair a
+laboratory is built around. The service layer already refused the person who
+entered the values — that is a check between two individuals. It said nothing
+about whether the second person is qualified to release anything, so "a second
+pair of eyes" meant any second pair of eyes in the building.
+
+Four writes are open on purpose and now say so in `READ_SHAPED_POST`: a
+duplicate check, a prescription price preview, a till quotation and a change
+preview are all *questions* that arrive as POSTs because they do not fit in a
+query string. Claiming an expense stays on `report.read` for the reason log 271
+recorded — claiming is not posting.
+
+### Three permission codes that have never existed
+
+`UserAuthorization.require(code, scope)` takes a string and never checks it
+against the catalogue. A code with a typo does not raise, does not warn and
+appears in no report: it is a permission nobody holds, so the guard refuses
+**everybody, forever**.
+
+That is the worst failure mode a permission check has, because it looks exactly
+like security working.
+
+* **`pharmacy.dispense`, six sites.** Every write in the blood bank. Donor
+  registration, collection, grouping, screening, separation, release, issue,
+  discard — the whole module, unusable by anybody. The catalogue's dispensing
+  code is `prescription.dispense`; `pharmacy.dispense` is not a code at all.
+* **`facility.manage`.** Provider schedules, so nobody could define a
+  consultant's clinic.
+* **`report.view`.** The ICU unit summary, so nobody could open it.
+
+Every one of those modules' tests passed throughout, because they run as the
+organization owner, who is exempt from every permission check by design.
+
+It was found by probing the running stack as the auditor and noticing the
+refusals were *too uniform to be real*. A 403 where a 403 belongs proves
+nothing on its own; a 403 everywhere deserves a second look.
+
+The blood bank's replacement is two codes for the reason the laboratory's is:
+`blood.process` is the bank's own work up to release, `blood.issue` is the
+ward's use of what was released. The technician who screened a unit is not the
+person who hangs it.
+
+**`tests/test_permission_codes.py` is the cheap permanent version of that
+probe.** It reads every `HasPermission.of`, `write=`, `require`, `has`,
+`has_any`, `accessible_facility_ids` and `accessible_department_ids` in `apps/`
+and asserts each code is declared. Proved by putting `report.view` back: the
+test named the file and line, and the restore was verified byte-for-byte. Its
+second test lists permissions no seeded role grants, with a written-down
+exemption table — because a permission granted to nobody is the same outage
+arriving by a different road.
+
+### The tenant was on two plans at once
+
+Six seed tests started failing with "hospital module not entitled" against a
+subscription screen showing a healthy active plan. `seed_demo._subscription`
+used `get_or_create(organization=..., plan=plan)` — keyed on the customer *and
+the plan*. The demo tenant had been upgraded to `enterprise`; the seed looked
+for `professional`, did not find it, and made a **second live subscription**.
+
+Entitlement resolution then picked the narrower of the two and the demo
+hospital silently lost its module. A duplicate row that reads as valid is worse
+than a missing one.
+
+Three fixes, because the bug had three layers:
+
+1. The seed now finds the organization's existing entitled subscription
+   whatever plan it is on, and says so rather than downgrading it. A seed must
+   be safe to re-run against a tenant somebody has changed since — re-running
+   is the whole point of a seed.
+2. `Subscription` gained a partial unique constraint: **one live subscription
+   per organization**, over the entitled statuses only, excluding soft-deleted
+   rows. A customer's history is a stack of cancelled subscriptions and it must
+   stay.
+3. The duplicate was cancelled with a reason and a subscription event, not
+   deleted. It is a billing record.
+
+### Three demo accounts that should have existed from the start
+
+* **`auditor@`** — the account that makes "read-only" provable. A role whose
+  whole value is what it *cannot* do needs an account, or the claim is
+  decoration. It is the subject of `tests/test_write_authority.py`, and
+  deliberately so: for every route there, the missing write check is the *only*
+  obstacle. A test written as a receptionist would pass several of them for the
+  wrong reason — refused for lack of the read permission, never reaching the
+  write check. That mistake has been made in this codebase before.
+* **`nurse@`** — four screens exist whose only intended user is a nurse, and
+  every probe of them had run as a doctor or the owner.
+* **`lab@`** — department scope could not be granted at seed time, because
+  departments are created by the module seeds which run *after* roles are
+  bound, so the assignment had nothing to name and was refused outright. A role
+  nobody can be given describes an organisation chart rather than a job;
+  `lab_technician`'s ceiling moved to facility, as the doctor's and the
+  nurse's did before it, for the same reason.
+
+`test_write_authority.py` also resolves each path before probing it. The first
+draft aimed at `/api/lab/orders/.../verify/`; the route is under
+`/api/diagnostics/`, so it 404ed. The assertion is "403, and only 403", so the
+typo failed loudly — but had it been "not 2xx" the test would have been green
+forever against a URL that does not exist. A path that matches no route refuses
+everybody for the wrong reason.
+
+### And the environment fight, settled
+
+`seed_demo` failed on the host with `getaddrinfo failed` while the stack was
+perfectly healthy: `TenantDatabase.host` records where a tenant database lives
+(`postgres`, written inside Docker) and the host reaches the same server at
+`localhost`. The `NIROVA_TENANT_DB_HOST` override existed and nobody remembered
+to export it, which is the same as not existing. It is now in `backend/.env`
+*and* set explicitly in `infra/docker-compose.yml`, so neither side depends on
+which file django-environ read first.
+
+**What I got wrong.** I told the user 245 write routes took no more authority
+than reading. The real number was 81; the rest were my parser's three defects.
+I also wrote a comment claiming `SupplierViewSet` was unguarded when a previous
+session had already fixed it in the `perform_*` hooks — corrected to say what
+the class-level `write=` actually adds, which is that `audit_writes` can see it
+and a fourth action cannot escape it.
+
+279 tests pass. `manage.py audit_writes` reports zero.

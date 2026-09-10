@@ -570,6 +570,13 @@ class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
                     admission.rounds.order_by("-recorded_at"), many=True
                 ).data
             )
+        # **A dual-verb action needs the check on the writing branch.** The
+        # class declares `encounter.read` and this action answers both GET and
+        # POST through one handler, so reading the rounds and *charting* one
+        # took the same authority -- and every other write in this module
+        # asserts `encounter.create` inline. The one that did not was the one
+        # sharing a function with a read.
+        get_authorization(request).require("encounter.create", Scope.OWN)
         serializer = RoundSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         entry = record_round(

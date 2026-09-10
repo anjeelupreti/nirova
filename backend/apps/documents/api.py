@@ -83,9 +83,16 @@ class DocumentViewSet(viewsets.ReadOnlyModelViewSet):
     """Documents, listed and downloaded by subject."""
 
     serializer_class = DocumentSerializer
+    # Uploading a document to a patient's record and archiving one are edits
+    # to that record, so they take `patient.update` -- the permission that
+    # already means exactly that. Reading stays at `patient.read`: a document
+    # nobody can open is not a record, and the pharmacist and the counter both
+    # need to see a scanned prescription without being able to add to it.
     permission_classes = [
         IsAuthenticated,
-        HasPermission.of("patient.read", scope=Scope.OWN),
+        HasPermission.of(
+            "patient.read", scope=Scope.OWN, write="patient.update",
+        ),
     ]
     lookup_field = "uuid"
     # JSON as well as multipart. Upload needs multipart; archive takes a JSON

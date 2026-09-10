@@ -171,6 +171,61 @@ PERMISSIONS: tuple[PermissionDef, ...] = (
     _p("theatre.override", "Double-book a theatre", "Clinical",
        is_sensitive=True),
 
+    # -- laboratory and imaging -------------------------------------------
+    #
+    # Ordering a test is `encounter.create` -- it is a clinical decision
+    # recorded in the encounter. What happens next is a different job done by
+    # different people, and until now the whole of it ran on `encounter.read`:
+    # collecting the sample, receiving or rejecting it, entering the result
+    # and *verifying* it were all open to everybody who could see a diagnostic
+    # order, which includes the front desk and a read-only auditor.
+    #
+    # Split in two because entering a result and releasing it are the
+    # maker-checker pair a laboratory is built around. A technician performs
+    # and enters; somebody else authorises before the number reaches the
+    # chart and somebody treats a patient on it. Small labs in Nepal often
+    # give both to a senior technician -- that is a customer's decision to
+    # make in a role they create, and it stays visible because it is two
+    # permissions rather than one.
+    _p("diagnostic.process", "Collect samples and enter results", "Clinical",
+       "Collect, receive or reject a sample, and record the result against "
+       "the order. Does not release the result -- see `diagnostic.verify`.",
+       is_sensitive=True),
+    _p("diagnostic.verify", "Verify and release results", "Clinical",
+       "Authorise a result so it reaches the patient's chart, and raise or "
+       "close a critical-result notification. Deliberately separate from "
+       "entering it.",
+       is_sensitive=True, conflicts_with=("diagnostic.process",)),
+
+    # -- blood bank -------------------------------------------------------
+    #
+    # **These exist because the blood bank was asking for a permission that
+    # does not exist.** Every write in `apps/bloodbank/api.py` -- registering
+    # a donor, grouping, screening, separating, releasing, issuing, discarding
+    # and transfusing -- called `require("pharmacy.dispense")`. There is no
+    # such code in this catalogue; the codes are `prescription.dispense` and
+    # `stock.*`. `require` does not validate that a code exists, so the guard
+    # did not fail loudly: it simply refused **everybody, forever**, and the
+    # whole module was dead from the outside while its tests, which run as the
+    # owner, passed. Found by probing the running stack as an auditor and
+    # getting a 403 that was too good to be true.
+    #
+    # Two permissions rather than one, because a blood bank and a ward are two
+    # places doing two jobs. The bank determines and releases; the ward
+    # reserves, collects and transfuses. Conflating them would mean the
+    # technician who screened a unit could also hang it, which is precisely
+    # the separation a transfusion service is built around.
+    _p("blood.process", "Run the blood bank", "Clinical",
+       "Register and defer donors, collect donations, group, screen, "
+       "separate into components, release into stock and discard. The bank's "
+       "own work, up to the point a unit becomes available.",
+       is_sensitive=True),
+    _p("blood.issue", "Reserve, issue and transfuse blood", "Clinical",
+       "Cross-match, reserve a unit for a patient, issue it to a ward, take "
+       "it back, and record the transfusion and any reaction. The clinical "
+       "use of what the bank released.",
+       is_sensitive=True),
+
     # -- inventory --------------------------------------------------------
     _p("stock.read", "View stock", "Inventory"),
     _p("stock.adjust", "Raise stock adjustments", "Inventory"),

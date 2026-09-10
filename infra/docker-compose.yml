@@ -66,6 +66,16 @@ x-backend-env: &backend-env
   TENANT_DB_USER: nirova
   TENANT_DB_PASSWORD: nirova
   TENANT_DB_NAME_PREFIX: nirova_tenant_
+  # **The same fact, stated for the process rather than the row.**
+  # `TenantDatabase.host` records where a tenant database lives;
+  # `NIROVA_TENANT_DB_HOST` records how *this* process reaches it. Set
+  # explicitly here even though it equals `TENANT_DB_HOST`, because
+  # `backend/.env` sets it to `localhost` for host-side tooling and that file
+  # is inside the build context. Real environment beats a dotenv file in
+  # django-environ, so the container wins either way -- but a correctness that
+  # depends on knowing which file is read first is one refactor from breaking.
+  NIROVA_TENANT_DB_HOST: postgres
+  NIROVA_TENANT_DB_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
   # Both applications are served same-origin through their own nginx, so CORS
   # is unused in this stack. Listed for the case where a developer runs

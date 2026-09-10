@@ -25,6 +25,10 @@ from apps.provisioning.models import (
 from apps.provisioning.services import decide, submit_request
 from apps.rbac.services import assign_role
 from apps.subscriptions.models import (
+    # ENTITLED_STATUSES: the statuses in which a customer may still transact.
+    # Used to find the subscription this tenant is *actually* living on,
+    # rather than assuming it is the one this command would have created.
+    ENTITLED_STATUSES,
     Subscription,
     SubscriptionEvent,
     SubscriptionEventType,
@@ -121,6 +125,39 @@ class Command(BaseCommand):
                 )
             )
             raise SystemExit(1)
+
+        # **Keyed on the customer, not on the customer *and the plan*.**
+        #
+        # `get_or_create(organization=..., plan=plan)` looked for a
+        # professional subscription, did not find the enterprise one this
+        # tenant had been upgraded to, and made a second live subscription
+        # alongside it. Entitlement resolution then picked the narrower of the
+        # two and the demo hospital silently lost the `hospital` module -- the
+        # ICU, theatre and inpatient seeds began failing with "module not
+        # entitled" against a subscription screen that showed a healthy plan.
+        #
+        # A seed must be safe to re-run against a tenant somebody has changed
+        # since. Re-running is the whole point of a seed; a tenant nobody has
+        # touched is the easy case.
+        existing = (
+            Subscription.objects.filter(
+                organization=organization, status__in=ENTITLED_STATUSES,
+            )
+            .order_by("-started_at")
+            .first()
+        )
+        if existing is not None:
+            if existing.plan_id != plan.pk:
+                self.stdout.write(
+                    f"  subscription: {existing.plan.code} "
+                    f"({existing.status}) — kept; not downgrading to "
+                    f"{plan.code}"
+                )
+            else:
+                self.stdout.write(
+                    f"  subscription: {existing.plan.code} ({existing.status})"
+                )
+            return existing
 
         subscription, created = Subscription.objects.get_or_create(
             organization=organization,
@@ -238,7 +275,23 @@ class Command(BaseCommand):
         store_keeper = self._user(
             f"store@{slug}.test", "Dipesh Shakya", organization, False, slug
         )
-        return cashier, pharmacy_manager, receptionist, store_keeper
+        # **The ward.** The nurse workspace, the eMAR, nursing handover and
+        # bedside rounds are four screens whose only intended user is a nurse,
+        # and no demo account held the role -- so every probe of them ran as a
+        # doctor or an owner, and "a nurse can do their job" was never once
+        # asserted. The same omission that hid the receptionist's queue.
+        nurse = self._user(
+            f"nurse@{slug}.test", "Sarita Tamang", organization, False, slug
+        )
+        # **The bench.** `lab_technician` is department-scoped and holds
+        # `encounter.read` with no clinical write, which makes it the subject
+        # that proves sample collection and result entry are not open to
+        # anybody who can read a diagnostic order.
+        lab_technician = self._user(
+            f"lab@{slug}.test", "Nabin Karki", organization, False, slug
+        )
+        return (cashier, pharmacy_manager, receptionist, store_keeper,
+                nurse, lab_technician)
 
     # -- tenant ----------------------------------------------------------
 
@@ -285,6 +338,26 @@ class Command(BaseCommand):
             )
             assign_role(accountant, "accountant", scope="organization",
                         reason="Demo seed")
+
+            # **The account that makes "read-only" provable.**
+            #
+            # The `auditor` role describes itself as "read-only oversight
+            # across the organization" and holds fourteen `.read` permissions
+            # and no write. That claim had never been tested from the outside,
+            # because no demo user held the role -- and `audit_writes` then
+            # found 245 write routes whose entire guard was a `.read`
+            # permission the auditor holds. On paper the auditor could
+            # discharge an ICU patient and discard a blood unit.
+            #
+            # A role whose whole value is what it *cannot* do needs an account,
+            # or the claim is decoration. Organization scope, because
+            # oversight that stops at a branch boundary is not oversight.
+            auditor = self._user(
+                f"auditor@{organization.slug}.test", "Prakash Rai",
+                organization, False, organization.slug,
+            )
+            assign_role(auditor, "auditor", scope="organization",
+                        reason="Demo seed")
         self.stdout.write("  roles assigned")
 
     def _assign_counter_roles(self, organization, counter_staff):
@@ -295,7 +368,8 @@ class Command(BaseCommand):
         filter is doing exactly what it should, and the user sees an empty
         estate. It looks like a permissions bug and is really an ordering one.
         """
-        cashier, pharmacy_manager, receptionist, store_keeper = counter_staff
+        (cashier, pharmacy_manager, receptionist, store_keeper,
+         nurse, lab_technician) = counter_staff
         with tenant_context(context_for_organization(organization)):
             from apps.organization.models import Facility as TenantFacility
 
@@ -327,6 +401,20 @@ class Command(BaseCommand):
             # At the pharmacy, where the stock is.
             assign_role(store_keeper, "store_keeper", scope="facility",
                         facility=facility, reason="Demo seed")
+            # The ward is at the clinic in this tenant; the hospital request
+            # is the one the seed deliberately leaves escalated, so binding
+            # the nurse there would leave them with no facility at all.
+            assign_role(nurse, "nurse", scope="facility",
+                        facility=clinic, reason="Demo seed")
+            # Department scope is the role's ceiling and the point of it: a
+            # technician works a bench, not a hospital. Bound to the
+            # laboratory when the tenant has one.
+            laboratory = (
+                TenantFacility.objects.filter(facility_type="laboratory").first()
+                or clinic
+            )
+            assign_role(lab_technician, "lab_technician", scope="facility",
+                        facility=laboratory, reason="Demo seed")
         self.stdout.write(f"  counter roles bound to {facility.code}")
 
     def _open_facilities(self, organization, requester, approver, platform_user):

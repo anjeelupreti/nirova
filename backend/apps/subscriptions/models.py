@@ -76,6 +76,37 @@ class Subscription(BaseModel):
         db_table = "cp_subscription"
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["organization", "status"])]
+        constraints = [
+            # **One live subscription per customer.**
+            #
+            # Nothing enforced this, and it went wrong exactly the way an
+            # unenforced invariant does. `seed_demo` keyed its
+            # `get_or_create` on `(organization, plan)`, so re-running it
+            # against a tenant that had been upgraded to `enterprise` did not
+            # find the existing row -- it made a *second* active subscription
+            # on `professional`. The customer was then on two plans at once.
+            #
+            # The symptom was not a billing error. Entitlement resolution
+            # picked one of the two, and the demo hospital lost the
+            # `hospital` module: the ICU, theatre and inpatient seeds all
+            # started failing with "module not entitled" while the
+            # subscription screen showed a healthy active plan. A duplicate
+            # row that reads as valid is worse than a missing one.
+            #
+            # Partial, over the entitled statuses only: a customer's history
+            # is a stack of cancelled and expired subscriptions, and it must
+            # stay. Deleted rows are excluded for the same reason every
+            # partial constraint here excludes them -- a soft delete is
+            # invisible to a manager and perfectly visible to Postgres.
+            models.UniqueConstraint(
+                fields=["organization"],
+                condition=models.Q(
+                    status__in=["trialing", "active", "past_due", "grace"],
+                    deleted_at__isnull=True,
+                ),
+                name="one_live_subscription_per_organization",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.organization.display_name} — {self.plan.name}"

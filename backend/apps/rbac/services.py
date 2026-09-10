@@ -382,7 +382,12 @@ SYSTEM_ROLES = [
             "patient.read", "patient.create", "patient.update",
             "encounter.read", "encounter.create",
             "prescription.create", "report.read",
-                    "patient.safety.read", "patient.clinical.read",
+            "patient.safety.read", "patient.clinical.read",
+            # A consultant orders and issues blood for their own patient.
+            "blood.issue",
+            # Authorising a result before it reaches the chart. The checker
+            # half of the laboratory pair.
+            "diagnostic.verify",
         ],
     },
     {
@@ -402,7 +407,14 @@ SYSTEM_ROLES = [
             "facility.read", "department.read",
             "patient.read", "patient.update",
             "encounter.read", "encounter.create", "stock.read",
-                    "patient.safety.read", "patient.clinical.read",
+            "patient.safety.read", "patient.clinical.read",
+            # The ward side of the transfusion line: reserve a unit for a
+            # patient, collect it, hang it, record the reaction. Not
+            # `blood.process` -- a nurse does not screen donations.
+            "blood.issue",
+            # Ward nurses take the bloods. Collection and sample handling,
+            # not result entry and not verification.
+            "diagnostic.process",
         ],
     },
     {
@@ -459,11 +471,38 @@ SYSTEM_ROLES = [
         "code": "lab_technician",
         "name": "Laboratory Technician",
         "description": "Sample handling and result entry.",
-        "max_scope": Scope.DEPARTMENT,
+        # **Facility, for the same reason the doctor's ceiling moved.** The
+        # demo tenant's laboratory is a whole facility (`MKL-KTM`), and a
+        # department ceiling could not be granted there at all -- departments
+        # are created by the module seeds, which run *after* roles are bound,
+        # so a department-scoped assignment had nothing to name and was
+        # refused outright. A role nobody can be given describes an
+        # organisation chart rather than a job.
+        #
+        # This widens where the role may be granted, not what it may do: the
+        # permission list below is unchanged, and a hospital that does run
+        # sub-departments can still grant it at department scope, which is the
+        # narrower rung and remains available.
+        "max_scope": Scope.FACILITY,
         "permissions": [
             "facility.read", "department.read", "patient.read",
             "encounter.read", "stock.read", "report.read",
-                    "patient.safety.read",
+            "patient.safety.read",
+            # **The bench runs the blood bank.** `blood.process` covers donor
+            # registration through release; `blood.issue` deliberately does
+            # not appear here, so the technician who screened a unit is not
+            # the person who hangs it. `patient.clinical.read` comes with it
+            # because a donor's screening history is a clinical record, and
+            # grouping a donation without sight of it is not a job anybody
+            # does.
+            "blood.process", "patient.clinical.read",
+            # Collect, receive, reject and enter -- the bench's own work.
+            # `diagnostic.verify` is deliberately absent: entering a result
+            # and releasing it to the chart are the maker-checker pair a
+            # laboratory exists to keep apart. A small lab that wants one
+            # person doing both grants it in a role of its own, where the
+            # decision is visible.
+            "diagnostic.process",
         ],
     },
     {

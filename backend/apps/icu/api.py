@@ -966,7 +966,12 @@ class UnitBoardView(APIView):
 class UnitSummaryView(APIView):
     """Occupancy, support, outcome and readmission for a facility's units."""
 
-    permission_classes = [IsAuthenticated, HasPermission.of("report.view")]
+    # `report.read`, not `report.view` -- which does not exist, so this
+    # summary was refused to every user in the system including the medical
+    # director it was built for. A one-word slip that no test could see,
+    # because a permission code is a string and nothing checked it against the
+    # catalogue until `test_every_permission_code_exists`.
+    permission_classes = [IsAuthenticated, HasPermission.of("report.read")]
 
     def get(self, request):
         facility = get_object_or_404(

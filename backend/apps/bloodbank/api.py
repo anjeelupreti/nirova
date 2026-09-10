@@ -2,9 +2,29 @@
 
 `patient.clinical.read` sees the shelf and the donor registry -- a donor registry
 is a clinical record with a screening history on it. This asked for
-`encounter.read` until log 271, which the front desk holds. Collecting, grouping,
-screening and releasing need `pharmacy.dispense` — the laboratory-side
-permission a blood bank technician holds. Issuing needs it too.
+`encounter.read` until log 271, which the front desk holds.
+
+**Writing takes one of two permissions, and for a while it took neither.**
+Every write here called `require("pharmacy.dispense")`. That code has never
+existed: the catalogue's dispensing permission is `prescription.dispense`.
+`require` does not check that a code is real, so the guard refused *everybody*
+rather than failing loudly, and the whole module was unusable from the outside
+while its tests -- which run as the organization owner, who is exempt --
+passed. It was found by probing the running stack as an auditor and getting a
+403 that was too good to be true.
+
+The replacement is two codes, because a blood bank and a ward are two places
+doing two jobs:
+
+* `blood.process` -- register and defer donors, collect, group, screen,
+  separate, release, run the expiry sweep. The bank's own work, up to the
+  point a unit becomes available.
+* `blood.issue` -- cross-match, reserve, issue, take back, discard, transfuse
+  and record a reaction. The clinical use of what the bank released.
+
+Keeping them apart means the technician who screened a unit is not also the
+person who hangs it, which is the separation a transfusion service is built
+around.
 
 Three things this API deliberately does not offer.
 
@@ -460,7 +480,16 @@ class DonorViewSet(viewsets.ModelViewSet):
     # The tier this needs already existed (`ACCESS_DESIGN.md`, phase 1) and is
     # held by doctor, nurse, medical director and auditor; the screens simply
     # never moved onto it.
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
+    #
+    # `write="blood.process"` because `create`, `defer` and `collect` assert
+    # it inline while PUT, PATCH and DELETE -- which a `ModelViewSet` answers
+    # by default -- asserted nothing. Editing a donor's record is how a
+    # deferral gets quietly undone, so it takes the same authority as making
+    # one.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.clinical.read", write="blood.process"),
+    ]
     lookup_field = "donor_number"
     filterset_class = uuid_filterset(
         Donor, fields=["blood_group", "status", "donor_type", "is_contactable"],
@@ -470,7 +499,7 @@ class DonorViewSet(viewsets.ModelViewSet):
         return Donor.objects.order_by("full_name")
 
     def create(self, request, *args, **kwargs):
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        get_authorization(request).require("blood.process", Scope.FACILITY)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         donor = register_donor(
@@ -482,7 +511,7 @@ class DonorViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="defer")
     def defer(self, request, donor_number=None):
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        get_authorization(request).require("blood.process", Scope.FACILITY)
         serializer = DeferSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -493,7 +522,7 @@ class DonorViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="collect")
     def collect(self, request, donor_number=None):
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        get_authorization(request).require("blood.process", Scope.FACILITY)
         serializer = CollectSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -543,8 +572,15 @@ class DonationViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
     def _writable(self):
+        """The bank's own work: determine, screen, separate, release.
+
+        `blood.process`, not `blood.issue`. A technician who screened a unit
+        must not also be the person who hangs it -- that separation is what a
+        transfusion service is built around, and it is why the catalogue has
+        two codes rather than one.
+        """
         get_authorization(self.request).require(
-            "pharmacy.dispense", Scope.FACILITY
+            "blood.process", Scope.FACILITY
         )
 
     @action(detail=True, methods=["post"], url_path="grouping")
@@ -624,8 +660,15 @@ class UnitViewSet(viewsets.ReadOnlyModelViewSet):
         return BloodUnit.objects.select_related("donation", "reserved_for")
 
     def _writable(self):
+        """The ward's use of a unit the bank already released.
+
+        Reserving, issuing, taking back and discarding all follow the unit out
+        of the bank, so they take `blood.issue`. Discard is here rather than
+        with the bank's work on purpose: a unit is most often discarded after
+        it has left, when the cold chain broke on a ward.
+        """
         get_authorization(self.request).require(
-            "pharmacy.dispense", Scope.FACILITY
+            "blood.issue", Scope.FACILITY
         )
 
     @action(detail=True, methods=["get"], url_path="blockers")
@@ -677,7 +720,7 @@ class UnitViewSet(viewsets.ReadOnlyModelViewSet):
         Separate so that no request body to the ordinary issue can turn it
         into this one.
         """
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        get_authorization(request).require("blood.issue", Scope.FACILITY)
         serializer = EmergencyIssueSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -793,7 +836,10 @@ class CrossMatchView(APIView):
     permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
 
     def post(self, request):
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        # `blood.issue`, not `blood.process`: a cross-match is done against a
+        # named patient for a unit about to leave the bank, which is the ward
+        # side of the line.
+        get_authorization(request).require("blood.issue", Scope.FACILITY)
         serializer = CrossMatchInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -908,7 +954,7 @@ class BloodBankReportView(APIView):
 
     def post(self, request):
         """Run the expiry sweep. Idempotent; safe to run repeatedly."""
-        get_authorization(request).require("pharmacy.dispense", Scope.FACILITY)
+        get_authorization(request).require("blood.process", Scope.FACILITY)
         facility = (
             get_object_or_404(Facility, uuid=request.data["facility"])
             if request.data.get("facility") else None

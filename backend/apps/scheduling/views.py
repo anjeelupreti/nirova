@@ -44,7 +44,19 @@ from apps.scheduling.services import (
 
 class ProviderScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ProviderScheduleSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("facility.read", write="facility.manage")]
+    # `department.manage`, not `facility.manage` -- which does not exist. The
+    # catalogue has `facility.read`, `facility.request_change` and
+    # `facility.approve_change`, and `require` never validated the name, so
+    # this write was refused to everybody including the facility manager whose
+    # job it is. Defining a consultant's weekly clinic is service
+    # administration, which is what `department.manage` means, and it is held
+    # by `organization_admin` and `facility_manager` -- deliberately narrower
+    # than `visit.schedule`, because a receptionist books into a clinic
+    # template rather than redrawing it.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("facility.read", write="department.manage"),
+    ]
     lookup_field = "uuid"
     filterset_class = uuid_filterset(
         ProviderSchedule, relations=['facility', 'department'], fields=['weekday', 'is_active']
@@ -211,7 +223,28 @@ class QueueViewSet(viewsets.ReadOnlyModelViewSet):
     """The live queue and the actions that move it along."""
 
     serializer_class = QueueTokenSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("encounter.read", scope=Scope.OWN)]
+    # **Reading the board and moving it are different authorities.**
+    #
+    # This declared the read permission and nothing else, and DRF's
+    # `@action(methods=["post"])` inherits the class's permission classes --
+    # so `call-next`, `recall`, `start` and `complete`, the four verbs that
+    # move a waiting room, were guarded by `encounter.read`. A lab technician
+    # could complete somebody's consultation. So could an **auditor**, a role
+    # whose entire description is "read-only oversight". Found by probing the
+    # running stack as that account and getting a 400 where a 403 belonged.
+    #
+    # `visit.schedule` is the authority that already means "give a patient a
+    # place to be seen"; issuing a token asserted it inline while the four
+    # actions that move the token afterwards did not. The four are the same
+    # job as the first. Held by the receptionist, the doctor, the nurse and
+    # the facility manager -- everybody who works a queue, and nobody who
+    # merely watches one.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of(
+            "encounter.read", scope=Scope.OWN, write="visit.schedule",
+        ),
+    ]
     lookup_field = "uuid"
 
     def get_queryset(self):

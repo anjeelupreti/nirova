@@ -173,6 +173,12 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="collect")
     def collect(self, request, uuid=None):
         """Record collection and allocate the specimen barcode."""
+        # `diagnostic.process`, asserted here rather than left to the class.
+        # The class declares `encounter.read`, and a POST action inherits it
+        # -- so until this line, collecting a sample took the authority to
+        # *look at* an order, which the front desk and a read-only auditor
+        # both hold.
+        get_authorization(request).require("diagnostic.process", Scope.OWN)
         serializer = CollectSpecimenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = collect_specimen(
@@ -184,11 +190,13 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="receive")
     def receive(self, request, uuid=None):
+        get_authorization(request).require("diagnostic.process", Scope.OWN)
         order = receive_specimen(self.get_object(), actor=request.user)
         return Response(DiagnosticOrderDetailSerializer(order).data)
 
     @action(detail=True, methods=["post"], url_path="reject")
     def reject(self, request, uuid=None):
+        get_authorization(request).require("diagnostic.process", Scope.OWN)
         serializer = RejectSpecimenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = reject_specimen(
@@ -201,6 +209,7 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="results")
     def results(self, request, uuid=None):
         """Enter values. Critical results raise an alert immediately."""
+        get_authorization(request).require("diagnostic.process", Scope.OWN)
         serializer = EnterResultsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -223,7 +232,15 @@ class DiagnosticOrderViewSet(viewsets.ModelViewSet):
 
         Refused if the caller entered the results — that is what verification
         is for, and the service layer enforces it.
+
+        **`diagnostic.verify`, which is not `diagnostic.process`.** The
+        service layer already refuses the person who entered the values; that
+        is a segregation check between two individuals. This is the other
+        half: whether the caller holds the authority to release a result to a
+        chart at all. Without it, "a second pair of eyes" meant any second
+        pair of eyes in the building, including the receptionist's.
         """
+        get_authorization(request).require("diagnostic.verify", Scope.OWN)
         order = verify_order(self.get_object(), actor=request.user)
         order = self.get_queryset().prefetch_related(
             "results", "critical_alerts"
@@ -303,6 +320,11 @@ class CriticalAlertViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="notify")
     def notify(self, request, uuid=None):
         """Record that a named person was told."""
+        # The laboratory's own act -- it is the lab that telephones the ward
+        # with a critical potassium. `diagnostic.verify`, not `.process`,
+        # because a critical value is a released finding and the person
+        # making the call is the person who released it.
+        get_authorization(request).require("diagnostic.verify", Scope.OWN)
         serializer = NotifyCriticalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         alert = notify_critical(
@@ -315,6 +337,10 @@ class CriticalAlertViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="acknowledge")
     def acknowledge(self, request, uuid=None):
+        # The ward's half. Acknowledging says "I have seen this and here is
+        # what I did", which is a clinical act and takes `encounter.create` --
+        # the same authority as writing the note that records the action.
+        get_authorization(request).require("encounter.create", Scope.OWN)
         serializer = AcknowledgeCriticalSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         alert = acknowledge_critical(

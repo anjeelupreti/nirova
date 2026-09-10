@@ -261,7 +261,22 @@ class NurseAssignmentViewSet(viewsets.ModelViewSet):
     """Nurse-to-patient / bed assignments."""
 
     serializer_class = NurseAssignmentSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
+    # **Charting is not the same authority as reading a chart.**
+    #
+    # These three nursing viewsets declared `patient.clinical.read` and
+    # nothing else, and a `ModelViewSet` answers every verb -- so allocating a
+    # nurse to a bed, writing an SBAR handover and closing a bedside task were
+    # all open to everybody who can read clinical data. That set includes the
+    # medical director and the **auditor**, whose role exists to change
+    # nothing.
+    #
+    # `encounter.create` is the permission that already means "record
+    # clinical data", and the doctor and the nurse are the two roles that
+    # hold it -- which is exactly who staffs a ward.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.clinical.read", write="encounter.create"),
+    ]
     lookup_field = "uuid"
 
     def get_queryset(self):
@@ -424,7 +439,11 @@ class NursingHandoverViewSet(viewsets.ModelViewSet):
     """SBAR shift handovers between outgoing and incoming nurses."""
 
     serializer_class = NursingHandoverSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
+    # Same split as `NurseAssignmentViewSet` above, and for the same reason.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.clinical.read", write="encounter.create"),
+    ]
     lookup_field = "uuid"
 
     def get_queryset(self):
@@ -468,7 +487,11 @@ class NursingTaskViewSet(viewsets.ModelViewSet):
     """Bedside duties and nursing tasks for the shift."""
 
     serializer_class = NursingTaskSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.clinical.read")]
+    # Same split as `NurseAssignmentViewSet` above, and for the same reason.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.clinical.read", write="encounter.create"),
+    ]
     lookup_field = "uuid"
 
     def get_queryset(self):

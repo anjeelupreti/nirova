@@ -57,7 +57,18 @@ class SupplierViewSet(viewsets.ModelViewSet):
     """The supplier master."""
 
     serializer_class = SupplierSerializer
-    permission_classes = [IsAuthenticated, HasPermission.of("purchase.read")]
+    # The authority stated once, on the class, as well as in each
+    # `perform_*` hook below.
+    #
+    # Not a fix -- the hooks already assert it, and their docstrings record
+    # why. This is belt and braces with a second job: `write=` is what
+    # `manage.py audit_writes` reads, and it covers any verb added later
+    # without a matching hook. A guard that lives only in three overrides is
+    # correct until somebody adds a fourth action.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("purchase.read", write="supplier.manage"),
+    ]
     lookup_field = "uuid"
     filterset_fields = ["status", "district"]  # no FKs; plain fields are fine
     search_fields = ["code", "name", "legal_name", "pan_number"]
@@ -210,6 +221,11 @@ class RequisitionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="submit")
     def submit(self, request, reference=None):
+        # `decide` two actions below asserts `purchase.approve`; submitting
+        # asserted nothing, so the class's `purchase.read` was the whole
+        # guard. Sending a requisition forward for approval is the raiser's
+        # act and takes the raiser's permission.
+        get_authorization(request).require("purchase.create", Scope.FACILITY)
         requisition = submit_requisition(self.get_object(), actor=request.user)
         return Response(PurchaseRequisitionSerializer(requisition).data)
 
