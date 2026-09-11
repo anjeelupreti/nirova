@@ -215,3 +215,108 @@ class ChangePasswordView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class MySecondFactorView(APIView):
+    """Turn two-step sign-in on, off, or renew its recovery codes.
+
+    `GET` says whether it is on and how many recovery codes are left.
+    `POST {action}`:
+
+    - `begin` — a new secret, returned once with the `otpauth://` link the
+      screen draws as a QR code. Stored sealed but **not yet enabled**: a
+      secret nobody has proved they scanned would lock the person out.
+    - `confirm {code}` — the first code from the app switches it on and
+      returns ten recovery codes, shown this once and stored hashed.
+    - `regenerate {code}` — ten new recovery codes; the old ones stop working.
+    - `disable {password, code}` — both, because turning it off from a session
+      left open on a ward computer must not be possible with the session alone.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "enabled": user.mfa_enabled,
+            "enabled_at": user.mfa_enabled_at,
+            "recovery_codes_left": len(user.mfa_recovery_codes or []) if user.mfa_enabled else 0,
+        })
+
+    def post(self, request):
+        from apps.audit.models import AuditAction
+        from apps.audit.services import record
+        from apps.identity import mfa
+
+        user = request.user
+        action = request.data.get("action", "")
+        code = str(request.data.get("code", ""))
+
+        if action == "begin":
+            if user.mfa_enabled:
+                raise DomainError("Two-step sign-in is already on.", code="already_enabled")
+            secret = mfa.new_secret()
+            user.mfa_secret = mfa.seal(secret)
+            user.mfa_last_step = None
+            user.save(update_fields=["mfa_secret", "mfa_last_step"])
+            return Response({
+                "secret": secret,
+                "uri": mfa.provisioning_uri(secret, user.email),
+            })
+
+        if action == "confirm":
+            if user.mfa_enabled:
+                raise DomainError("Two-step sign-in is already on.", code="already_enabled")
+            secret = mfa.unseal(user.mfa_secret) if user.mfa_secret else None
+            if not secret:
+                raise DomainError("Start again: scan a new code.", code="not_started")
+            step = mfa.verify(secret, code)
+            if step is None:
+                raise DomainError(
+                    "That code did not match. Check the time on your phone and use the newest code.",
+                    code="invalid_code",
+                )
+            plain, hashed = mfa.new_recovery_codes()
+            user.mfa_enabled = True
+            user.mfa_enabled_at = timezone.now()
+            user.mfa_last_step = step
+            user.mfa_recovery_codes = hashed
+            user.save(update_fields=[
+                "mfa_enabled", "mfa_enabled_at", "mfa_last_step", "mfa_recovery_codes",
+            ])
+            record(AuditAction.UPDATE, entity_type="identity.User", entity_id=user.uuid,
+                   entity_label=f"{user.email} turned on two-step sign-in")
+            return Response({"enabled": True, "recovery_codes": plain})
+
+        if action == "regenerate":
+            if not user.mfa_enabled or mfa.check_second_factor(user, code) != "totp":
+                raise DomainError("Enter a current code from your app.", code="invalid_code")
+            plain, hashed = mfa.new_recovery_codes()
+            user.mfa_recovery_codes = hashed
+            user.save(update_fields=["mfa_recovery_codes"])
+            record(AuditAction.UPDATE, entity_type="identity.User", entity_id=user.uuid,
+                   entity_label=f"{user.email} renewed recovery codes")
+            return Response({"recovery_codes": plain})
+
+        if action == "disable":
+            if not user.mfa_enabled:
+                raise DomainError("Two-step sign-in is not on.", code="not_enabled")
+            if not user.check_password(str(request.data.get("password", ""))):
+                raise DomainError("That is not your current password.", code="wrong_password")
+            if mfa.check_second_factor(user, code) is None:
+                raise DomainError("Enter a current code from your app, or a recovery code.",
+                                  code="invalid_code")
+            user.mfa_enabled = False
+            user.mfa_enabled_at = None
+            user.mfa_secret = ""
+            user.mfa_last_step = None
+            user.mfa_recovery_codes = []
+            user.save(update_fields=[
+                "mfa_enabled", "mfa_enabled_at", "mfa_secret", "mfa_last_step",
+                "mfa_recovery_codes",
+            ])
+            record(AuditAction.UPDATE, entity_type="identity.User", entity_id=user.uuid,
+                   entity_label=f"{user.email} turned off two-step sign-in")
+            return Response({"enabled": False})
+
+        raise DomainError("Unknown action.", code="invalid")

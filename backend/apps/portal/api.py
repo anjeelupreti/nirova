@@ -53,6 +53,9 @@ from apps.portal.services import (
     accessible_patients,
     adoption,
     appointments_for,
+    book_online,
+    booking_options,
+    cancel_online,
     authenticate,
     cancel_patient_correction,
     decide_patient_correction,
@@ -307,7 +310,14 @@ class MeView(APIView):
     def _target(self, request):
         """The record being read, chosen from what this account may open."""
         reachable = accessible_patients(request.user.account)
-        wanted = request.query_params.get("record", "")
+        # From the body as well as the query string. Actions are POSTed, and
+        # reading only the query string meant a parent booking or messaging
+        # "for" their child's record silently acted on the first record the
+        # account could reach — usually their own.
+        wanted = (
+            request.query_params.get("record", "")
+            or str(getattr(request, "data", {}).get("record", "") or "")
+        )
         if not wanted:
             return reachable[0]
         for row in reachable:
@@ -339,6 +349,17 @@ class MeView(APIView):
                     for entry in accessible_patients(account)
                 ],
             })
+
+        if section == "booking":
+            from django.utils.dateparse import parse_date
+
+            if not row["can_book_appointments"]:
+                raise PortalError(
+                    "This account may not book appointments for that record.",
+                    code="not_permitted",
+                )
+            on_date = parse_date(request.query_params.get("date", "") or "") or None
+            return Response(booking_options(patient, on_date))
 
         if section == "results":
             if not row["can_see_results"]:
@@ -456,6 +477,31 @@ class MeView(APIView):
         if what == "sign_out_everywhere":
             count = revoke_all_sessions(account, reason="Signed out everywhere")
             return Response({"sessions_ended": count})
+
+        if what == "book":
+            row = self._target(request)
+            appointment = book_online(
+                request.organization, account, row["patient"],
+                request.data.get("schedule"), request.data.get("when"),
+                reason=request.data.get("reason", ""),
+            )
+            return Response(
+                {
+                    "reference": appointment.reference,
+                    "when": appointment.scheduled_for,
+                    "provider": appointment.provider_name,
+                    "facility": appointment.facility.name,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        if what == "cancel_appointment":
+            row = self._target(request)
+            cancelled = cancel_online(
+                account, row["patient"], request.data.get("reference", ""),
+                reason=request.data.get("reason", ""),
+            )
+            return Response({"reference": cancelled.reference, "status": cancelled.status})
 
         if what == "request_correction":
             row = self._target(request)

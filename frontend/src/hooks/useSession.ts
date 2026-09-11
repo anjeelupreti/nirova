@@ -20,12 +20,25 @@ interface LoginResponse {
   default_organization: string | null;
 }
 
+/** The password was right and a second factor is on: finish with a code. */
+interface SecondFactorRequired {
+  mfa_required: true;
+  challenge: string;
+  expires_in: number;
+}
+
 export interface UseSession {
   session: Session | null;
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /**
+   * Resolves with a challenge when two-step sign-in is on — the password was
+   * right and a code is still needed — and with nothing when signed in.
+   */
+  login: (email: string, password: string) => Promise<{ challenge: string } | void>;
+  /** The second step: a code from the authenticator app, or a recovery code. */
+  verifySecondFactor: (challenge: string, code: string) => Promise<{ recoveryCodesLeft?: number }>;
   logout: () => void;
   switchOrganization: (slug: string) => Promise<void>;
   /**
@@ -95,16 +108,35 @@ export function useSession(): UseSession {
   const login = useCallback(
     async (email: string, password: string) => {
       setError(null);
-      const result = await api.post<LoginResponse>("/auth/login/", {
+      const result = await api.post<LoginResponse | SecondFactorRequired>("/auth/login/", {
         email,
         password,
       });
+      if ("mfa_required" in result) return { challenge: result.challenge };
       tokenStore.set(result.access, result.refresh);
       if (result.default_organization) {
         organizationStore.set(result.default_organization);
       }
       setLoading(true);
       await load();
+    },
+    [load],
+  );
+
+  const verifySecondFactor = useCallback(
+    async (challenge: string, code: string) => {
+      setError(null);
+      const result = await api.post<LoginResponse & { recovery_codes_left?: number }>(
+        "/auth/login/verify/",
+        { challenge, code },
+      );
+      tokenStore.set(result.access, result.refresh);
+      if (result.default_organization) {
+        organizationStore.set(result.default_organization);
+      }
+      setLoading(true);
+      await load();
+      return { recoveryCodesLeft: result.recovery_codes_left };
     },
     [load],
   );
@@ -172,6 +204,7 @@ export function useSession(): UseSession {
     error,
     isAuthenticated: Boolean(session?.user),
     login,
+    verifySecondFactor,
     logout,
     switchOrganization,
     can,

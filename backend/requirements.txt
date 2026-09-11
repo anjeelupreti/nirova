@@ -10,6 +10,10 @@ celery==5.4.0
 redis==5.2.1
 argon2-cffi==23.1.0
 python-dateutil==2.9.0.post0
+# Encrypts the second-factor secret at rest (Fernet). The one thing in the
+# identity tables that, read from a backup, would let somebody sign in as the
+# person — so it is not stored as plain text. See apps/identity/mfa.py.
+cryptography==45.0.7
 
 # WSGI server for the container image. `runserver` is a development tool: it
 # is single-threaded per request, reloads on file changes, and Django itself

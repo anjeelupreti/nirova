@@ -11985,3 +11985,188 @@ alarm red, because this screen is read at home, alone.
 Docker Desktop restarted mid-session. The API, worker and scheduler came back
 — they restart unless stopped — and restart-looped, because Postgres and Redis
 had no restart policy and stayed down. Both now restart unless stopped.
+
+
+## 277 - A "Book a visit" button with nothing behind it, and a second factor nothing read
+
+*12 September 2026. The open items from 276: booking from the portal, and
+two-step sign-in.*
+
+### Booking from the patient's phone
+
+The scheduling service has supported online booking since the diary was
+built — `available_slots(for_online=True)` holds back each session's walk-in
+reserve, `book_appointment` re-checks capacity under the transaction, and
+there is an `ONLINE` source — and nothing on the portal side called any of
+it. The home screen's "Book a visit" opened a list of past appointments.
+
+Now `GET /api/me/?section=booking` returns the next fortnight with the number
+of open slots per day and, for the chosen day, each clinician's slots and fee;
+`POST {action: "book"}` and `{action: "cancel_appointment"}` do the rest. What
+only the portal knows is checked there: the slot was really on offer online
+(never inside the reserve, never less than thirty minutes away), one account
+holds at most three online bookings — without a ceiling, one phone can fill a
+doctor's week — and a cancellation needs two hours' notice so the slot can go
+to somebody else; closer than that is a phone call. Four tests, each trying
+the thing it refuses. The first run's cleanup filtered on a status that does
+not exist (`booked`), so it cleaned nothing and left test bookings in the demo
+diary; fixed, and the diary checked empty afterwards.
+
+The screens: a fortnight strip (Saturday closed, as a Nepali OPD is), then the
+doctors with that day's slots grouped morning and afternoon and the fee on
+each, then one confirmation that states the fee plainly, because an
+unexpected charge at the counter is the commonest complaint about booked
+visits. A slot taken between choosing and confirming reloads the day with a
+sentence, not an error.
+
+Two defects found on the way:
+
+- **A cancelled visit counted as upcoming.** `appointments_for` judged by date
+  alone, so a visit the patient had cancelled could sit under "Up next" on the
+  home screen. Upcoming now also means still holding its slot.
+- **A proxy's actions went to the wrong record.** `_target` read the chosen
+  record from the query string only; actions are POSTed with it in the body.
+  So a parent sending a message about their child's record — which the
+  client has always done, with `record` in the body — filed it against the
+  first record the account could reach, usually their own. It reads both now.
+
+### Two-step sign-in
+
+`User.mfa_enabled` and `User.mfa_secret` were in the first identity migration
+and nothing read either: an account could be marked as having a second factor
+and sign in with a password alone.
+
+- **Standard TOTP** (RFC 6238; SHA-1, six digits, thirty seconds) so Google
+  and Microsoft Authenticator and hardware tokens all work — forty lines,
+  tested against the RFC's own vectors.
+- **Encrypted at rest** with Fernet (the `cryptography` package, added to the
+  requirements); `mfa_secret` widened from 64 characters, which fitted the
+  bare secret and not its ciphertext.
+- **Single use**: the last accepted step is stored, so a code read over a
+  shoulder cannot be replayed within its minute.
+- **Ten recovery codes**, shown once, stored as password hashes, each removed
+  when used.
+- **Two steps at sign-in**: the password returns a signed five-minute
+  challenge, bound to the password hash so a password change voids it; the
+  code finishes it. A wrong code counts toward the same lockout as a wrong
+  password, so the code cannot be guessed at leisure once the password is
+  known.
+- **Switching it off** needs the password and a code; a session left open on
+  a ward computer is not enough.
+- **A way back** for a lost phone: an administrator's reset, behind
+  `user.deactivate`, with a stated reason, audited, and refused for yourself,
+  platform staff, and anyone who also belongs to another organization — the
+  same lines as the temporary password, now drawn by one shared helper.
+
+The console: a code step on the sign-in page (numeric keypad, the operating
+system's one-time-code autofill, submits on the sixth digit, a recovery-code
+switch on the same screen); a card on My account that goes off → scan (QR
+generated locally, the key written out for cameras that will not focus) →
+first code → recovery codes shown once with copy and print → on; and the
+reset action on the staff panel where it applies.
+
+Verified end to end in a browser: enrolled through the API, signed in through
+the real form, the code step appeared, a fresh code signed in, and it was
+switched off again. Eleven backend tests, including a replay and a forged
+challenge.
+
+The full suite then caught one thing: `test_no_write_route_is_guarded_only_by_a_read`
+flagged `POST /api/auth/me/mfa/` as a write route declaring no write
+permission. It is self-service by design — it only ever changes the caller's
+own account, and switching it off needs the password and a code — so it joins
+`ChangePasswordView` in `OPEN_BY_DESIGN`, with that reason written beside it.
+The guard did what it is for: a new write endpoint had to say why it is open.
+
+Running the suite was itself a problem this round: processes launched from
+the tool were being ended part-way, silently, and reported as "exit code 0"
+with a log that stopped mid-line. A suite that stops at 40% and reports
+success is worse than one that fails. The runs were launched detached instead,
+and a result was only believed when the log ended in its summary line.
+
+### Not done
+
+- An organization-wide rule requiring two-step sign-in for everyone, with the
+  API holding unenrolled staff to the enrolment screen. The per-person switch
+  exists; the policy that makes it mandatory does not yet.
+
+
+## 278 - A run killed at 40% said "exit code 0"
+
+*12 September 2026. "Aren't you planning to solve this?" — about the test runs
+that stopped part-way and reported success. Log 277 had recorded it as an
+environment problem and a workaround in a memory file. That was the wrong
+place to stop.*
+
+### What was actually wrong
+
+Measured first: a ninety-second process run the same way survived to the end,
+so the killing was transient — the machine under load from Docker rebuilds —
+and not something this project can prevent. But the killing was never the
+harm. The harm was that a suite which ran 40% of its tests ended with
+"completed (exit code 0)" and a log that stopped mid-line, and nothing in the
+project could tell that apart from a pass. Anybody reading the exit code — a
+person, CI, an assistant — would have called it green.
+
+So the question the project now answers is not "how did the process end" but
+"did pytest say it finished".
+
+### The run record
+
+`tests/run_record.py`, hooked from `conftest.py`:
+
+- **At session start** pytest writes `.test-results/last-run.json` saying
+  `complete: false`, with its pid.
+- **At session finish** it overwrites that with the counts, the failed and
+  errored test ids, pytest's exit status, and `complete: true` — atomically,
+  so a reader never sees half a record.
+- A run that is killed never reaches the second write. Its record still says
+  `complete: false`, and `verdict()` reads that as **INCOMPLETE** — or
+  **RUNNING** if the pid is still alive (checked without signalling it: on
+  Windows `os.kill(pid, 0)` terminates rather than probes). Only a finished
+  run with exit status 0 and no failures or errors is **PASS**.
+
+`scripts/run_tests.py` runs the suite through that verdict — `--detach`
+starts it in its own process group so an environment that ends its children
+does not end the run, `--status` and `--wait` read the result — and exits
+0 pass, 1 fail, 2 incomplete, 3 no run, 4 still running. CI now runs the suite
+through it and uploads the record.
+
+Proved against the real failure, not only unit tests: a detached run of the
+invariants suite reported RUNNING, its pytest process was killed with
+`taskkill` part-way — the log ending in dots, exactly as on the day — and the
+verdict was `INCOMPLETE` with exit code 2. Seven unit tests cover the reading
+(an unfinished record from a dead process, a live one, none at all, a clean
+pass, a named failure, an interruption, errors without failures).
+
+### Found by using it
+
+Within minutes the runner had its first real finding, against me: a focused
+run of the second-factor tests was started while the full suite was still
+running detached. It overwrote the full run's record — so `--status` reported
+the focused run's PASS over a suite still at 20% — and, worse, one of its
+tests switches on "require two-step sign-in" for the whole organization, under
+the other run's feet. These tests share the live demo database; two runs at
+once corrupt each other.
+
+Now a run that finds an unfinished record from a live process refuses to start
+(`pytest.exit`, code 4) and names the other run — and leaves that run's record
+alone, since pytest calls the finish hook even for a session it refused.
+Verified the same way: an overlapping run was refused and the full suite's
+record still read RUNNING. The contaminated run was stopped and the suite
+started again clean.
+
+### Required two-step sign-in
+
+`security.require_mfa`, declared in the settings registry, so it validates and
+appears on the settings screen with its caution text. Enforced where the
+temporary-password lock is — the authenticator — because a rule the console
+enforced and the API did not would be that hole again: an unenrolled member of
+an organization that requires it reaches who they are, enrolment, the session
+and sign-out, and gets `403 mfa_enrolment_required` for everything else. The
+answer is cached for thirty seconds per organization, and dropped the moment
+the setting changes. It cannot be switched on by an administrator who has not
+enrolled themselves — they would be the first person locked out, and nobody
+enrolled would be left to help. The session tells the console, which shows the
+enrolment screen instead of the application and lifts it once the recovery
+codes have been acknowledged — not the instant it switches on, which would
+whisk the codes off the screen before anybody saved them.

@@ -119,54 +119,147 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        user.failed_login_attempts = 0
-        user.locked_until = None
-        user.last_login_ip = ip
-        user.last_active_at = timezone.now()
-        user.save(
-            update_fields=[
-                "failed_login_attempts",
-                "locked_until",
-                "last_login_ip",
-                "last_active_at",
-            ]
-        )
-        log(LoginOutcome.SUCCESS, user)
+        # The password was right; if a second factor is on, that is half of it.
+        # Nothing is reset and no token issued until the code is given too —
+        # the failure counter keeps counting across both steps, so the code
+        # cannot be guessed at leisure once the password is known.
+        if user.mfa_enabled:
+            from apps.identity.mfa import CHALLENGE_SECONDS, issue_challenge
 
-        memberships = (
-            Membership.objects.filter(user=user, status=MembershipStatus.ACTIVE)
-            .select_related("organization")
-            .order_by("-is_default", "created_at")
-        )
-
-        if not memberships and not user.is_platform_staff:
-            log(LoginOutcome.NO_ORGANIZATION, user)
+            log(LoginOutcome.MFA_REQUIRED, user)
             return Response(
                 {
-                    "error": {
-                        "code": "no_organization",
-                        "message": (
-                            "This account is not linked to any organization. "
-                            "Ask an administrator to invite you."
-                        ),
-                        "detail": {},
-                    }
-                },
-                status=status.HTTP_403_FORBIDDEN,
+                    "mfa_required": True,
+                    "challenge": issue_challenge(user),
+                    "expires_in": CHALLENGE_SECONDS,
+                }
             )
 
-        refresh = RefreshToken.for_user(user)
+        return finish_sign_in(user, ip, log)
+
+
+def finish_sign_in(user, ip, log):
+    """What a successful sign-in does, after one factor or two."""
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_ip = ip
+    user.last_active_at = timezone.now()
+    user.save(
+        update_fields=[
+            "failed_login_attempts",
+            "locked_until",
+            "last_login_ip",
+            "last_active_at",
+        ]
+    )
+    log(LoginOutcome.SUCCESS, user)
+
+    memberships = (
+        Membership.objects.filter(user=user, status=MembershipStatus.ACTIVE)
+        .select_related("organization")
+        .order_by("-is_default", "created_at")
+    )
+
+    if not memberships and not user.is_platform_staff:
+        log(LoginOutcome.NO_ORGANIZATION, user)
         return Response(
             {
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": UserSerializer(user).data,
-                "memberships": MembershipSerializer(memberships, many=True).data,
-                "default_organization": (
-                    memberships[0].organization.slug if memberships else None
-                ),
-            }
+                "error": {
+                    "code": "no_organization",
+                    "message": (
+                        "This account is not linked to any organization. "
+                        "Ask an administrator to invite you."
+                    ),
+                    "detail": {},
+                }
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
+
+    refresh = RefreshToken.for_user(user)
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserSerializer(user).data,
+            "memberships": MembershipSerializer(memberships, many=True).data,
+            "default_organization": (
+                memberships[0].organization.slug if memberships else None
+            ),
+        }
+    )
+
+
+class SecondFactorView(APIView):
+    """The code step: `{challenge, code}` → tokens.
+
+    The challenge proves the password was given in the last five minutes; the
+    code is from the authenticator app, or one of the recovery codes. A wrong
+    code counts toward the same lockout as a wrong password.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from apps.identity.mfa import check_second_factor, read_challenge
+
+        ip = client_ip(request)
+        user_agent = request.META.get("HTTP_USER_AGENT", "")[:512]
+        user = read_challenge(str(request.data.get("challenge", "")))
+
+        def log(outcome, who=None):
+            LoginAttempt.objects.create(
+                email=(who or user).email if (who or user) else "",
+                user=who or user,
+                outcome=outcome,
+                ip_address=ip,
+                user_agent=user_agent,
+            )
+
+        if user is None or not user.mfa_enabled:
+            return Response(
+                {"error": {
+                    "code": "challenge_expired",
+                    "message": "That sign-in has expired. Enter your password again.",
+                    "detail": {},
+                }},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        if user.is_locked:
+            log(LoginOutcome.LOCKED, user)
+            return Response(
+                {"error": {
+                    "code": "account_locked",
+                    "message": (
+                        "This account is temporarily locked after repeated "
+                        "failed sign-ins. Try again shortly."
+                    ),
+                    "detail": {"locked_until": user.locked_until.isoformat()},
+                }},
+                status=status.HTTP_423_LOCKED,
+            )
+
+        method = check_second_factor(user, str(request.data.get("code", "")))
+        if method is None:
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= MAX_FAILED_ATTEMPTS:
+                user.locked_until = timezone.now() + timezone.timedelta(minutes=LOCKOUT_MINUTES)
+            user.save(update_fields=["failed_login_attempts", "locked_until"])
+            log(LoginOutcome.MFA_FAILED, user)
+            return Response(
+                {"error": {
+                    "code": "invalid_code",
+                    "message": "That code did not work. Check the time on your phone and try the newest code.",
+                    "detail": {},
+                }},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        response = finish_sign_in(user, ip, log)
+        if method == "recovery" and response.status_code == 200:
+            response.data["recovery_codes_left"] = len(user.mfa_recovery_codes or [])
+        return response
 
 
 class SessionView(APIView):
@@ -221,6 +314,16 @@ class SessionView(APIView):
             "is_read_only": organization.is_read_only,
         }
         payload["entitlements"] = entitlements.as_dict()
+
+        # Told to the console so it can show the enrolment screen instead of
+        # the application — the API refuses everything else anyway (see
+        # `apps.identity.authentication`), and a screen of 403s is not how
+        # somebody should learn their organization changed the rules.
+        from apps.identity.authentication import organization_requires_mfa
+
+        payload["mfa_enrolment_required"] = (
+            not user.mfa_enabled and organization_requires_mfa(request)
+        )
 
         if membership is not None:
             authorization = resolve_authorization(user, membership)

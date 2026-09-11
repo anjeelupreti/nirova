@@ -1,56 +1,34 @@
 /**
- * The application shell: navigation, the organization switcher, and routing.
+ * The application shell: frame, navigation, routing.
  *
- * The switcher is the visible half of the multi-tenancy design. Changing the
- * selected organization changes one HTTP header, and every screen re-renders
- * against a different database — no screen contains tenant-specific code.
+ * **What moved out of here, and why.** This file used to be 566 lines, of
+ * which about 320 were a navigation literal and two hand-built `<nav>`s. The
+ * navigation is data — `components/shell/nav.ts` — because three things now
+ * consume it: the rail, the narrow strip, and the command palette. Keeping it
+ * inline meant the palette could not exist without a second copy, and a second
+ * copy is a rail and a palette that disagree about what the product contains.
+ *
+ * What is left is the shell's own job: decide who is signed in, work out where
+ * "/" goes for *this* person, hold the frame together, and route.
  */
 
-import { Suspense, lazy } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import {
-  Activity,
-  Building2,
-  FileSpreadsheet,
-  ChevronDown,
-  GaugeCircle,
-  FlaskConical,
-  ListOrdered,
-  Package,
-  Receipt,
-  ScrollText,
-  ShoppingCart,
-  Truck,
-  UserCog,
-  CalendarClock,
-  CalendarDays,
-  Coins,
-  BedDouble,
-  Globe,
-  Siren,
-  Scissors,
-  HeartPulse,
-  Scale,
-  ShieldCheck,
-  Droplet,
-  Send,
-  KeyRound,
-  Users,
-  UserCheck,
-  ClipboardCheck,
-  BarChart3,
-  Tags,
-  SlidersHorizontal,
-  ShieldAlert,
-  Inbox,
-  Bell,
-  Loader2,
-} from "lucide-react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
-import GlobalSearch from "@/components/GlobalSearch";
-import UserMenu from "@/components/UserMenu";
+import { Header } from "@/components/shell/Header";
+import { NarrowNav, Sidebar, useRailState } from "@/components/shell/Sidebar";
+import {
+  CommandPalette,
+  usePaletteShortcut,
+  type PaletteAction,
+} from "@/components/shell/CommandPalette";
+import { resolveHome, visibleGroups } from "@/components/shell/nav";
+import { RouteProgress, ShellSkeleton } from "@/components/ui/loader";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/primitives";
 import { useSession } from "@/hooks/useSession";
-import { cn } from "@/lib/utils";
+import { usePreferences } from "@/hooks/usePreferences";
+import api from "@/lib/api";
+import type { MyWorkspace } from "@/types";
 
 /*
   Route-level code splitting.
@@ -65,6 +43,9 @@ import { cn } from "@/lib/utils";
   renders, and putting a spinner in front of the login form to save a few
   kilobytes is a bad trade.
 */
+const AccessPage = lazy(() => import("@/pages/Access"));
+const SettingsPage = lazy(() => import("@/pages/Settings"));
+const AccountPage = lazy(() => import("@/pages/Account"));
 const AppointmentsPage = lazy(() => import("@/pages/Appointments"));
 const BillingPage = lazy(() => import("@/pages/Billing"));
 const BloodPage = lazy(() => import("@/pages/Blood"));
@@ -72,17 +53,20 @@ const CapacityPage = lazy(() => import("@/pages/Capacity"));
 const ClaimsPage = lazy(() => import("@/pages/Claims"));
 const ConfigurationPage = lazy(() => import("@/pages/Configuration"));
 const ConsultationPage = lazy(() => import("@/pages/Consultation"));
-const DataImportPage = lazy(() => import("@/pages/DataImport"));
 const CounterPage = lazy(() => import("@/pages/Counter"));
+const DashboardPage = lazy(() => import("@/pages/Dashboard"));
+const DataImportPage = lazy(() => import("@/pages/DataImport"));
 const DiagnosticsPage = lazy(() => import("@/pages/Diagnostics"));
 const EmergencyPage = lazy(() => import("@/pages/Emergency"));
 const FacilitiesPage = lazy(() => import("@/pages/Facilities"));
 const FacilityRequestsPage = lazy(() => import("@/pages/FacilityRequests"));
 const FinancePage = lazy(() => import("@/pages/Finance"));
 const IcuPage = lazy(() => import("@/pages/Icu"));
+const KitchenPage = lazy(() => import("@/pages/Kitchen"));
 const NotificationsPage = lazy(() => import("@/pages/Notifications"));
 const NurseWorkspacePage = lazy(() => import("@/pages/NurseWorkspace"));
 const PatientsPage = lazy(() => import("@/pages/Patients"));
+const PatientRecordPage = lazy(() => import("@/pages/PatientRecord"));
 const PayrollPage = lazy(() => import("@/pages/Payroll"));
 const PeoplePage = lazy(() => import("@/pages/People"));
 const PharmacyPage = lazy(() => import("@/pages/Pharmacy"));
@@ -94,473 +78,270 @@ const QueuePage = lazy(() => import("@/pages/Queue"));
 const ReferralsPage = lazy(() => import("@/pages/Referrals"));
 const ReportsPage = lazy(() => import("@/pages/Reports"));
 const SelfServicePage = lazy(() => import("@/pages/SelfService"));
-const AccountPage = lazy(() => import("@/pages/Account"));
-const StaffPage = lazy(() => import("@/pages/Staff"));
 const ServicesPage = lazy(() => import("@/pages/Services"));
+const StaffPage = lazy(() => import("@/pages/Staff"));
 const TheatrePage = lazy(() => import("@/pages/Theatre"));
 const TimePage = lazy(() => import("@/pages/Time"));
 const WardsPage = lazy(() => import("@/pages/Wards"));
 const WorkspacePage = lazy(() => import("@/pages/Workspace"));
 
 import LoginPage from "@/pages/Login";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Badge,
-  Select,
-} from "@/components/ui/primitives";
-
-/**
- * Navigation: grouped by the job, and filtered by what this person may open.
- *
- * **Grouped by the job, not by the module.** "Clinical" used to hold eleven
- * items spanning outpatients, inpatients, theatre, the laboratory and the
- * patient portal — and a list of eleven is a list nobody scans. Each group is
- * now two to five items, named for the work rather than the codebase: somebody
- * on a ward opens Inpatient, somebody at a counter opens Pharmacy & supply,
- * and neither walks past the other's screens.
- *
- * **`needs` hides what this person cannot open.** Every item's permission is
- * *derived* from the endpoints its screen actually calls, not guessed —
- * guessing would be the wrong kind of confident, because hiding a menu item
- * somebody can use is worse than showing one they cannot. Items with no
- * `needs` are open to everybody who is signed in.
- *
- * A group whose every item is hidden does not render its heading either. An
- * empty section with a title is worse than no section: it looks like something
- * failed to load.
- *
- * **This is a courtesy, not a control.** The API refuses on its own and that
- * refusal is the guard; this only stops people being offered doors that do not
- * open for them.
- *
- * `platformOnly` marks the console that reads the control plane rather than a
- * tenant. Hidden from customers entirely, for the same reason: a menu item
- * that always errors teaches people to ignore errors.
- */
-const NAV_GROUPS: {
-  label: string;
-  platformOnly?: boolean;
-  items: {
-    to: string;
-    label: string;
-    icon: typeof Users;
-    needs?: string;
-    /** The scope the screen's own endpoints ask for. */
-    scope?: string;
-  }[];
-}[] = [
-  {
-    label: "Mine",
-    items: [
-      { to: "/workspace", label: "What needs you", icon: Inbox },
-      { to: "/notifications", label: "Notifications", icon: Bell },
-      // Moved out of People, which is where somebody looks for *other* people.
-      { to: "/self-service", label: "Self service", icon: UserCheck },
-    ],
-  },
-  {
-    label: "Patients",
-    items: [
-      { to: "/patients", label: "Patients", icon: Users, needs: "patient.read", scope: "own" },
-      // Beside the queue on purpose: a receptionist moves between "who is
-      // booked" and "who is waiting" all morning, and they were a click apart
-      // in different groups.
-      { to: "/appointments", label: "Appointments", icon: CalendarDays, needs: "encounter.read", scope: "own" },
-      { to: "/queue", label: "Queue", icon: ListOrdered, needs: "encounter.read", scope: "own" },
-      { to: "/portal", label: "Portal accounts", icon: KeyRound, needs: "patient.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "Inpatient",
-    // **`patient.clinical.read` on the four clinical boards below, not
-    // `encounter.read`.** The coarse permission is held by the receptionist --
-    // correctly, for the outpatient queue and the appointment diary -- and it
-    // was putting the critical-care record, the operating list, the
-    // transfusion history and the nurse's bedside console in the front desk's
-    // sidebar. The tier already existed (`docs/ACCESS_DESIGN.md`); the screens
-    // had never moved onto it.
-    //
-    // Emergency and Wards deliberately stay on `encounter.read`: registering an
-    // arrival and knowing which bed somebody is in are front-desk work.
-    items: [
-      { to: "/emergency", label: "Emergency", icon: Siren, needs: "encounter.read", scope: "own" },
-      { to: "/wards", label: "Wards", icon: BedDouble, needs: "encounter.read", scope: "own" },
-      { to: "/nurse-workspace", label: "Nurse workspace", icon: ClipboardCheck, needs: "patient.clinical.read", scope: "facility" },
-      { to: "/icu", label: "ICU", icon: HeartPulse, needs: "patient.clinical.read", scope: "facility" },
-      { to: "/theatre", label: "Theatre", icon: Scissors, needs: "patient.clinical.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "Diagnostics",
-    items: [
-      { to: "/diagnostics", label: "Laboratory & imaging", icon: FlaskConical, needs: "encounter.read", scope: "own" },
-      { to: "/blood", label: "Blood bank", icon: Droplet, needs: "patient.clinical.read", scope: "facility" },
-      { to: "/referrals", label: "Referrals", icon: Send, needs: "encounter.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "Pharmacy & supply",
-    items: [
-      { to: "/pharmacy", label: "Pharmacy", icon: Package, needs: "stock.read", scope: "facility" },
-      { to: "/counter", label: "Counter", icon: ShoppingCart, needs: "sale.read", scope: "facility" },
-      { to: "/procurement", label: "Procurement", icon: Truck, needs: "purchase.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "Money",
-    items: [
-      { to: "/billing", label: "Billing", icon: Receipt, needs: "invoice.read", scope: "facility" },
-      { to: "/claims", label: "Insurance claims", icon: ShieldCheck, needs: "invoice.read", scope: "facility" },
-      // `finance.read`, not `report.read`: every doctor holds the latter for
-      // laboratory turnaround and theatre utilisation, and it used to put the
-      // general ledger and the bank statements in their sidebar.
-      { to: "/finance", label: "Finance", icon: Scale, needs: "finance.read", scope: "facility" },
-      // What things cost, beside the screens that charge for them. Reading is
-      // `invoice.read` because anybody raising an invoice needs to see prices;
-      // changing them is a different permission the screen checks itself.
-      { to: "/services", label: "Services & prices", icon: Tags, needs: "invoice.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "People",
-    items: [
-      { to: "/people", label: "Directory", icon: UserCog, needs: "employee.read", scope: "own" },
-      // No `needs`: attendance and leave are self-service. The screen shows
-      // you your own days and the facility's only if you hold
-      // `attendance.read`, so gating the *link* on that permission hid the
-      // screen from exactly the people with most reason to open it -- a
-      // doctor, a counter assistant and a pharmacist all held none of it, and
-      // all three had to request leave through somebody else.
-      { to: "/time", label: "Attendance & leave", icon: CalendarClock },
-      { to: "/payroll", label: "Payroll", icon: Coins, needs: "salary.read", scope: "facility" },
-    ],
-  },
-  {
-    label: "Oversight",
-    items: [
-      { to: "/reports", label: "Reports", icon: BarChart3, needs: "report.read", scope: "own" },
-      { to: "/privacy", label: "Privacy", icon: ShieldAlert, needs: "privacy.review", scope: "facility" },
-    ],
-  },
-  {
-    label: "Organization",
-    items: [
-      { to: "/facilities", label: "Facilities", icon: Building2, needs: "facility.read", scope: "facility" },
-      // `subscription.read`, not `facility.read`: this screen is what the
-      // hospital's *plan* allows and how much of it is spent -- commercial
-      // information that inherited the permission every clinician holds for
-      // knowing which facilities exist.
-      { to: "/capacity", label: "Capacity", icon: GaugeCircle, needs: "subscription.read", scope: "organization" },
-      { to: "/facility-requests", label: "Change requests", icon: ScrollText, needs: "facility.read", scope: "facility" },
-      // Under Organization rather than People on purpose: /people is the
-      // employee directory -- hiring, transfers, credentials -- and says
-      // nothing about who can sign in. Those are different questions asked by
-      // different people, and putting them side by side taught nobody which
-      // was which. `user.read` at `own`, because seeing your colleagues is not
-      // an administrative act; inviting one is, and that is checked on POST.
-      { to: "/staff", label: "Staff access", icon: KeyRound, needs: "user.read", scope: "own" },
-      // Six rarely-visited lists behind one entry rather than six. Reading
-      // needs `config.read`; each list checks its own write permission.
-      { to: "/configuration", label: "Configuration", icon: SlidersHorizontal, needs: "config.read", scope: "facility" },
-      // Beside Configuration because a migration is the same kind of act: rare,
-      // administrative, and done once when a practice starts rather than daily.
-      // `data.import` at organization scope -- registering one patient at the
-      // counter is a clerk's job, creating eight thousand from a spreadsheet is
-      // not, and the mistake is a different size.
-      { to: "/import", label: "Import records", icon: FileSpreadsheet, needs: "data.import", scope: "organization" },
-    ],
-  },
-  {
-    label: "Platform",
-    platformOnly: true,
-    items: [{ to: "/platform", label: "Console", icon: Globe }],
-  },
-];
+import SignupPage from "@/pages/auth/Signup";
+import { ChoosePassword } from "@/pages/auth/ChoosePassword";
+import { EnrolSecondFactor } from "@/pages/auth/EnrolSecondFactor";
 
 export default function App() {
   const session = useSession();
+  const { preferences } = usePreferences();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [counts, setCounts] = useState<{ notifications?: number; workspace?: number }>({});
 
-  if (session.loading) {
+  const navigate = useNavigate();
+
+  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  usePaletteShortcut(openPalette);
+
+  const { session: data, can } = session;
+  const isAuthenticated = session.isAuthenticated;
+
+  /*
+    The two numbers on the rail.
+
+    One request, on sign-in and then never polled. A badge that reloads every
+    thirty seconds is a request per user per thirty seconds for a number that
+    changes a few times a day, and on a tenant with two hundred staff that is
+    the busiest endpoint in the product for no clinical reason. The screens
+    themselves are authoritative and refresh when opened.
+  */
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    void api
+      .get<MyWorkspace>("/me/workspace/")
+      .then((workspace) => {
+        if (cancelled) return;
+        setCounts({
+          workspace: workspace.approvals_total,
+          // `unread` is `number | null` — null when the notification source
+          // itself could not be read. Undefined here means "no badge", which is
+          // the honest rendering; a zero would claim there is nothing unread.
+          notifications: workspace.notifications?.unread ?? undefined,
+        });
+      })
+      .catch(() => {
+        // A count that cannot be read is shown as no count. Rendering a zero
+        // would be a claim that nothing is waiting, which is the one thing it
+        // must not say when the source failed.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  const isPlatformOnly =
+    Boolean(data?.user.is_platform_staff) && (data?.memberships.length ?? 0) === 0;
+
+  /*
+    Two lists from one model.
+
+    The rail gets the work; the palette gets the work **and** the
+    administrative screens that now live behind the avatar. Deleting those from
+    the model instead would have made "Configuration" a screen you can only
+    reach by remembering it is under an avatar, which is worse than the
+    forty-item rail it replaced.
+  */
+  const groups = visibleGroups(can, Boolean(data?.user.is_platform_staff));
+  const paletteGroups = visibleGroups(can, Boolean(data?.user.is_platform_staff), {
+    includeSystem: true,
+  });
+  const railState = useRailState(groups);
+
+  if (session.loading) return <ShellSkeleton />;
+  // Signed out, the only other place anyone can be is the registration form.
+  // Every other path — a bookmarked ward, a link from a notification — lands
+  // on sign-in, and the router takes them on to it afterwards.
+  if (!session.isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
+      <Routes>
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="*" element={<LoginPage session={session} />} />
+      </Routes>
+    );
+  }
+  // A temporary password is for signing in once. Nothing else opens until it
+  // has been replaced with one only this person knows.
+  if (data?.user.must_change_password) {
+    return <ChoosePassword session={session} name={data.user.full_name} />;
+  }
+  // The organization requires a second factor and this person has none yet.
+  // The API refuses everything but enrolment, so the application would be a
+  // screen of refusals; this is the one thing that can be done.
+  if (data?.mfa_enrolment_required) {
+    return (
+      <EnrolSecondFactor
+        session={session}
+        organization={data.organization?.display_name ?? "Your organization"}
+      />
     );
   }
 
-  if (!session.isAuthenticated) {
-    return <LoginPage session={session} />;
-  }
-
-  const { session: data, can } = session;
   const organization = data?.organization;
-  //: Where "/" goes. A platform operator with no membership has nothing to
-  //: see on a clinical screen, and a customer has no business on the console.
-  const isPlatformOnly =
-    Boolean(data?.user.is_platform_staff) &&
-    (data?.memberships.length ?? 0) === 0;
-  const home = isPlatformOnly ? "/platform" : "/patients";
   const memberships = data?.memberships ?? [];
 
-  /**
-   * The groups this person can actually use.
-   *
-   * Filtered once here rather than inside both navigations, so the sidebar and
-   * the narrow-screen strip can never disagree about what exists. A group with
-   * nothing left in it is dropped entirely: an empty section under a heading
-   * looks like something failed to load.
-   */
-  const visibleGroups = NAV_GROUPS.filter(
-    (group) => !group.platformOnly || data?.user.is_platform_staff,
-  )
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => !item.needs || can(item.needs, item.scope)),
-    }))
-    .filter((group) => group.items.length > 0);
+  /*
+    Where "/" goes, for this person.
+
+    Previously one line: `isPlatformOnly ? "/platform" : "/patients"`. Every one
+    of the seventeen seeded roles landed on the patient list — a pharmacist, a
+    controller and a payroll officer included. `resolveHome` consults the
+    `landing` preference first — which was offered on My account, saved, and
+    then read by nothing — then the person's role, then their permissions.
+  */
+  const home = resolveHome({
+    landing: preferences.landing,
+    roles: [],
+    isPlatformOnly,
+    can,
+  });
+
+  const actions: PaletteAction[] = [
+    {
+      id: "appearance",
+      label: "Change the colour scheme",
+      icon: "spark",
+      keywords: ["theme", "palette", "colour", "color", "dark", "light", "appearance"],
+      run: () => navigate("/settings"),
+    },
+    {
+      id: "sign-out",
+      label: "Sign out",
+      icon: "signOut",
+      run: session.logout,
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      {/*
-        **Sticky, because a header that scrolls away takes the search and the
-        organization switcher with it.** Both are things you reach for *while*
-        looking at something further down a long list, and having to scroll back
-        to the top to use them is what makes people stop using them.
-      */}
-      <header className="sticky top-0 z-40 border-b bg-background">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-              <Activity className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold tracking-tight">Nirova</span>
-          </div>
+    <div className="flex min-h-screen bg-background">
+      <Sidebar
+        groups={groups}
+        organizationName={organization?.display_name ?? "Nirova"}
+        facilityName={data?.entitlements?.plan_code ? null : null}
+        planCode={data?.entitlements?.plan_code ?? null}
+        counts={counts}
+        state={railState}
+      />
 
-          {/*
-            The omnibox, in the header rather than on a page: a search you have
-            to navigate to is a search nobody uses. Hidden from a platform
-            operator with no membership, who has no tenant to search.
-          */}
-          {isPlatformOnly ? null : <GlobalSearch />}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <Header
+          organization={organization ?? null}
+          memberships={memberships}
+          onSwitchOrganization={(slug) => void session.switchOrganization(slug)}
+          onOpenPalette={openPalette}
+          user={{
+            name: data?.user.display_name ?? "",
+            email: data?.user.email ?? "",
+          }}
+          onSignOut={session.logout}
+          isPlatformOnly={isPlatformOnly}
+          readOnly={organization?.is_read_only}
+        />
 
-          {/*
-            The context switcher. Only rendered when there is somewhere to
-            switch to — a single-clinic customer should not be shown a control
-            that does nothing.
-          */}
-          {memberships.length > 1 ? (
-            <div className="relative flex items-center gap-1">
-              <Select
-                aria-label="Organization"
-                className="h-8 w-auto pr-8 text-sm"
-                value={organization?.slug ?? ""}
-                onChange={(event) =>
-                  void session.switchOrganization(event.target.value)
-                }
-              >
-                {memberships.map((membership) => (
-                  <option
-                    key={membership.uuid}
-                    value={membership.organization_slug}
-                  >
-                    {membership.organization_name}
-                  </option>
-                ))}
-              </Select>
-              <ChevronDown className="pointer-events-none -ml-7 h-4 w-4 text-muted-foreground" />
-            </div>
-          ) : (
-            (organization ? (
-              <span className="text-sm font-medium">
-                {organization.display_name}
-              </span>
-            ) : isPlatformOnly ? (
-              // No organization name to show, so say what they are instead.
-              // A header that reads as blank suggests something failed to
-              // load, when in fact nothing was meant to.
-              <Badge variant="secondary">Platform operator</Badge>
-            ) : null)
-          )}
-
-          {data?.entitlements && (
-            <Badge variant="secondary" className="hidden sm:inline-flex">
-              {data.entitlements.plan_code}
-            </Badge>
-          )}
-
-          {/*
-            The account menu, where every product of this kind puts it: an
-            avatar at the far right that opens onto the things about *you*
-            rather than about the organization. Before this the header had a
-            name in grey text and a Sign out button, and there was nowhere at
-            all to reach your own settings.
-          */}
-          <div className="ml-auto flex items-center gap-2">
-            <UserMenu
-              name={data?.user.display_name ?? ""}
-              email={data?.user.email ?? ""}
-              onSignOut={session.logout}
-            />
-          </div>
+        <div className="min-w-0 px-4 lg:px-6">
+          <NarrowNav groups={groups} pinned={railState.pinned} counts={counts} />
         </div>
 
-      </header>
-
-      <div className="mx-auto flex max-w-[100rem] gap-6 px-4 py-6">
-        {/*
-          A sidebar rather than a row of tabs. Fourteen destinations do not fit
-          across a header, and the ones that get pushed off the end are the
-          ones nobody finds.
-        */}
-        {/*
-          **Sticky and scrolling on its own, which it was not.** The sidebar was
-          a plain flex child, so it scrolled away with the page: on a long ward
-          list, navigation simply disappeared and getting anywhere else meant
-          scrolling back to the top first.
-
-          `top-14` clears the header, which is `h-14`. The height is the
-          viewport less that, so a sidebar taller than the screen scrolls
-          *itself* rather than pushing the page. `overscroll-contain` stops a
-          scroll that reaches the end of the sidebar from continuing into the
-          page behind it -- the small thing that makes a fixed panel feel fixed.
-        */}
-        <nav className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-52 shrink-0 space-y-5 overflow-y-auto overscroll-contain pb-6 pt-1 lg:block">
-          {visibleGroups.map((group) => (
-            <div key={group.label}>
-              <p className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {group.label}
-              </p>
-              <div className="space-y-0.5">
-                {group.items.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                        isActive
-                          ? "bg-muted font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                      )
-                    }
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/*
-          On a narrow screen the sidebar collapses to a scrolling strip. A
-          hamburger would hide the whole product behind one tap on the device
-          a ward round actually uses.
-        */}
-        <nav className="-mx-4 mb-2 flex gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
-          {visibleGroups
-            .flatMap((group) => group.items)
-            .map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors",
-                    isActive
-                      ? "border-primary bg-muted font-medium text-foreground"
-                      : "border-transparent text-muted-foreground",
-                  )
-                }
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </NavLink>
-            ))}
-        </nav>
-
-      <main className="min-w-0 flex-1">
-        {/*
-          A tenant that cannot be reached is a normal state during onboarding,
-          not a crash — so it is explained rather than thrown.
-        */}
-        {data?.tenant_error && !isPlatformOnly && (
-          <Alert variant="warning" className="mb-6">
-            <AlertTitle>This organization is not ready yet</AlertTitle>
-            <AlertDescription>{data.tenant_error.message}</AlertDescription>
-          </Alert>
-        )}
-
-        {organization?.is_read_only && (
-          <Alert variant="warning" className="mb-6">
-            <AlertTitle>Read-only</AlertTitle>
-            <AlertDescription>
-              This organization is {organization.status}. Records can be viewed
-              but not changed.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <Suspense
-          fallback={
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              <Loader2 className="inline h-4 w-4 animate-spin" />
-            </p>
-          }
-        >
-        <Routes>
+        <main className="mx-auto w-full min-w-0 max-w-content flex-1 px-4 py-6 lg:px-6">
           {/*
-            Platform staff have no memberships, so every tenant screen would
-            be empty or refused. Landing them on the console is not a
-            convenience — it is the only page that means anything to them.
+            A tenant that cannot be reached is a normal state during onboarding,
+            not a crash — so it is explained rather than thrown.
           */}
-          <Route path="/" element={<Navigate to={home} replace />} />
-          <Route path="/patients" element={<PatientsPage />} />
-          <Route path="/queue" element={<QueuePage />} />
-          <Route path="/appointments" element={<AppointmentsPage />} />
-          <Route path="/consultation/:uuid" element={<ConsultationPage />} />
-          <Route path="/billing" element={<BillingPage />} />
-          <Route path="/finance" element={<FinancePage />} />
-          <Route path="/claims" element={<ClaimsPage />} />
-          <Route path="/diagnostics" element={<DiagnosticsPage />} />
-          <Route path="/blood" element={<BloodPage />} />
-          <Route path="/referrals" element={<ReferralsPage />} />
-          <Route path="/portal" element={<PortalPage />} />
-          <Route path="/emergency" element={<EmergencyPage />} />
-          <Route path="/wards" element={<WardsPage />} />
-          <Route path="/nurse-workspace" element={<NurseWorkspacePage />} />
-          <Route path="/theatre" element={<TheatrePage />} />
-          <Route path="/icu" element={<IcuPage />} />
-          <Route path="/pharmacy" element={<PharmacyPage />} />
-          <Route path="/counter" element={<CounterPage />} />
-          <Route path="/procurement" element={<ProcurementPage />} />
-          <Route path="/self-service" element={<SelfServicePage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/services" element={<ServicesPage />} />
-          <Route path="/configuration" element={<ConfigurationPage />} />
-          <Route path="/import" element={<DataImportPage />} />
-          <Route path="/workspace" element={<WorkspacePage />} />
-          <Route path="/people" element={<PeoplePage />} />
-          <Route path="/staff" element={<StaffPage />} />
-          {/* Reached from the account menu rather than the sidebar: it is
-              about you, not about the work. */}
-          <Route path="/account" element={<AccountPage />} />
-          <Route path="/time" element={<TimePage />} />
-          <Route path="/payroll" element={<PayrollPage />} />
-          <Route path="/facilities" element={<FacilitiesPage />} />
-          <Route path="/capacity" element={<CapacityPage />} />
-          <Route path="/facility-requests" element={<FacilityRequestsPage />} />
-          <Route path="/platform" element={<PlatformPage />} />
-          <Route path="*" element={<Navigate to={home} replace />} />
-        </Routes>
-        </Suspense>
-      </main>
+          {data?.tenant_error && !isPlatformOnly && (
+            <Alert variant="warning" className="mb-6">
+              <AlertTitle>This organization is not ready yet</AlertTitle>
+              <AlertDescription>{data.tenant_error.message}</AlertDescription>
+            </Alert>
+          )}
+
+          {organization?.is_read_only && (
+            <Alert variant="warning" className="mb-6">
+              <AlertTitle>Read-only</AlertTitle>
+              <AlertDescription>
+                This organization is {organization.status}. Records can be viewed
+                but not changed.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/*
+            A progress bar at the top of the window rather than a centred
+            spinner. The spinner pushed the whole page down while a chunk
+            downloaded and let it snap back on arrival, which on a slow
+            connection looked like the page loading twice.
+          */}
+          <Suspense fallback={<RouteProgress />}>
+            <Routes>
+              <Route path="/" element={<Navigate to={home} replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/patients" element={<PatientsPage />} />
+              {/* One patient, on one page. Reached from the patient list, the
+                  command palette and every worklist row. */}
+              <Route path="/patients/:uuid" element={<PatientRecordPage />} />
+              <Route path="/queue" element={<QueuePage />} />
+              <Route path="/appointments" element={<AppointmentsPage />} />
+              <Route path="/consultation/:uuid" element={<ConsultationPage />} />
+              <Route path="/billing" element={<BillingPage />} />
+              <Route path="/finance" element={<FinancePage />} />
+              <Route path="/claims" element={<ClaimsPage />} />
+              <Route path="/diagnostics" element={<DiagnosticsPage />} />
+              <Route path="/blood" element={<BloodPage />} />
+              <Route path="/referrals" element={<ReferralsPage />} />
+              <Route path="/portal" element={<PortalPage />} />
+              <Route path="/emergency" element={<EmergencyPage />} />
+              <Route path="/wards" element={<WardsPage />} />
+              <Route path="/nurse-workspace" element={<NurseWorkspacePage />} />
+              <Route path="/theatre" element={<TheatrePage />} />
+              <Route path="/icu" element={<IcuPage />} />
+              <Route path="/pharmacy" element={<PharmacyPage />} />
+              <Route path="/counter" element={<CounterPage />} />
+              <Route path="/procurement" element={<ProcurementPage />} />
+              <Route path="/self-service" element={<SelfServicePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/services" element={<ServicesPage />} />
+              <Route path="/configuration" element={<ConfigurationPage />} />
+              <Route path="/import" element={<DataImportPage />} />
+              <Route path="/workspace" element={<WorkspacePage />} />
+              <Route path="/people" element={<PeoplePage />} />
+              <Route path="/staff" element={<StaffPage />} />
+              <Route path="/access" element={<AccessPage />} />
+              {/* The administrative hub, reached from the avatar. */}
+              <Route path="/settings" element={<SettingsPage />} />
+              {/* Reached from the account menu rather than the sidebar: it is
+                  about you, not about the work. */}
+              <Route path="/account" element={<AccountPage />} />
+              <Route path="/time" element={<TimePage />} />
+              <Route path="/payroll" element={<PayrollPage />} />
+              <Route path="/facilities" element={<FacilitiesPage />} />
+              <Route path="/capacity" element={<CapacityPage />} />
+              <Route path="/facility-requests" element={<FacilityRequestsPage />} />
+              <Route path="/platform" element={<PlatformPage />} />
+              {/* The design system, rendered. Not in the sidebar: it is for
+                  whoever is building the product, and the route is the door. */}
+              <Route path="/design" element={<KitchenPage />} />
+              <Route path="*" element={<Navigate to={home} replace />} />
+            </Routes>
+          </Suspense>
+        </main>
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        groups={paletteGroups}
+        actions={actions}
+        canSearchRecords={!isPlatformOnly}
+      />
     </div>
   );
 }

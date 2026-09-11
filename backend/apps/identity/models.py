@@ -65,8 +65,21 @@ class User(AbstractBaseUser, PermissionsMixin, UUIDModel, TimeStampedModel):
     support_access_enabled = models.BooleanField(default=False)
     support_access_expires_at = models.DateTimeField(null=True, blank=True)
 
+    #: Second factor. Both fields existed from the first migration and nothing
+    #: read either, so "MFA" on this account was a checkbox in the admin. See
+    #: `apps/identity/mfa.py`.
     mfa_enabled = models.BooleanField(default=False)
-    mfa_secret = models.CharField(max_length=64, blank=True)
+    #: The TOTP secret, **encrypted** (Fernet). Widened from 64 characters,
+    #: which fitted the bare secret and not its ciphertext — and a bare secret
+    #: in a backup is a way to sign in as the person.
+    mfa_secret = models.CharField(max_length=255, blank=True)
+    mfa_enabled_at = models.DateTimeField(null=True, blank=True)
+    #: The last 30-second step a code was accepted for. A code is valid for a
+    #: minute or so; without this, one read over a shoulder could be used again
+    #: inside that window.
+    mfa_last_step = models.BigIntegerField(null=True, blank=True)
+    #: One-time recovery codes, as password hashes. Used ones are removed.
+    mfa_recovery_codes = models.JSONField(default=list, blank=True)
     password_changed_at = models.DateTimeField(null=True, blank=True)
     must_change_password = models.BooleanField(default=False)
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)

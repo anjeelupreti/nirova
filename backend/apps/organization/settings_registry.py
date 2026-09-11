@@ -150,6 +150,28 @@ SETTINGS = [
             "see everybody."
         ),
     ),
+    Setting(
+        namespace="security",
+        key="require_mfa",
+        label="Require two-step sign-in for everyone",
+        description=(
+            "When on, every member signs in with a code from their phone as "
+            "well as their password. Anybody who has not set it up is taken "
+            "straight to setting it up, and can do nothing else until they "
+            "have."
+        ),
+        kind="boolean",
+        default=False,
+        # Organization-wide: an account signs in once for every facility it
+        # works at, so there is nowhere per-facility for this to live.
+        per_facility=False,
+        caution=(
+            "Everybody without it set up — including you, if you have not — "
+            "will be asked to set it up the next time they use the system. "
+            "Make sure staff have a phone they can use for it, and that an "
+            "administrator is on hand to reset it for anyone who loses theirs."
+        ),
+    ),
 ]
 
 BY_CODE = {setting.code: setting for setting in SETTINGS}

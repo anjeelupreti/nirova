@@ -30,6 +30,7 @@ import {
   Label,
   Select,
 } from "@/components/ui/primitives";
+import { TwoStepSignIn } from "@/components/account/TwoStepSignIn";
 import { Avatar } from "@/components/ui/data";
 import { CardSkeleton } from "@/components/ui/feedback";
 import { Page, PageHeader, Section } from "@/components/ui/layout";
@@ -146,6 +147,7 @@ export default function AccountPage() {
         <div className="space-y-6">
           <Details me={me} onSaved={setMe} />
           <Password me={me} onChanged={load} />
+          <TwoStepSignIn />
         </div>
         <PreferencePanel catalogue={me.preference_catalogue} />
       </div>
@@ -267,7 +269,7 @@ function Details({ me, onSaved }: { me: Me; onSaved: (me: Me) => void }) {
           Save changes
         </Button>
         {saved && (
-          <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 animate-in fade-in-0">
+          <span className="flex items-center gap-1.5 text-sm text-good animate-in fade-in-0">
             <Check className="h-4 w-4" />
             Saved
           </span>

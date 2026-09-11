@@ -50,6 +50,8 @@ import {
 } from "@/components/ui/primitives";
 import { useSession } from "@/hooks/useSession";
 import api, { ApiError } from "@/lib/api";
+import { TemporaryPassword } from "@/components/access/TemporaryPassword";
+import { ResetSecondFactor } from "@/components/access/ResetSecondFactor";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/layout";
 
@@ -82,6 +84,8 @@ interface StaffMember {
   invited_at: string | null;
   joined_at: string | null;
   last_active_at: string | null;
+  /** Whether they sign in with a second factor. */
+  mfa_enabled?: boolean;
   roles: AssignedRole[];
 }
 
@@ -459,6 +463,17 @@ function MemberPanel({
       onClose={onClose}
       footer={
         mayDeactivate && !member.is_organization_owner ? (
+          <div className="flex w-full flex-wrap items-start justify-between gap-2">
+          {member.status === "active" && (
+            <TemporaryPassword uuid={member.uuid} name={member.full_name} />
+          )}
+          {member.status === "active" && member.mfa_enabled && (
+            <ResetSecondFactor
+              uuid={member.uuid}
+              name={member.full_name}
+              onDone={() => void onChanged(member.uuid)}
+            />
+          )}
           <Button
             variant={member.status === "active" ? "destructive" : "default"}
             disabled={busy}
@@ -485,6 +500,7 @@ function MemberPanel({
               </>
             )}
           </Button>
+          </div>
         ) : null
       }
     >

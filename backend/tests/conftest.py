@@ -9,6 +9,32 @@ mocks the database away.
 
 import pytest
 
+from tests.run_record import record_finish, record_start
+
+
+# -- the run record ---------------------------------------------------------------
+#
+# **A run that was killed looked exactly like a run that passed.** On
+# 12 September the process running this suite was ended part-way, several times,
+# by the environment it ran in: the log stopped mid-line after the 55th test,
+# nothing printed a summary, and the launcher reported exit code 0. Anybody
+# reading "exit 0" — a person, a script, an AI assistant — would have called a
+# suite that ran 40% of its tests green.
+#
+# So every run writes a record the moment it starts, saying it is incomplete,
+# and overwrites it only when pytest itself finishes. A run that is killed
+# cannot write its ending, so it is left saying "incomplete" — and
+# `scripts/test_status.py` reads that as a failure. What decides whether the
+# suite passed is no longer how the process ended but whether pytest said so.
+
+
+def pytest_sessionstart(session):
+    record_start(session)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    record_finish(session, exitstatus)
+
 
 @pytest.fixture(scope="session")
 def django_db_setup():

@@ -568,7 +568,7 @@ def result_visibility(order) -> dict:
             "reason": "Not yet released by the laboratory.",
         }
 
-    rows = list(order.results.all()) if hasattr(order, "results") else []
+    rows = _current_results(order)
     critical = any(getattr(row, "is_critical", False) for row in rows)
     abnormal = any(getattr(row, "is_abnormal", False) for row in rows)
 
@@ -596,6 +596,28 @@ def result_visibility(order) -> dict:
     }
 
 
+#: How an abnormal flag reads on the patient's document.
+FLAG_WORDS = {
+    "low": "LOW", "high": "HIGH", "critical_low": "CRITICAL LOW",
+    "critical_high": "CRITICAL HIGH", "abnormal": "ABNORMAL",
+}
+
+
+def _current_results(order) -> list:
+    """The results as they stand: amended values replaced, not listed twice.
+
+    **The portal read three fields the result model does not have** —
+    `value`, `reference_range`, `name` — through `getattr` with a default,
+    so nothing failed and every released result reached the patient with a
+    blank value, and the downloadable copy printed "Normal" as the range for
+    every analyte. It also showed superseded rows, so a corrected potassium
+    appeared beside the wrong one it corrected. The staff side has always
+    read `display_value`, `reference_text` and the current rows; so now does
+    this. Filtered in Python because callers prefetch `results`.
+    """
+    return [row for row in order.results.all() if not row.is_superseded]
+
+
 def results_for(patient, include_held: bool = True) -> list:
     """The patient's diagnostic orders, with what may be shown of each."""
     orders = patient.diagnostic_orders.prefetch_related("results").order_by(
@@ -619,23 +641,33 @@ def results_for(patient, include_held: bool = True) -> list:
             "available_at": visibility.get("available_at"),
             "results": [
                 {
-                    "analyte": getattr(row, "analyte_name", "")
-                    or getattr(row, "name", ""),
-                    "value": getattr(row, "value", ""),
-                    "unit": getattr(row, "unit", ""),
-                    "reference_range": getattr(row, "reference_range", ""),
-                    "abnormal": getattr(row, "is_abnormal", False),
+                    "analyte": row.analyte_name,
+                    "value": row.display_value,
+                    "unit": row.unit,
+                    "reference_range": row.reference_text,
+                    "abnormal": row.is_abnormal,
+                    "flag": row.flag,
                 }
-                for row in order.results.all()
+                for row in _current_results(order)
             ] if visibility["visible"] else [],
         })
     return rows
 
 
 def appointments_for(patient, upcoming_only: bool = False) -> list:
-    rows = list(patient.appointments.order_by("-scheduled_for")[:60])
+    from apps.scheduling.models import OCCUPIES_SLOT
+
+    now = timezone.now()
+    rows = list(patient.appointments.select_related("facility").order_by("-scheduled_for")[:60])
+
+    def upcoming(row) -> bool:
+        # Still in the diary as well as in the future. Counting by date alone
+        # put a visit the patient had cancelled under "Up next" on the home
+        # screen.
+        return row.scheduled_for >= now and row.status in OCCUPIES_SLOT
+
     if upcoming_only:
-        rows = [row for row in rows if row.scheduled_for >= timezone.now()]
+        rows = [row for row in rows if upcoming(row)]
     return [
         {
             "reference": row.reference,
@@ -645,10 +677,180 @@ def appointments_for(patient, upcoming_only: bool = False) -> list:
             "provider": row.provider_name,
             "facility": row.facility.name if row.facility_id else "",
             "reason": row.reason,
-            "upcoming": row.scheduled_for >= timezone.now(),
+            "upcoming": upcoming(row),
+            "can_cancel": upcoming(row) and row.scheduled_for - now >= CANCEL_NOTICE,
         }
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# Booking from the portal
+# ---------------------------------------------------------------------------
+
+#: How far ahead the portal offers slots. A fortnight is how far a Nepali
+#: OPD's diary is realistically planned; beyond it, rosters change.
+BOOKING_HORIZON_DAYS = 14
+
+#: The soonest a slot can be booked online. Somebody booking a slot that
+#: starts in five minutes from a bus in Banepa will not be in it.
+BOOKING_LEAD = timedelta(minutes=30)
+
+#: How many online bookings one patient may hold at once. Without a ceiling,
+#: one account can fill a doctor's week from a phone — the thing
+#: `walk_in_reserve` protects the door from, done from home instead.
+MAX_ONLINE_BOOKINGS = 3
+
+#: A cancellation this close to the slot is a phone call, not a tap: the slot
+#: cannot be offered to anybody else in time, and the desk should know.
+CANCEL_NOTICE = timedelta(hours=2)
+
+
+def _online_schedules():
+    from apps.scheduling.models import ProviderSchedule
+
+    return (
+        ProviderSchedule.objects.filter(
+            is_active=True, is_accepting_online=True, facility__status="active",
+        )
+        .select_related("facility", "department")
+        .order_by("provider_name", "start_time")
+    )
+
+
+def booking_options(patient, on_date=None) -> dict:
+    """What can be booked: the next fortnight at a glance, and one day's slots.
+
+    Every slot comes from `available_slots(for_online=True)`, which holds back
+    the walk-in reserve — the portal can never book a session so full that a
+    patient who travelled in has nowhere to go.
+    """
+    from apps.scheduling.services import available_slots
+
+    today = timezone.localdate()
+    earliest = timezone.now() + BOOKING_LEAD
+    schedules = list(_online_schedules())
+
+    def open_slots(schedule, day):
+        return [slot for slot in available_slots(schedule, day, for_online=True) if slot >= earliest]
+
+    days = []
+    for offset in range(BOOKING_HORIZON_DAYS):
+        day = today + timedelta(days=offset)
+        count = sum(len(open_slots(schedule, day)) for schedule in schedules)
+        days.append({"date": day, "open": count})
+
+    chosen = on_date or next((row["date"] for row in days if row["open"]), today)
+    clinicians = []
+    for schedule in schedules:
+        slots = open_slots(schedule, chosen)
+        if not slots:
+            continue
+        clinicians.append({
+            "schedule": str(schedule.uuid),
+            "provider": schedule.provider_name,
+            "speciality": schedule.provider_speciality,
+            "department": schedule.department.name if schedule.department_id else "",
+            "facility": schedule.facility.name,
+            "room": schedule.room,
+            "fee": schedule.consultation_fee,
+            "minutes": schedule.slot_minutes,
+            "slots": slots,
+        })
+
+    held = _online_bookings(patient)
+    return {
+        "date": chosen,
+        "days": days,
+        "clinicians": clinicians,
+        "held": held,
+        "limit": MAX_ONLINE_BOOKINGS,
+    }
+
+
+def _online_bookings(patient) -> int:
+    from apps.scheduling.models import OCCUPIES_SLOT, Appointment, AppointmentSource
+
+    return Appointment.objects.filter(
+        patient=patient, source=AppointmentSource.ONLINE,
+        scheduled_for__gte=timezone.now(), status__in=list(OCCUPIES_SLOT),
+    ).count()
+
+
+def book_online(organization, account, patient, schedule_uuid, when, reason: str = ""):
+    """A patient books their own slot.
+
+    The service it calls re-checks capacity under the transaction, so two
+    patients tapping the same slot cannot both have it. What is checked here
+    is what only the portal knows: that the slot was really on offer online
+    (not in the walk-in reserve, not too soon), that this account may book for
+    this record, and that it is not already holding its share of the diary.
+    """
+    from django.utils.dateparse import parse_datetime
+
+    from apps.scheduling.models import AppointmentSource, ProviderSchedule
+    from apps.scheduling.services import available_slots, book_appointment
+
+    if not access_for(account, patient)["can_book_appointments"]:
+        raise PortalError("This account may not book appointments for that record.",
+                          code="not_permitted")
+
+    schedule = ProviderSchedule.objects.filter(
+        uuid=schedule_uuid, is_active=True, is_accepting_online=True,
+    ).select_related("facility").first()
+    if schedule is None:
+        raise PortalError("That clinic is not taking online bookings.", code="not_bookable")
+
+    moment = parse_datetime(str(when)) if when else None
+    if moment is None:
+        raise PortalError("Choose a time.", code="invalid")
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment)
+
+    offered = [
+        slot for slot in available_slots(schedule, timezone.localtime(moment).date(), for_online=True)
+        if slot >= timezone.now() + BOOKING_LEAD
+    ]
+    if moment not in offered:
+        raise PortalError(
+            "That time is no longer available. Please choose another.",
+            code="slot_unavailable",
+        )
+
+    if _online_bookings(patient) >= MAX_ONLINE_BOOKINGS:
+        raise PortalError(
+            f"You already have {MAX_ONLINE_BOOKINGS} visits booked online. "
+            "Please attend or cancel one before booking another.",
+            code="booking_limit",
+        )
+
+    return book_appointment(
+        organization, patient, schedule.facility,
+        scheduled_for=moment, schedule=schedule,
+        reason=(reason or "").strip()[:255],
+        source=AppointmentSource.ONLINE,
+    )
+
+
+def cancel_online(account, patient, reference: str, reason: str = ""):
+    """A patient cancels their own visit, with enough notice to re-offer it."""
+    from apps.scheduling.models import OCCUPIES_SLOT
+    from apps.scheduling.services import cancel_appointment
+
+    access_for(account, patient)
+    appointment = patient.appointments.filter(reference=reference).first()
+    if appointment is None or appointment.status not in OCCUPIES_SLOT:
+        raise PortalError("That visit cannot be cancelled here.", code="not_cancellable")
+    if appointment.scheduled_for - timezone.now() < CANCEL_NOTICE:
+        raise PortalError(
+            "It is too close to the time to cancel here. Please ring the hospital "
+            "so the slot can be given to someone else.",
+            code="too_late",
+        )
+    return cancel_appointment(
+        appointment, actor=None,
+        reason=f"Cancelled by the patient in the app. {reason}".strip(),
+    )
 
 
 def invoices_for(patient) -> dict:
@@ -689,6 +891,24 @@ def invoices_for(patient) -> dict:
     }
 
 
+def _plain_directions(line) -> str:
+    """How to take it, in words a patient reads — never the chart's Latin.
+
+    The portal showed "1 capsule TDS" and "1 tablet PRN". `Frequency` has
+    carried plain labels all along, with a docstring saying they exist for
+    exactly this app; nothing here used them.
+    """
+    try:
+        how_often = line.get_frequency_display()
+    except AttributeError:
+        how_often = line.frequency
+    how_often = (how_often or "").lower()
+    if line.is_prn and line.prn_indication:
+        how_often = f"{how_often} for {line.prn_indication}".strip()
+    words = ", ".join(part for part in (line.dose, how_often) if part)
+    return words or line.instructions
+
+
 def prescriptions_for(patient) -> list:
     rows = patient.prescriptions.prefetch_related("lines").order_by(
         "-created_at"
@@ -705,6 +925,8 @@ def prescriptions_for(patient) -> list:
                     "brand": getattr(line, "brand_name", ""),
                     "dose": line.dose,
                     "frequency": line.frequency,
+                    "directions": _plain_directions(line),
+                    "prn_indication": line.prn_indication if line.is_prn else "",
                     "duration_days": line.duration_days,
                     "instructions": getattr(line, "instructions", ""),
                 }
@@ -737,6 +959,20 @@ def referrals_for(patient) -> list:
     ]
 
 
+def _hospital_contact() -> dict:
+    """Who to ring: the hospital's name and number, for the emergency line on
+    every screen. The main hospital if there is one, else the first site."""
+    from apps.organization.models import Facility
+
+    site = (
+        Facility.objects.filter(status="active", facility_type="hospital").first()
+        or Facility.objects.filter(status="active").first()
+    )
+    if site is None:
+        return {"name": "", "phone": ""}
+    return {"name": site.name, "phone": site.phone}
+
+
 def home(account: PortalAccount, patient=None) -> dict:
     """What the portal shows first.
 
@@ -755,9 +991,48 @@ def home(account: PortalAccount, patient=None) -> dict:
         "outstanding": 0, "invoices": [],
     }
 
+    # **The home screen was a menu.** Eight tiles, the same for every patient,
+    # and the only facts on it were counts. What a patient opens the app to
+    # learn — when am I next seen, is my result back and is it all right, what
+    # am I meant to be taking — each took a tap into a list. These answer
+    # them on arrival, each behind the same grant as its own screen: a proxy
+    # who may not see results sees neither the latest result nor the
+    # medicines here either.
+    visible = [row for row in results if row["visible"]]
+    latest = visible[0] if visible else None
+    medicines = []
+    if permissions["can_see_results"]:
+        current = patient.prescriptions.filter(status="active").prefetch_related("lines").order_by("-created_at")[:3]
+        for prescription in current:
+            for line in prescription.lines.all():
+                if getattr(line, "status", "active") != "active":
+                    continue
+                medicines.append({
+                    "drug": line.generic_name,
+                    "brand": line.brand_name,
+                    "how": _plain_directions(line),
+                    "until": line.end_date,
+                    "dose": line.dose,
+                    "frequency": line.frequency,
+                    "prn_for": line.prn_indication if line.is_prn else "",
+                })
+    hospital = _hospital_contact()
+
     return {
         "patient": patient.full_name,
+        "first_name": patient.first_name,
         "mrn": patient.mrn,
+        "age": patient.age_years,
+        "gender": patient.gender,
+        "blood_group": patient.blood_group,
+        "hospital": hospital,
+        "latest_result": {
+            "reference": latest["reference"],
+            "test": latest["test"],
+            "ordered_at": latest["ordered_at"],
+            "abnormal": any(row["abnormal"] for row in latest["results"]),
+        } if latest else None,
+        "medicines": medicines[:6],
         "via_proxy": permissions["via_proxy"],
         "relationship": permissions["relationship"],
         "next_appointment": upcoming[-1] if upcoming else None,
@@ -1196,16 +1471,20 @@ def generate_patient_document(
         )
 
         rows_html = ""
-        for r in order.results.all():
+        for r in _current_results(order):
             abnormal_badge = (
-                '<span style="color: #dc2626; font-weight: 700;">[HIGH/ABNORMAL]</span>'
-                if getattr(r, "is_abnormal", False)
+                '<span style="color: #dc2626; font-weight: 700;">'
+                f'{_esc(FLAG_WORDS.get(r.flag, "ABNORMAL"))}</span>'
+                if r.is_abnormal
                 else ""
             )
-            name = _esc(getattr(r, "analyte_name", "") or getattr(r, "name", "Analyte"))
-            val = _esc(getattr(r, "value", ""))
-            unit = _esc(getattr(r, "unit", ""))
-            ref_range = _esc(getattr(r, "reference_range", "") or "Normal")
+            name = _esc(r.analyte_name)
+            val = _esc(r.display_value)
+            unit = _esc(r.unit)
+            # Never "Normal" when no range is recorded: that printed a
+            # reassurance on the patient's copy of every result, abnormal ones
+            # included, because the field it read did not exist.
+            ref_range = _esc(r.reference_text or "—")
             rows_html += f"""
             <tr>
                 <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">{name}</td>

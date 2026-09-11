@@ -93,8 +93,20 @@ jobs:
       # Runs every seed twice and the invariants from the development log.
       # Six defects were found by running the seeds a second time by hand;
       # this is that, automated.
+      # Through the runner, whose verdict comes from the record pytest writes
+      # when it finishes rather than from the process's exit code: a run that
+      # is killed part-way exits "successfully" often enough to matter, and
+      # then reads as INCOMPLETE here instead of green. See
+      # backend/tests/run_record.py.
       - name: Tests
-        run: python -m pytest -q
+        run: python scripts/run_tests.py -q
+
+      - name: Test record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-run-record
+          path: backend/.test-results/
 
   frontend:
     runs-on: ubuntu-latest

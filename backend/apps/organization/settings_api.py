@@ -132,6 +132,17 @@ class SettingsView(APIView):
         except ValueError as exc:
             raise DomainError(str(exc)) from exc
 
+        # Requiring two-step sign-in is refused to somebody who has not set it
+        # up themselves: they would be the first person locked to the
+        # enrolment screen, and an organization where the rule was turned on
+        # by nobody who can use it has nobody enrolled to help the rest.
+        if setting.code == "security.require_mfa" and value and not request.user.mfa_enabled:
+            raise DomainError(
+                "Set up your own two-step sign-in first (My account), then turn "
+                "this on for everyone.",
+                code="enrol_first",
+            )
+
         before = config_value(
             setting.namespace, setting.key, default=setting.default,
             facility=facility,
@@ -142,6 +153,10 @@ class SettingsView(APIView):
             facility=facility,
             description=setting.label,
         )
+        if setting.namespace == "security":
+            from apps.identity.authentication import forget_policy
+
+            forget_policy(request.organization.slug)
 
         # Recorded as a change with both sides. "Somebody turned privacy on"
         # is not enough a year later; "it was off and became on, on this date,
@@ -200,6 +215,10 @@ class SettingsView(APIView):
         from apps.organization.locale import clear_cache
 
         clear_cache()
+        if setting.namespace == "security":
+            from apps.identity.authentication import forget_policy
+
+            forget_policy(request.organization.slug)
 
         record(
             AuditAction.DELETE,

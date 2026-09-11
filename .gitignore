@@ -25,3 +25,6 @@ Thumbs.db
 media/
 staticfiles/
 *.log
+
+# Test run records (backend/tests/run_record.py)
+.test-results/
