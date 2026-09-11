@@ -17,21 +17,31 @@ line here, it is not scoped.**
 
 | | Sections | Feature lines |
 |---|---|---|
-| Built `[x]` | 22 | — |
+| Built `[x]` | 22 | 1,386 |
 | Built to depth 🔷 | 11 | — |
-| Partial `[~]` | 47 | — |
-| Not started `[ ]` | 43 | — |
-| **Done** | **33 of 132** | **1212** |
-| **Outstanding** | **99** | **647** |
+| Partial `[~]` | 51 | 3 |
+| Not started `[ ]` | 42 | 691 |
+| **Done** | **33 of 127** | **1,386 of 2,080** |
+| **Outstanding** | **94** | **691** |
 
-*Recounted from the file on 6 September 2026, after documents (§122), the
-report library (§105) and global search (§104) landed.*
+*Counted by script on 11 September 2026, after the console rebuild (§273) and
+the palette, navigation, role-editor and persona work that followed it (§274).*
+
+**The line count jumped from 1,212 to 2,057 and that is not progress, it is
+scope arriving.** The previous figure was a hand count taken on 6 September;
+the difference is partly the three new sections and partly that a hand count
+of two thousand checkboxes is not a count. It is a script now
+(`^- \[x\]` and its siblings), so the next recount is comparable to this one.
+
+The section total moved from 132 to **127** for a duller reason: 132 is the
+specification's numbering, and this file groups some of it — `§108–§113 Domain
+analytics` is one heading covering six. Nothing was dropped.
 
 Counted by feature rather than by section, because "Hospital OS" as a single
 line hid that it is forty distinct capabilities. The section-level view
 flattered the position; this one does not.
 
-647 understates the remaining work: in the later phases some lines group
+693 understates the remaining work: in the later phases some lines group
 several features on one row (`Cath lab · dialysis · oncology …`). Those get
 expanded when the phase is picked up, not before — writing sixty speculative
 lines for a module nobody has scoped yet is planning theatre.
@@ -494,7 +504,118 @@ is **like**. Raised on 7 September 2026 after a walk through the console, and
 tracked here so it competes for attention with the rest rather than being done
 when somebody happens to notice.*
 
+*Extended on 11 September 2026 (log 273) after a second walk that concluded the
+console was not pitchable. The lines below the design-system heading did not
+exist before that: the theme, the type, the colour semantics and the loading
+states were not tracked anywhere, so they were nobody's work.*
+
+**Design system**
+- [x] **Three-tier tokens** — `styles/tokens/{primitive,semantic,component}.css`.
+      The shadcn contract is kept name-for-name, so all 44 screens and every
+      existing utility class kept working and only the values moved
+- [x] Warm neutrals (hue 40–60) replacing shadcn's blue-tinted slate, so the
+      two themes stop being two different designs
+- [x] The console's dark background moved off pure black to `#0A0A0A`. This
+      *reverses* part of §267 deliberately: the OLED argument is right for a
+      phone at a bedside and wrong for an LCD under strip lights, where pure
+      black behind light text haloes. The patient application keeps true black
+- [x] **Clinical colour semantics** — acuity 1–5, good/warning/serious/critical/
+      info each as ink + tint + ink-on-tint, plus recessive chart chrome
+- [x] `StatusBadge` / `StatusDot` / `AcuityBadge` / `TrendBadge` / `Freshness`,
+      with every status string this product emits mapped to a tone in one
+      table, and an unknown status resolving to neutral rather than to a guess
+- [x] Typography: Geist and Geist Mono, self-hosted (a hospital network that
+      blocks a font CDN would otherwise silently fall back), a named type
+      scale, and **tabular figures by default** — 25 of 44 screens had
+      remembered `tabular-nums` and 19 had not
+- [x] Elevation, radius and focus as scales rather than per-component choices.
+      In dark mode elevation is lightness, not shadow
+- [x] A real mark, replacing the lucide `Activity` glyph that had been the
+      product's identity for nine months
+- [x] **325 raw Tailwind colour utilities → zero**, across 29 files, by codemod
+      rather than by hand: 29 files, several over 2,000 lines, is how you
+      introduce a different defect in each. The mapping keyed hue family to
+      domain state, with the *step* deciding ink-on-tint from ink-on-page —
+      collapsing `text-red-200` and `text-red-700` to one token makes one of
+      them invisible. The 48 `dark:` variants were **deleted**, not translated:
+      `text-warning` is already right in both modes, and keeping the pair
+      re-introduces the split. Two decorative gradients it refused to guess at
+      were done by hand. The ratchet now sits at 0 (§274)
+- [x] **Five selectable palettes**, each computed and contrast-validated rather
+      than chosen — 65 assertions across the five, in both modes. The verdict
+      on the first one was "boring and dim", and it was: a 45%-luminance accent,
+      pure grey chrome, and no second colour anywhere. The fix that mattered is
+      that a fill now carries **dark ink where it can**, instead of every button
+      being darkened until white text fits — which is what made the teal deep
+      and lifeless. `#007865` → `#10B7A0` (§274)
+- [x] Neutrals tinted with the brand hue at 5–13% — below the point at which
+      anybody would name the colour, above the point at which the interface
+      looks like a wireframe
+- [x] `--hero` / `--hero-2` / `--hero-foreground`: a deep brand surface for the
+      one banner at the top of a portal. Replaces hand-rolled literal gradients
+      that ignored the palette and had no dark form
+- [ ] An organization's own accent. `Organization.primary_color` has been on
+      the model and in the frontend's type all along, read by nothing
+- [x] `/design` renders every token, state and chart form on one scroll.
+      Every dark-mode defect above existed because there was nowhere to see all
+      of it at once
+- [x] Every screen migrated onto the colour tokens
+- [ ] The remaining screens migrated onto `DataView`, `Tabs` and `<Can>`.
+      Colour is done; composition is not
+
+**Components that existed and were used by nothing**
+- [x] `@radix-ui/react-tabs` — installed since the first commit, zero imports,
+      while **17 screens hand-rolled their own tab strip** with no keyboard
+      support and no linkable tab. Now one `<Tabs>` with `?tab=` sync
+- [x] `SegmentedControl` — written, exported, zero usages. It is the view
+      switch in `DataView`
+- [ ] `Timeline` — written, exported, still zero usages. It is what
+      `/patients/:uuid` needs, and that screen does not exist yet
+- [x] `landing` preference — declared in `preferences.py`, offered on My
+      account, saved, **and read by nothing**. `resolveHome` reads it now
+- [x] `Organization.primary_color` — on the model and in the frontend's type
+      all along, rendered by nothing. The shell shows the customer's identity
+- [ ] `@radix-ui/react-dialog`, `-select`, `-progress`, `-label` — installed,
+      still reimplemented by hand in `primitives.tsx`
+
+**Loading, empty and failed**
+- [x] Five distinct waits, five treatments: nothing under 250ms (`Delayed`),
+      a skeleton on first load, `RouteProgress` for a chunk, `Refreshing` for a
+      refetch, an in-button spinner for an action
+- [x] **Once a screen has data it never goes back to a skeleton.** Somebody
+      reading row forty should still be looking at row forty
+- [x] A failed chart says so rather than rendering an empty axis. "0% occupancy
+      because the service failed" and "0% because the ward is empty" must not
+      look the same — this is the most dangerous defect a dashboard can have
+
 **Navigation**
+- [x] **The rail is its own surface.** Header, rail and content were all
+      `--background`, so the application had no frame and the links appeared to
+      float on the page — most of why the navigation "looked like a list of
+      things" despite being correctly grouped
+- [x] Collapsible groups, remembered per browser; pinned screens above the
+      groups; approval and unread counts on the rail
+- [x] A folded group still reports what is waiting inside it, because folding a
+      group must not hide an approval queue
+- [x] **Command palette (⌘K, Ctrl-K, `/`)** over records, screens and actions,
+      reusing the omnibox's stale-response guard
+- [x] The navigation moved to `components/shell/nav.ts` — three things consume
+      it now (rail, narrow strip, palette) and a second copy would be a rail
+      and a palette that disagree about what the product contains
+- [x] **The rail is the work; the avatar is the system** (§274). Everything
+      lived in the rail, so it carried forty entries including six things
+      somebody opens twice a year — Configuration, Change requests, Import
+      records, Plan and usage, Staff access, Roles — at the same weight as the
+      queue somebody opens forty times a day. Every mature product of this
+      shape splits the two the same way. The rail went 36 → 30
+- [x] A `/settings` hub, and the six behind the avatar menu
+- [x] They stay in the *model* rather than being deleted from it:
+      `SYSTEM_ITEMS` sits beside `NAV_GROUPS`, the rail renders one and the
+      command palette renders both. Deleting them would make "Configuration" a
+      screen you can only reach by remembering it is under an avatar
+- [ ] A facility switcher in the shell. The header switches *organizations*; a
+      three-hospital customer has no visible sense of which building they are
+      in. The dashboard has a per-board facility selector; the shell does not
 - [x] A screen nobody in this role can open is not in their sidebar. Each
       item's permission **and scope** are derived from the endpoints its screen
       calls, not guessed; a doctor went from sixteen items with eleven dead to
@@ -583,14 +704,422 @@ holiday, a ward or a tax slab, which is why they sat unguarded so long.*
       granted to roles all along, with nothing to spend them on (§227)
 - [ ] Units, the level below a department. Same shape: nested in the
       department serializer, no endpoint of their own
-- [ ] A shared `<RequiresPermission>` wrapper, so the check reads the same
-      everywhere and a screen that forgets it is visible in review
+- [x] A shared `<Can>` / `useCan` / `<RequirePermission>`, so the check reads
+      the same everywhere and a screen that forgets it is visible in review.
+      `mode="disable"` exists for the cases where a control's absence would
+      itself read as a missing feature — because hiding a control from somebody
+      who *is* permitted is worse than the honest 403 (§273)
+- [ ] The other 38 screens actually using it. The wrapper is not the work; the
+      deliberate pass over each screen's actions is
+
+## §133 Visualisation and dashboards `[~]`
+
+*A new section, added 11 September 2026 (log 273). Before it, the word
+"dashboard" appeared **once** in 3,300 lines of this file — as the platform
+executive dashboard — and "chart" only ever meant a patient's. So a product
+whose buyers are hospital directors had no line anywhere saying it should be
+able to show them anything.*
+
+**The chart layer**
+- [x] `components/charts/*` bound to the tokens, so no screen ever names a
+      colour and every chart re-themes without re-rendering
+- [x] Eight categorical hues **validated rather than chosen** — worst adjacent
+      CVD ΔE 10.1 light / 11.2 dark against a target of 8; normal-vision 21.8 /
+      19.2 against a floor of 15. Gold sits at slot 4 because red↔gold measured
+      6.0 under deuteranopia
+- [x] Assigned in fixed order and never cycled; a ninth series folds into
+      "Other" rather than generating a hue no CVD reader can separate
+- [x] Scatter, bubble and choropleth capped at three series — every pair is on
+      screen at once there, and only the first three clear the gates. Enforced
+      in the component rather than documented
+- [x] Sequential ramp for magnitude, diverging for polarity, status hues
+      reserved and never reused as a series
+- [x] Four states per chart: loading, empty, **failed**, data. A failed chart
+      that renders an empty axis is a claim that nothing happened
+- [x] A table view behind every chart, a hover layer by default, a legend for
+      two or more series and none for one, and an as-of time
+
+**The forms**
+- [x] Line, area, stacked area, bar, grouped, stacked, horizontal, emphasis
+- [x] Diverging bar, combo (one shared scale — **no dual axis anywhere**),
+      scatter and bubble
+- [x] Donut with the total in the hole, funnel with the drop between stages
+      labelled, treemap, stacked progress
+- [x] **Heatmap** — arrivals by day and hour, which answers "when to roster"
+      and no line chart can
+- [x] **Occupancy grid** — the ward drawn as beds. The most-requested view in
+      any hospital system and the one this product did not have
+- [x] **Gantt** — the theatre day: the gap where a case fits and the list that
+      is overrunning, both invisible in a table sorted by start time
+- [x] Calendar heatmap for seasonality; waterfall for how a balance moved;
+      dumbbell for before-and-after per item; population pyramid for case mix
+- [x] **Levey–Jennings** for laboratory QC — §34 has asked for this since the
+      beginning. Violations change shape as well as colour
+- [x] Sparkline, bullet, meter, stat tile and hero figure
+- [ ] Org chart visualisation (§60 lists it twice and it is built neither time)
+- [ ] Floor plan by room rather than by bay
+
+**The dashboards**
+- [x] `/dashboard` exists at all, and `/` resolves to it by preference, then by
+      role, then by permission. All seventeen roles previously landed on
+      `/patients`
+- [x] Every panel declares its permission, loads and fails on its own, and
+      **never renders a zero** when its source failed
+- [x] Facility overview: emergency load and acuity mix, inpatients and risk
+      mix, counter takings and margin, procurement pipeline, headcount and
+      expiring credentials — wired to `/ed/summary/`,
+      `/inpatient/nurse-workspace/summary/`, `/pos/summary/`,
+      `/procurement/dashboard/` and `/hr/dashboard/`, **all of which already
+      existed and were called by no screen**
+- [x] **Personas replaced the one-screen-with-gates design** (§274). The
+      dashboard above was a single screen whose panels disappeared by
+      permission, so a pharmacist and a medical director saw the same product
+      minus different pieces — subtraction, not personalisation, and a fair
+      reading of "the system itself is confused whom to show what"
+- [x] A persona is inferred from **capability, not role code**. Roles are
+      customer-editable now, so keying the interface to `nurse` would break
+      the moment somebody renamed it. Somebody who can chart observations and
+      administer medication *is* working as a nurse
+- [x] **Ward**, for a nurse: patients in **deterioration order, not bed
+      order** — a ward list sorted by bed number is a filing system, one
+      sorted by NEWS2 is a handover
+- [x] **Front desk**: the queue by longest wait, coloured past 45 and 90
+      minutes. The receptionist's whole job on a busy morning is noticing the
+      person who has been there ninety minutes before they come and say so
+- [x] **Clinic**, for a doctor: the list, straight into the consultation, with
+      the emergency acuity mix beside it
+- [x] **Dispensing** and **People**, on the same frame
+- [x] Distinct without being five products: the frame, palette, status colours
+      and rail stay constant; a persona shifts the hero, the accent (a
+      validated series slot, never a new hue) and the composition
+- [x] The inference is a default and not a law — overridable, remembered per
+      browser, because which board somebody wants this week is closer to a rail
+      fold than to a theme
+- [ ] Cash position, for a controller: receivables ageing, collections,
+      payables due, till status. The leadership board covers takings; the
+      ledger view is not built
+- [ ] Revenue cycle: claims by status, denial reasons, days in AR
+- [ ] Trend lines on the platform executive dashboard (§3) — MRR movement,
+      retention, cohorts. The waterfall exists; the data behind it does not
+- [ ] Widgets a person can add, remove and reorder, stored beside the other
+      preferences
+
+## §134 Roles and permissions, seen `[~]`
+
+*Also new, and the omission it records is the starker one: **§16 tracks the
+RBAC engine in forty lines and never once says a customer should be able to
+look at it.** The engine is one of this product's real differentiators and it
+was invisible in every client.*
+
+- [x] `/access` — roles with holder counts, what each carries grouped by
+      module, the scope ladder drawn, and the capabilities the engine has that
+      no screen yet exposes, stated rather than hidden
+- [x] **The permission matrix** — roles across, permissions down, read and
+      write distinguished by mark. The view a procurement security review asks
+      for; reading fifteen role definitions one at a time is not a review
+- [x] `beyond_your_authority` rendered. `RoleSerializer` has computed it since
+      it was written and nothing displayed it: "you cannot grant this" is a
+      dead end, "you cannot grant this because it carries `payroll.approve`"
+      tells somebody what to ask for
+- [x] **`role.read`, not `user.read`.** The first version of the nav entry
+      guessed the permission from what the screen *shows* — it lists people,
+      so `user.read` — rather than deriving it from the endpoint it *calls*.
+      `tests/test_nav.py` caught it on the first run: an operations manager
+      holds `user.read`, was shown the link, and got a 403 from
+      `/admin/roles/`. That guard was written for exactly this class of
+      mistake and it has now made it twice, which is the argument for the
+      guard rather than against the author
+- [x] **Role create, edit and retire.** `role.manage` — "Create and edit
+      roles" — had been in the catalogue and granted to seeded roles from the
+      beginning with **nothing to spend it on**; every role in every Nirova
+      database came from a seed (§274)
+- [x] An unknown permission code **fails closed and names the typo**. A
+      `JSONField` stores `patient.raed` happily, it resolves to nothing at
+      check time, and the role looks powerful in the editor and does nothing on
+      the ward
+- [x] Segregation of duties refused on save, and named **as it is ticked** —
+      a refusal after two minutes of work is a form people fight.
+      `check_segregation_of_duties` had been correct since it was written and
+      never once called from an API, because no API ever saved a role
+- [x] **A role cannot carry permissions its author does not hold.** Without it
+      `role.manage` is a privilege-escalation primitive. Tested as a user
+      holding only `role.read`, `role.manage` and `patient.read` — not as the
+      owner, who bypasses every check and would pass for the wrong reason
+- [x] A system role cannot be retired, and neither can one somebody holds. The
+      message says how many, because "revoke it from four people first" is
+      actionable and "could not delete" is not. Deactivated, never deleted
+- [x] `PATCH` merges before validating rather than `partial=True`, which
+      would let `{"name": "x"}` through with `permissions` defaulting to `[]`
+      and silently strip the role
+- [x] **A permission catalogue endpoint.** `grouped_permissions()` has
+      carried the docstring "for rendering the role editor" since the catalogue
+      was written and had no route, so the console grouped by parsing the
+      code's prefix — which gets `patient.clinical.read` into "Patients" by
+      luck and would get a new module wrong. The prefix parser survives as the
+      *fallback* for a failed request, because a broken catalogue should
+      degrade the grouping rather than empty the screen
+- [ ] `PermissionOverride` grants and denials, which are modelled, enforced,
+      and have no screen
+- [ ] Segregation-of-duty conflicts surfaced at edit time rather than on submit
+- [ ] Per-person activity trail. `apps/audit` records every read and no screen
+      shows one person's
+
+## §135 Profiles and records `[~]`
+
+*The third thing with no line anywhere. The first draft of this section claimed
+there was no profile for anybody; **that was wrong and is corrected here.**
+`People.tsx` does contain an employee profile — record, credentials, history and
+pay, with practice status — reached by clicking a row in the directory. What it
+is not is a **route**: it lives in component state, so it cannot be linked,
+bookmarked, opened in a second tab or returned to with the back button, and
+nothing outside that one screen can point at a person.*
+
+*The patient half of the claim stands: there is no patient record page at all.*
+
+- [x] An employee profile exists — record, credentials, history, pay, and
+      whether they may practise, from `/hr/employees/<code>/` and
+      `/practice-status/`. Rich, and reachable from exactly one place
+- [x] **A colleague can be linked to.** `?employee=CODE` rather than
+      component state, so the profile survives a back button, a bookmark, a
+      second tab and a link pasted into a message. A search parameter rather
+      than a `/people/:code` route on purpose: the profile needs the
+      directory's facility filter and tab around it to return to, and a
+      separate route would have to rebuild that context or drop somebody
+      somewhere generic on "back"
+- [ ] Roles held and at what scope, on that profile. `/admin/staff/<uuid>/`
+      returns them and the HR profile does not show them — so "what may this
+      person do" and "who is this person" are two screens
+- [ ] The same shape for a patient
+- [ ] `/patients/:uuid` as a record page with a `Timeline` — the component that
+      exists and is used nowhere
+- [ ] A shared `RecordPage` shell: header, identity block, tabs, right rail
+- [ ] Avatar upload (§59 has "photograph upload and storage" open)
+- [ ] Session listing and forced logout (§15), and login history per person
+
+## §136 Getting data out `[~]`
+
+*New on 11 September 2026 (§274). "Reports, excels, pdfs, billings, slips need
+to be worked upon" — and the honest position before this was that **every list
+in the product was a dead end**. A ward sister who needed the bed state for a
+handover, an accountant reconciling against a bank statement, an auditor asked
+for last quarter's dispensing: all had one option, which was to read the screen
+and retype it. A system you cannot get data out of is one people keep a
+spreadsheet beside, until the spreadsheet becomes the record.*
+
+- [x] **CSV and Excel from any list**, attached to `DataView` so a screen gains
+      it by adopting the component rather than by growing its own button.
+      Exports the **sorted, filtered** rows, not the whole set — an export that
+      silently returns everything while the screen shows a subset is the sort of
+      file somebody reconciles a bank statement against and cannot work out why
+      the totals differ
+- [x] **CSV injection closed.** A cell beginning `=`, `+`, `-` or `@` is
+      executed as a formula by Excel and Sheets, so a patient whose name was
+      entered as `=cmd|…` becomes remote code execution on the machine of
+      whoever opens the export. One apostrophe, stripped again on display
+- [x] **A byte-order mark on the Excel export.** Without it Excel reads the file
+      as the system codepage and every Devanagari name, every accented character
+      and the rupee sign arrive as mojibake — and users conclude the *system*
+      stored the name wrong
+- [x] Only columns with a `value` accessor are exported. A cell that renders an
+      avatar and a badge has no sensible CSV form, and stringifying the React
+      element puts "[object Object]" in a file somebody sends to an insurer
+- [x] **A print stylesheet**, which the product had none of — so every
+      prescription, invoice and payslip came out as a screenshot of the
+      application, navigation rail included, on a dark background
+- [x] Printing forces the light palette, keeps background fills — Chrome drops
+      them, which turns every status chip into invisible text — avoids splitting
+      a table row across a page break, and repeats table headers
+- [x] `printElement` prints **one element**, by stamping the document rather
+      than by opening a new window and re-styling it. The printed layout is the
+      same layout because it is the same element
+- [x] **No PDF library.** jsPDF and friends are 300–800 kB, cannot lay out a
+      table without being told every coordinate, and produce documents that look
+      nothing like the screen. The browser already has a typesetting engine that
+      writes PDF, so Print opens it and the operator chooses "Save as PDF" —
+      which is what every hospital system that prints anything actually does
+- [x] `PrintableDocument`: the frame every slip shares — issuer, reference,
+      identity block, signature lines, and **who printed it and when**. A
+      document with no provenance cannot be verified or challenged later, and in
+      a dispute that is the only question anybody asks
+- [x] The Nepali tax invoice on that frame — PAN, fiscal year beside the
+      number, per-line discount and VAT, payments, balance, credit-note label,
+      a draft warning — and it never computes a total the server did not (log 275)
+- [x] **The laboratory report**, printable **only once verified** — a report
+      printed between entry and verification is the document verification
+      exists to stop. Names who entered and who released; abnormal values
+      flagged H / L / CRITICAL in words, because monochrome printers drop
+      colour; critical values state who was told and how (log 275)
+- [x] **The prescription**, printed for the patient straight from signing —
+      in Nepal it is very often filled at an outside pharmacy, and signing had
+      ended with a notice on the doctor's screen and nothing in the patient's
+      hand. NMC registration, generic first, quantity to supply, substitution
+      per line, validity, and any overridden warning with its reason (log 276)
+- [x] **The counter receipt** at the roll's width, printed alone — it had
+      printed the whole screen. Seller's PAN and licence, batch and expiry per
+      line (how a recall reaches a customer), every tender with its wallet
+      reference, change, and the return terms (log 276)
+- [x] **The discharge summary**, after discharge only: diagnosis on admission
+      and final, the course and the wards it passed through, investigations
+      released during the stay, medicines to continue, advice, follow-up and
+      signatures. Sections the printer may not see say so rather than vanish
+      (log 276)
+- [ ] Scheduled and emailed reports
+- [ ] A real `.xlsx` with formatting and several sheets, for the finance
+      exports where a flat CSV genuinely is not enough
+
+## §137 A demonstration that is alive `[x]`
+
+*New on 11 September 2026 (log 275). Every dashboard read zero, and it was not
+the dashboards: the narrative seeds each told one story once, on the day they
+ran. A buyer shown "0 in department · NPR 0" concludes the product is empty.*
+
+- [x] **`seed_demo_population`** — a register of 160 people (children, the
+      elderly, stated ages, no phone), a 29-line formulary in batches through
+      the stock ledger (low stock, near expiry, cold chain, 13%-VAT lines), and
+      a fifty-bed inpatient estate in gendered bays with some beds out of
+      service for a stated reason. Topped up to a floor, never added to
+- [x] **`seed_demo_day`** — today, at the facilities where each thing happens:
+      emergency arrivals through the night and day, the outpatient queue, the
+      pharmacy counter, the wards (admissions, discharges through all five
+      clearances, housekeeping, a nursing round every four hours), and the
+      laboratory (orders through collection, receipt, results, verification)
+- [x] **It tops the day up rather than generating it.** Each run adds the
+      shortfall for a day this far along and moves every open case along its
+      own clock; twice in a row adds nothing. Every patient's story is seeded
+      from their own reference, so nine o'clock and eleven o'clock agree
+- [x] **Through the service layer only**, and it will not invent what the
+      product guards against: no "admitted" disposition without an admission,
+      nothing prescription-only across the counter
+- [x] **Kept current by Celery beat**, half-hourly — the project's first task —
+      and only when `NIROVA_DEMO_DAY_SLUG` is set, which only the demonstration
+      stack sets
+- [x] Both run in the seed order, and therefore twice in `test_seeds.py` — which
+      on its first run found a real defect: a return from a VAT-rated sale was
+      refused, because the credit note carried the shelf price without its VAT
+- [x] The demo nurse and doctor also hold roles at the hospital, through
+      `assign_role` — they had been rostered at the clinic alone, nowhere near
+      the wards and emergency department that are their day
+
+## §138 Signing in, signing up, and getting a first password `[~]`
+
+*New on 11 September 2026 (log 275). "The login and signup pages are still not
+satisfactory" — and there was no signup at all.*
+
+- [x] Sign-in answers every question asked on it: forgotten password (answered
+      honestly — the administrator issues one), "is it me or is it down?" (live
+      service status), "how do we start?" (register your hospital), "who sees
+      what I open?" (every access logged)
+- [x] The right-hand panel is the product at a legible size — the bed board, a
+      deteriorating patient, today's figures — using the real NEWS2 component,
+      and labelled illustrative
+- [x] **Registration** at `/signup`: three steps, organization type as cards,
+      suggested modules per type, and a page that says what happens next.
+      `POST /api/auth/register/` records a request and **never provisions** —
+      a database per anonymous form is a database per bot
+- [x] Rate-limited by address and by email, with a honeypot that tells a bot
+      it succeeded and stores nothing
+- [x] The platform team's queue under Platform → Registrations: contacted,
+      declined with a reason, or **onboarded** — the request's own answers
+      handed to `onboard_organization`, nobody retyping a hospital's name
+- [x] **An administrator can issue a temporary password.** Until now an
+      invited or onboarded person had an unusable password and no route to a
+      usable one — an organization could be onboarded and its owner could
+      never sign in. Behind `user.deactivate`; refused for yourself, for
+      platform staff, and for anybody who also belongs to another
+      organization, whose account this organization must not hold the keys to
+- [x] The temporary password is never written to the audit trail, and nothing
+      opens until the holder replaces it with one only they know
+- [x] **The API refuses everything but the way out** while
+      `must_change_password` is set — reading who you are, changing the
+      password, signing out. In the authenticator, because nearly every view
+      names its own permission classes and a default permission would have
+      reached almost nothing. Measured before: the patient list answered 200
+      (log 276)
+- [ ] Self-service password reset by email, for organizations that turn it on
+- [x] **Two-step sign-in** (log 277): standard TOTP tested against the RFC's
+      vectors, the secret encrypted at rest, codes single-use, ten hashed
+      recovery codes, a signed five-minute challenge between the steps, wrong
+      codes counted toward the same lockout, turning it off needs the password
+      and a code, and an administrator's audited reset for a lost phone
+- [x] **An organization-wide rule making it mandatory** (`security.require_mfa`,
+      log 278), enforced in the API — unenrolled members reach only enrolment —
+      refused to an administrator who has not enrolled, and shown in the
+      console as a setup screen rather than a wall of refusals
+
+## §139 The ward, rebuilt `[x]`
+
+*New on 11 September 2026 (log 275). "I don't even like the nurse workspace and
+the ward, so AI-generated looking."*
+
+- [x] `GET /api/ipd/board/` — the whole facility's bed board in one request,
+      with age, sex, night of stay, due-home, consultant, diagnosis and NEWS2
+- [x] **The access tiers hold on it**: diagnosis and NEWS2 only for
+      `patient.clinical.read`, and only for patients with a care relationship
+      where the organization requires one; a withheld value says it was
+      withheld. Tested, and the test proved by removing the gate
+- [x] The board: a strip of figures that are also filters, occupancy bars that
+      separate full from broken, tiles that answer "who do I see first" and
+      "whose bed frees up today", free beds that say what they can take,
+      out-of-service beds hatched with their reason
+- [x] The nurse's patient card, rebuilt: no monospace, no bracketed capitals,
+      no gradients or pulsing; NEWS2 with the response it obliges, the scoring
+      observation coloured in place, and **when the next observations are
+      due** from the RCP minimum frequency — the question a nurse carrying six
+      patients asks most, which was not on the screen
+- [x] Every age on the nurse workspace had read "Adult" — the server called a
+      method that did not exist, including for the children on the paediatric
+      ward
+- [x] "My patients" with nothing assigned falls back to the whole ward **and
+      says so**, instead of labelling forty-one patients "assigned to you"
+- [x] Opening a till: facilities offered only where a till can sell, the tills
+      already open shown, a free till name suggested, the drawer counted by
+      note. The dropdown had been empty because the first facility was the
+      clinic, which has no dispensary
+
+## §140 The patient's own app `[~]`
+
+*New on 12 September 2026 (log 276). "The patients portal needs to be
+distinct" — and, probed before redesigning, it had been showing patients blank
+results.*
+
+- [x] Released results reach the patient **with their values and ranges** —
+      the portal read fields the result model does not have, so every value
+      was blank and the downloadable copy printed "Normal" for every range
+- [x] Amended results shown once, as corrected; the clinician-first hold
+      counts current rows only
+- [x] A portal token with no hospital is asked to sign in again, not a 500
+- [x] A home that opens on the person: health card, what is next, what is
+      waiting, current medicines, an emergency button that dials
+- [x] Its own palette and forms, measured for contrast; a tab bar on phones
+- [x] Medicines in plain words ("three times daily"), never the chart's Latin
+- [x] Written reports as paragraphs; flags as Low / High in a warm tone
+- [x] **Booking a visit from the portal** (log 277): a fortnight of days, each
+      doctor's slots and fee, one confirmation that states the fee; only slots
+      really on offer online (the walk-in reserve untouchable), at most three
+      online bookings per account, cancellation with two hours' notice
+- [x] A cancelled visit no longer shows as upcoming; a proxy's actions reach the
+      record they chose, not their own
+- [x] **Nepali, with Bikram Sambat dates** (log 279): sign-in, home, tabs,
+      booking, appointments, results and medicines in Nepali; dates in BS from
+      a maintained library checked against known new-year dates, never a
+      hand-typed table; medicines phrased from structured fields ("दिनको तीन
+      पटक"); counts in Devanagari, hospital numbers and money left 0–9
+- [ ] Nepali on the remaining screens — bills, referrals, messages, sessions,
+      profile corrections, the access log
+- [ ] Bikram Sambat dates in the staff console (the login page now claims only
+      what is true: BS fiscal years and payroll months)
+- [ ] Paying a bill in the app (eSewa / Khalti checkout)
 
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something
 nothing else would have, kept here so they are not quietly dropped.*
 
+- [x] **A test run is only a pass if pytest says it finished** — every run
+      writes a record at start that says incomplete and overwrites it only at
+      its own finish; `scripts/run_tests.py` reports a killed run as
+      INCOMPLETE, never as green, and refuses to start a second run over a
+      live one (log 278)
 - [x] Every seed runs twice — six seeds only ever worked once
 - [x] Every registered report runs — four named functions that did not exist
 - [x] Every search source formats a real row — `scheduled_start` does not exist
@@ -615,6 +1144,17 @@ nothing else would have, kept here so they are not quietly dropped.*
       database it reported four crashed routes where there was one (§217)
 - [ ] The same sweep for POST and PATCH. Harder: a write needs a valid body,
       and a sweep that posts nonsense tests the serializer rather than the view
+- [x] **The console's colour comes from the token system.** A ratchet, not a
+      pass/fail on zero: 325 raw Tailwind utilities may fall and may not rise.
+      It also fails when the count drops far *below* budget, because a budget
+      well above the real number is headroom rather than a guard (§273)
+- [x] **The token layer is wired**, primitive → semantic → component, all three
+      before `@tailwind base`. Cheap check, expensive failure: if `index.css`
+      stops importing the primitives every semantic token resolves to nothing
+      and the console renders in browser defaults — obvious in a browser and
+      invisible in a diff
+- [x] **No component names a primitive token directly.** One that does pins
+      itself to a value and will not follow a customer's re-theme
 
 ## §128 Security `[~]`
 
@@ -2676,7 +3216,9 @@ September; findings measured, not assumed.*
       omitted
 - [x] Reading somebody else's record is stated at the top of the screen
 - [x] "Not for urgent problems" beside the message box, not in terms of use
-- [ ] Nepali translation
+- [~] Nepali translation — the main paths and Bikram Sambat dates are done
+      (§140, log 279); bills, referrals, messages, sessions, profile and the
+      access log are still English
 - [ ] Offline reading of already-fetched pages
 - [ ] Installable as a progressive web app
 

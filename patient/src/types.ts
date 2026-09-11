@@ -9,7 +9,24 @@ export interface AccessibleRecord {
 
 export interface HomeScreen {
   patient: string;
+  first_name?: string;
   mrn: string;
+  age?: number | null;
+  gender?: string;
+  blood_group?: string;
+  /** Who to ring — the emergency card dials this. */
+  hospital?: { name: string; phone: string };
+  latest_result?: { reference: string; test: string; ordered_at: string; abnormal: boolean } | null;
+  medicines: {
+    drug: string;
+    brand: string;
+    how: string;
+    until: string | null;
+    /** Structured, so the patient's language can phrase it. */
+    dose?: string;
+    frequency?: string;
+    prn_for?: string;
+  }[];
   via_proxy: boolean;
   relationship: string;
   next_appointment: Appointment | null;
@@ -30,6 +47,8 @@ export interface ResultValue {
   value: string;
   unit: string;
   reference_range: string;
+  /** low | high | critical_low | critical_high | abnormal | normal */
+  flag?: string;
   abnormal: boolean;
 }
 
@@ -54,6 +73,8 @@ export interface Appointment {
   facility: string;
   reason: string;
   upcoming: boolean;
+  /** Far enough ahead to cancel in the app; closer than that is a phone call. */
+  can_cancel?: boolean;
 }
 
 export interface InvoiceRow {
@@ -76,6 +97,9 @@ export interface PrescriptionLine {
   brand: string;
   dose: string;
   frequency: string;
+  /** Dose and frequency in plain words — "1 capsule, three times daily". */
+  directions?: string;
+  prn_indication?: string;
   duration_days: number | null;
   instructions: string;
 }

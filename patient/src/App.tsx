@@ -21,6 +21,8 @@ import {
   AlertTriangle,
   CalendarDays,
   ChevronLeft,
+  ChevronRight,
+  House,
   FileText,
   FlaskConical,
   Loader2,
@@ -39,6 +41,19 @@ import {
 } from "lucide-react";
 
 import api, { ApiError, session, whenSignedOut } from "@/lib/api";
+import {
+  LanguageSwitch,
+  dateLeaf,
+  directions,
+  formatDate,
+  formatDateTime,
+  formatTime,
+  sexLabel,
+  translate as tr,
+  useI18n,
+  type StringKey,
+} from "@/lib/i18n";
+import { BookVisit } from "@/Booking";
 import { cn } from "@/lib/utils";
 import type {
   Appointment,
@@ -95,25 +110,10 @@ interface AccessLog {
   note: string;
 }
 
-const dateTime = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleString([], {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "—";
-
-const date = (value: string | null) =>
-  value
-    ? new Date(value).toLocaleDateString([], {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : "—";
+// Dates follow the chosen language — and, in Nepali, the Bikram Sambat
+// calendar. See `lib/i18n.tsx`.
+const dateTime = (value: string | null) => formatDateTime(value);
+const date = (value: string | null) => formatDate(value);
 
 const rupees = (value: string) =>
   `Rs ${Number(value).toLocaleString("en-IN", {
@@ -122,6 +122,9 @@ const rupees = (value: string) =>
   })}`;
 
 export default function App() {
+  // Subscribed here, at the root, so a language change re-renders the whole
+  // app — the plain date and text helpers read the active language directly.
+  useI18n();
   const [signedIn, setSignedIn] = useState(Boolean(session.token));
   const [screen, setScreen] = useState<Screen>("home");
   const [record, setRecord] = useState<string>("");
@@ -142,22 +145,69 @@ export default function App() {
     // `max-w-md` at every width, so a patient opening their results on a laptop
     // got a narrow strip down the middle of a wide screen -- which reads as
     // broken rather than as focused. The cap widens at each breakpoint instead.
-    <div className="mx-auto min-h-screen w-full max-w-md bg-background px-4 pb-16 pt-6 sm:max-w-2xl sm:px-6 lg:max-w-5xl lg:px-8 lg:pt-10">
-      {screen === "home" ? (
-        <Home
-          record={record}
-          onOpen={setScreen}
-          onSwitchRecord={setRecord}
-          onSignOut={() => setSignedIn(false)}
-        />
-      ) : (
-        <Section
-          screen={screen}
-          record={record}
-          onBack={() => setScreen("home")}
-        />
-      )}
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-md px-4 pb-28 pt-6 sm:max-w-2xl sm:px-6 lg:max-w-5xl lg:px-8 lg:pb-16 lg:pt-10">
+        {screen === "home" ? (
+          <Home
+            record={record}
+            onOpen={setScreen}
+            onSwitchRecord={setRecord}
+            onSignOut={() => setSignedIn(false)}
+          />
+        ) : (
+          <Section
+            screen={screen}
+            record={record}
+            onBack={() => setScreen("home")}
+          />
+        )}
+      </div>
+      <TabBar screen={screen} onOpen={setScreen} />
     </div>
+  );
+}
+
+/**
+ * The four places a patient goes most, under the thumb on a phone. Hidden on
+ * a laptop, where the directory beside the home screen does the same job and
+ * a bar pinned to the bottom of a wide window reads as a mobile site.
+ */
+const TABS: { screen: Screen; label: StringKey; icon: typeof House }[] = [
+  { screen: "home", label: "nav.home", icon: House },
+  { screen: "results", label: "nav.results", icon: FlaskConical },
+  { screen: "appointments", label: "nav.visits", icon: CalendarDays },
+  { screen: "messages", label: "nav.messages", icon: MessageSquare },
+  { screen: "profile", label: "nav.me", icon: UserCog },
+];
+
+function TabBar({ screen, onOpen }: { screen: Screen; onOpen: (screen: Screen) => void }) {
+  return (
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+    >
+      <ul className="mx-auto grid max-w-md grid-cols-5 sm:max-w-2xl">
+        {TABS.map(({ screen: target, label, icon: Icon }) => {
+          const active = screen === target;
+          return (
+            <li key={target}>
+              <button
+                type="button"
+                onClick={() => onOpen(target)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex w-full flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors",
+                  active ? "text-primary" : "text-muted-foreground",
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {tr(label)}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -174,12 +224,11 @@ function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
     // rather than pinned to a phone-width column on the left.
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-10 sm:py-16">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          My health record
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Your appointments, results and bills.
-        </p>
+        <div className="mb-4 flex justify-end">
+          <LanguageSwitch />
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">{tr("app.title")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{tr("app.subtitle")}</p>
       </div>
 
       {mode === "in" ? (
@@ -190,11 +239,8 @@ function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
 
       <Alert className="mt-8">
         <Phone className="h-4 w-4" />
-        <AlertTitle>If this is an emergency</AlertTitle>
-        <AlertDescription>
-          Do not use this app. Go to the emergency department or call for an
-          ambulance.
-        </AlertDescription>
+        <AlertTitle>{tr("emergency.title")}</AlertTitle>
+        <AlertDescription>{tr("emergency.body")}</AlertDescription>
       </Alert>
     </div>
   );
@@ -245,10 +291,8 @@ function SignIn({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>
-          With the phone number you gave at the hospital.
-        </CardDescription>
+        <CardTitle>{tr("signin.title")}</CardTitle>
+        <CardDescription>{tr("signin.hint")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {problem && (
@@ -259,7 +303,7 @@ function SignIn({
         )}
 
         <div className="space-y-1">
-          <Label htmlFor="s-org">Hospital</Label>
+          <Label htmlFor="s-org">{tr("signin.hospital")}</Label>
           <Input
             id="s-org"
             value={organization}
@@ -268,7 +312,7 @@ function SignIn({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="s-id">Phone number</Label>
+          <Label htmlFor="s-id">{tr("signin.phone")}</Label>
           <Input
             id="s-id"
             inputMode="tel"
@@ -279,7 +323,7 @@ function SignIn({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="s-pw">Password</Label>
+          <Label htmlFor="s-pw">{tr("signin.password")}</Label>
           <Input
             id="s-pw"
             type="password"
@@ -295,16 +339,14 @@ function SignIn({
           onClick={() => void submit()}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          Sign in
+          {tr("signin.submit")}
         </Button>
 
         <Button variant="ghost" className="w-full" onClick={onRegister}>
-          I have a code from the hospital
+          {tr("signin.code")}
         </Button>
 
-        <p className="text-center text-xs text-muted-foreground">
-          After five wrong attempts you will be locked out for a few minutes.
-        </p>
+        <p className="text-center text-xs text-muted-foreground">{tr("signin.lockout")}</p>
       </CardContent>
     </Card>
   );
@@ -463,20 +505,35 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
 
 const TILES: {
   screen: Screen;
-  label: string;
+  label: StringKey;
   icon: typeof FlaskConical;
   needs?: "results" | "invoices";
 }[] = [
-  { screen: "results", label: "Test results", icon: FlaskConical, needs: "results" },
-  { screen: "appointments", label: "Appointments", icon: CalendarDays },
-  { screen: "prescriptions", label: "Medicines", icon: Pill, needs: "results" },
-  { screen: "invoices", label: "Bills", icon: Receipt, needs: "invoices" },
-  { screen: "referrals", label: "Referrals", icon: Send },
-  { screen: "messages", label: "Messages", icon: MessageSquare },
-  { screen: "access", label: "Who saw my record", icon: Eye },
-  { screen: "profile", label: "My details", icon: UserCog },
+  { screen: "results", label: "section.results", icon: FlaskConical, needs: "results" },
+  { screen: "appointments", label: "section.appointments", icon: CalendarDays },
+  { screen: "prescriptions", label: "section.prescriptions", icon: Pill, needs: "results" },
+  { screen: "invoices", label: "section.invoices", icon: Receipt, needs: "invoices" },
+  { screen: "referrals", label: "section.referrals", icon: Send },
+  { screen: "messages", label: "section.messages", icon: MessageSquare },
+  { screen: "access", label: "section.access", icon: Eye },
+  { screen: "profile", label: "section.profile", icon: UserCog },
 ];
 
+/**
+ * The first screen after signing in.
+ *
+ * **It was a menu.** Eight identical tiles on a white page, the same for
+ * every patient, with the name and number of the record at the top and
+ * nothing else — so a patient who opened the app to see whether their result
+ * was back, or when they were next due, had to guess which tile held it. The
+ * patient apps people actually keep (MyChart, the NHS App) open on the
+ * person's own situation and put the directory underneath; so does this.
+ *
+ * In the order a patient asks: who am I to this hospital (the card they show
+ * at the desk), what is next, what is waiting for me, what am I taking — and,
+ * on every screen, who to ring if this is an emergency, as a number that
+ * dials rather than a sentence that advises.
+ */
 function Home({
   record,
   onOpen,
@@ -527,163 +584,354 @@ function Home({
 
   if (!data) {
     return (
-      <p className="py-20 text-center text-muted-foreground">
-        <Loader2 className="inline h-5 w-5 animate-spin" />
-      </p>
+      <div className="space-y-4 pt-2" aria-busy="true">
+        <div className="h-40 animate-pulse rounded-3xl bg-muted" />
+        <div className="h-28 animate-pulse rounded-3xl bg-muted" />
+        <div className="h-28 animate-pulse rounded-3xl bg-muted" />
+      </div>
     );
   }
 
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    return tr(hour < 12 ? "home.greeting.morning" : hour < 17 ? "home.greeting.afternoon" : "home.greeting.evening");
+  })();
+  const sex = sexLabel(data.gender);
+
+  // What is waiting for this person, most important first. Only what exists
+  // is listed — an attention list of zeros is a list nobody reads twice.
+  const waiting: {
+    key: string;
+    screen: Screen;
+    icon: typeof FlaskConical;
+    title: string;
+    detail: string;
+    tone: "calm" | "warm";
+  }[] = [];
+  if (data.results_being_discussed > 0) {
+    waiting.push({
+      key: "discussed",
+      screen: "results",
+      icon: Phone,
+      title:
+        data.results_being_discussed === 1
+          ? tr("home.discussedOne")
+          : tr("home.discussedMany", { n: data.results_being_discussed }),
+      detail: tr("home.discussedDetail"),
+      tone: "warm",
+    });
+  }
+  if (data.results_ready > 0 && data.can_see_results) {
+    waiting.push({
+      key: "results",
+      screen: "results",
+      icon: FlaskConical,
+      title:
+        data.results_ready === 1 ? tr("home.resultsOne") : tr("home.resultsMany", { n: data.results_ready }),
+      detail: data.latest_result
+        ? tr("home.latest", { test: data.latest_result.test }) +
+          (data.latest_result.abnormal ? tr("home.outsideRange") : "")
+        : "",
+      tone: data.latest_result?.abnormal ? "warm" : "calm",
+    });
+  }
+  if (Number(data.outstanding) > 0 && data.can_see_invoices) {
+    waiting.push({
+      key: "bills",
+      screen: "invoices",
+      icon: Receipt,
+      title: tr("home.toPay", { amount: rupees(data.outstanding) }),
+      detail: tr("home.payHow"),
+      tone: "warm",
+    });
+  }
+  if (data.unread_messages > 0) {
+    waiting.push({
+      key: "messages",
+      screen: "messages",
+      icon: MessageSquare,
+      title:
+        data.unread_messages === 1 ? tr("home.messagesOne") : tr("home.messagesMany", { n: data.unread_messages }),
+      detail: tr("home.fromHospital"),
+      tone: "calm",
+    });
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            {data.patient}
-          </h1>
-          <p className="text-sm text-muted-foreground">{data.mrn}</p>
+    <div className="space-y-5">
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-sm font-bold text-primary-foreground">
+            {(data.hospital?.name || "H").charAt(0)}
+          </span>
+          <span className="truncate text-sm font-semibold">
+            {data.hospital?.name || "My health record"}
+          </span>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void signOut()}>
-          <LogOut className="h-4 w-4" />
-        </Button>
-      </div>
+        <div className="flex items-center gap-2">
+          <LanguageSwitch />
+          <Button variant="ghost" size="sm" onClick={() => void signOut()} aria-label={tr("home.signOut")}>
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">{tr("home.signOut")}</span>
+          </Button>
+        </div>
+      </header>
 
       {/* Reading somebody else's record should never be ambiguous. */}
       {data.via_proxy && (
         <Alert>
           <ShieldCheck className="h-4 w-4" />
-          <AlertTitle>You are viewing {data.patient}'s record</AlertTitle>
-          <AlertDescription>
-            As their {data.relationship}. They or the hospital can end this at
-            any time.
-          </AlertDescription>
+          <AlertTitle>{tr("home.proxyTitle", { name: data.patient })}</AlertTitle>
+          <AlertDescription>{tr("home.proxyBody", { relationship: data.relationship })}</AlertDescription>
         </Alert>
       )}
 
       {data.records.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {data.records.map((row) => (
-            <Button
-              key={row.uuid}
-              size="sm"
-              variant={
-                (record || data.records[0].uuid) === row.uuid
-                  ? "default"
-                  : "outline"
-              }
-              onClick={() => onSwitchRecord(row.uuid)}
-            >
-              {row.name}
-            </Button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Whose record">
+          {data.records.map((row) => {
+            const active = (record || data.records[0].uuid) === row.uuid;
+            return (
+              <button
+                key={row.uuid}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => onSwitchRecord(row.uuid)}
+                className={cn(
+                  "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-card hover:bg-muted",
+                )}
+              >
+                {row.name}
+                {row.via_proxy && <span className="ml-1 opacity-70">· {row.relationship}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* Shown, not omitted. A silent gap is worse than a visible delay. */}
-      {data.results_being_discussed > 0 && (
-        <Alert>
-          <Phone className="h-4 w-4" />
-          <AlertTitle>
-            {data.results_being_discussed === 1
-              ? "A result is ready and a doctor will call you"
-              : `${data.results_being_discussed} results are ready and a doctor will call you`}
-          </AlertTitle>
-          <AlertDescription>
-            Some results are better explained than read alone. They will appear
-            here shortly if nobody has been in touch.
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* The health card: what the desk asks for, in the order it asks. */}
+      <section className="relative overflow-hidden rounded-3xl bg-primary p-5 text-primary-foreground shadow-sm sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-20 right-16 h-40 w-40 rounded-full bg-white/5"
+        />
+        <p className="text-sm opacity-90">
+          {greeting}
+          {!data.via_proxy && data.first_name ? `, ${data.first_name}` : ""}
+        </p>
+        <p className="mt-1 text-2xl font-semibold tracking-tight">{data.patient}</p>
+        <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <dt className="text-xs opacity-80">{tr("home.mrn")}</dt>
+            <dd className="font-semibold tabular-nums">{data.mrn}</dd>
+          </div>
+          <div>
+            <dt className="text-xs opacity-80">{tr("home.blood")}</dt>
+            <dd className="font-semibold">{data.blood_group || tr("home.bloodUnknown")}</dd>
+          </div>
+          <div>
+            <dt className="text-xs opacity-80">{tr("home.age")}</dt>
+            <dd className="font-semibold">
+              {data.age != null ? `${data.age}${sex ? ` · ${sex}` : ""}` : "—"}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-4 text-xs opacity-80">{tr("home.showAtDesk")}</p>
+      </section>
 
-      {/*
-        The two things a patient came to check, side by side once there is room
-        for them. Stacked they push the rest of the page below the fold on a
-        laptop, which is the one screen with no shortage of room.
-      */}
-      <div className="grid gap-4 sm:grid-cols-2">
-      {data.next_appointment && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Your next appointment</CardDescription>
-            <CardTitle className="text-base">
-              {dateTime(data.next_appointment.when)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            {data.next_appointment.provider}
-            {data.next_appointment.facility &&
-              ` · ${data.next_appointment.facility}`}
-          </CardContent>
-        </Card>
-      )}
+      <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+        <div className="space-y-5">
+          {/* What is next. */}
+          <section className="rounded-3xl border bg-card p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {tr("home.upNext")}
+            </p>
+            {data.next_appointment ? (
+              <div className="mt-3 flex items-start gap-4">
+                <DateBadge value={data.next_appointment.when} />
+                <div className="min-w-0">
+                  <p className="font-semibold">{data.next_appointment.provider}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {dateTime(data.next_appointment.when)}
+                    {data.next_appointment.facility && ` · ${data.next_appointment.facility}`}
+                  </p>
+                  {data.next_appointment.reason && (
+                    <p className="mt-1 text-sm">{data.next_appointment.reason}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">{tr("home.noAppointment")}</p>
+                {data.can_book_appointments && (
+                  <Button size="sm" variant="outline" onClick={() => onOpen("appointments")}>
+                    <CalendarDays className="h-4 w-4" />
+                    {tr("home.bookVisit")}
+                  </Button>
+                )}
+              </div>
+            )}
+          </section>
 
-      {Number(data.outstanding) > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>To pay</CardDescription>
-            <CardTitle className="text-base">
-              {rupees(data.outstanding)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => onOpen("invoices")}
+          {/* What is waiting. */}
+          <section className="rounded-3xl border bg-card p-2">
+            <p className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {tr("home.forYou")}
+            </p>
+            {waiting.length === 0 ? (
+              <p className="px-3 pb-4 pt-1 text-sm text-muted-foreground">
+                {tr("home.nothingWaiting")}
+              </p>
+            ) : (
+              <ul>
+                {waiting.map(({ key, screen, icon: Icon, title, detail, tone }) => (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      onClick={() => onOpen(screen)}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <span
+                        className={cn(
+                          "grid h-10 w-10 shrink-0 place-items-center rounded-full",
+                          tone === "warm"
+                            ? "bg-warm text-warm-foreground"
+                            : "bg-primary/10 text-primary",
+                        )}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium">{title}</span>
+                        {detail && (
+                          <span className="block truncate text-sm text-muted-foreground">{detail}</span>
+                        )}
+                      </span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* What am I taking. */}
+          {data.medicines.length > 0 && (
+            <section className="rounded-3xl border bg-card p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {tr("home.medicines")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onOpen("prescriptions")}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  {tr("home.all")}
+                </button>
+              </div>
+              <ul className="mt-3 divide-y">
+                {data.medicines.map((row, index) => (
+                  <li key={index} className="flex items-start gap-3 py-2.5">
+                    <Pill className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {row.drug}
+                        {row.brand && <span className="font-normal text-muted-foreground"> ({row.brand})</span>}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {directions(row.dose ?? "", row.frequency ?? "", row.how, row.prn_for ?? "")}
+                        {row.until && ` · ${tr("home.until", { date: formatDate(row.until) })}`}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
+
+        <aside className="space-y-5">
+          <nav aria-label="Everything in your record" className="rounded-3xl border bg-card p-2">
+            {TILES.filter((tile) => {
+              if (tile.needs === "results") return data.can_see_results;
+              if (tile.needs === "invoices") return data.can_see_invoices;
+              return true;
+            }).map(({ screen, label, icon: Icon }) => (
+              <button
+                key={screen}
+                type="button"
+                onClick={() => onOpen(screen)}
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-muted/60"
+              >
+                <Icon className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1 font-medium">{tr(label)}</span>
+                {screen === "results" && data.results_ready > 0 && (
+                  <Badge variant="secondary">{data.results_ready}</Badge>
+                )}
+                {screen === "appointments" && data.upcoming_appointments > 0 && (
+                  <Badge variant="secondary">{data.upcoming_appointments}</Badge>
+                )}
+                {screen === "messages" && data.unread_messages > 0 && (
+                  <Badge variant="destructive">{data.unread_messages}</Badge>
+                )}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => onOpen("sessions")}
+              className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60"
             >
-              See the bills
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+              <Smartphone className="h-4 w-4" />
+              <span className="flex-1">{tr("home.signedIn")}</span>
+            </button>
+          </nav>
+
+          <EmergencyCard hospital={data.hospital} />
+        </aside>
       </div>
+    </div>
+  );
+}
 
-      {/*
-        Two across a phone, three on a tablet, four on a laptop. A two-column
-        grid on a wide screen leaves the tiles enormous and the page mostly
-        empty.
-      */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {TILES.filter((tile) => {
-          if (tile.needs === "results") return data.can_see_results;
-          if (tile.needs === "invoices") return data.can_see_invoices;
-          return true;
-        }).map(({ screen, label, icon: Icon }) => (
-          <button
-            key={screen}
-            type="button"
-            onClick={() => onOpen(screen)}
-            className="flex flex-col items-start gap-2 rounded-lg border p-4 text-left transition-colors hover:bg-muted/50"
-          >
-            <Icon className="h-5 w-5 text-muted-foreground" />
-            <span className="font-medium">{label}</span>
-            {screen === "results" && data.results_ready > 0 && (
-              <Badge variant="secondary">{data.results_ready} ready</Badge>
-            )}
-            {screen === "appointments" && data.upcoming_appointments > 0 && (
-              <Badge variant="secondary">
-                {data.upcoming_appointments} upcoming
-              </Badge>
-            )}
-            {screen === "messages" && data.unread_messages > 0 && (
-              <Badge variant="destructive">{data.unread_messages} new</Badge>
-            )}
-          </button>
-        ))}
-      </div>
+/** A calendar leaf: the day, large, because the day is what people remember. */
+function DateBadge({ value }: { value: string }) {
+  const leaf = dateLeaf(value);
+  return (
+    <div className="grid w-14 shrink-0 overflow-hidden rounded-2xl border text-center">
+      <span className="truncate bg-primary px-0.5 py-0.5 text-[11px] font-semibold uppercase text-primary-foreground">
+        {leaf.month}
+      </span>
+      <span className="py-1 text-xl font-semibold tabular-nums">{leaf.day}</span>
+    </div>
+  );
+}
 
-      <Button
-        variant="ghost"
-        className="w-full"
-        onClick={() => onOpen("sessions")}
-      >
-        <Smartphone className="h-4 w-4" />
-        Where I am signed in
-      </Button>
-
-      <p className="pt-2 text-center text-xs text-muted-foreground">
-        This app is not for urgent problems. In an emergency, go to the
-        emergency department.
+/** Every screen's way out, as a number that dials. */
+function EmergencyCard({ hospital }: { hospital?: { name: string; phone: string } }) {
+  return (
+    <div className="rounded-3xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+      <p className="flex items-center gap-2 font-semibold text-destructive">
+        <Phone className="h-4 w-4" />
+        {tr("emergency.title")}
       </p>
+      <p className="mt-1 text-foreground/80">{tr("emergency.body")}</p>
+      {hospital?.phone && (
+        <a
+          href={`tel:${hospital.phone.replace(/\s+/g, "")}`}
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2 font-semibold text-destructive-foreground"
+        >
+          <Phone className="h-4 w-4" />
+          {tr("emergency.call", { name: hospital.name ? hospital.name.split(",")[0] : tr("emergency.hospital") })}
+        </a>
+      )}
     </div>
   );
 }
@@ -692,17 +940,17 @@ function Home({
 /* Sections                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const TITLES: Record<Screen, string> = {
-  home: "Home",
-  results: "Test results",
-  appointments: "Appointments",
-  invoices: "Bills",
-  prescriptions: "Medicines",
-  referrals: "Referrals",
-  access: "Who saw my record",
-  messages: "Messages",
-  sessions: "Where I am signed in",
-  profile: "My details & corrections",
+/**
+ * How a flag reads to a patient: which way, in a word. Warm rather than red —
+ * a slightly low haemoglobin is something to ask about, not an emergency, and
+ * the result screen is read at home, alone.
+ */
+const FLAG_WORDS: Record<string, string> = {
+  low: "Low",
+  high: "High",
+  critical_low: "Very low",
+  critical_high: "Very high",
+  abnormal: "Outside range",
 };
 
 function Section({
@@ -759,7 +1007,7 @@ function Section({
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-lg font-semibold tracking-tight">
-          {TITLES[screen]}
+          {tr(`section.${screen}` as StringKey)}
         </h1>
       </div>
 
@@ -780,7 +1028,7 @@ function Section({
         <Results rows={data as ResultRow[]} onPrint={handlePrint} />
       )}
       {data !== null && screen === "appointments" && (
-        <Appointments rows={data as Appointment[]} />
+        <Appointments rows={data as Appointment[]} record={record} onChanged={load} />
       )}
       {data !== null && screen === "invoices" && (
         <Bills data={data as Invoices} onPrint={handlePrint} />
@@ -873,32 +1121,50 @@ function Results({
           <CardContent>
             {row.visible ? (
               <div className="space-y-1">
-                {row.results.map((value, index) => (
-                  <div
-                    key={index}
-                    className="flex items-baseline justify-between gap-2 text-sm"
-                  >
-                    <span className="text-muted-foreground">
-                      {value.analyte}
-                    </span>
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        value.abnormal && "font-medium text-destructive",
+                {row.results.map((value, index) =>
+                  /*
+                    A written report — an X-ray, a scan — is a paragraph, not a
+                    number. It had been squeezed into the value column in bold
+                    red, which made a whole report read as an alarm and was
+                    hard to read at all. It is set as text, in ordinary ink,
+                    with "worth discussing" said in words where it applies.
+                  */
+                  value.value.length > 40 ? (
+                    <div key={index} className="space-y-1.5 text-sm">
+                      {value.abnormal && (
+                        <p className="inline-flex rounded-full bg-warm px-2.5 py-0.5 text-xs font-medium text-warm-foreground">
+                          {tr("results.discuss")}
+                        </p>
                       )}
+                      <p className="whitespace-pre-line leading-relaxed">{value.value}</p>
+                    </div>
+                  ) : (
+                    <div
+                      key={index}
+                      className="flex items-baseline justify-between gap-2 text-sm"
                     >
-                      {value.value} {value.unit}
-                      {value.reference_range && (
-                        <span className="ml-1 text-xs text-muted-foreground">
-                          ({value.reference_range})
+                      <span className="text-muted-foreground">{value.analyte}</span>
+                      <span className="text-right tabular-nums">
+                        <span className={cn(value.abnormal && "font-semibold text-warm-foreground")}>
+                          {value.value} {value.unit}
                         </span>
-                      )}
-                    </span>
-                  </div>
-                ))}
+                        {value.abnormal && (
+                          <span className="ml-1.5 rounded-full bg-warm px-1.5 py-0.5 text-[11px] font-medium text-warm-foreground">
+                            {tr((`flag.${value.flag}` in FLAG_WORDS ? `flag.${value.flag}` : "flag.abnormal") as StringKey)}
+                          </span>
+                        )}
+                        {value.reference_range && (
+                          <span className="block text-xs text-muted-foreground">
+                            {tr("results.usual", { range: value.reference_range })}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ),
+                )}
                 {row.results.length === 0 && (
                   <p className="text-sm text-muted-foreground">
-                    The report is with your doctor.
+                    {tr("results.withDoctor")}
                   </p>
                 )}
                 <div className="mt-3 flex justify-end border-t pt-3">
@@ -909,7 +1175,7 @@ function Results({
                     onClick={() => onPrint("result", row.reference)}
                   >
                     <Printer className="h-3.5 w-3.5" />
-                    Official Report
+                    {tr("results.report")}
                   </Button>
                 </div>
               </div>
@@ -927,52 +1193,148 @@ function Results({
   );
 }
 
-function Appointments({ rows }: { rows: Appointment[] }) {
+function Appointments({
+  rows,
+  record,
+  onChanged,
+}: {
+  rows: Appointment[];
+  record: string;
+  onChanged: () => void;
+}) {
+  const [booking, setBooking] = useState(false);
   const upcoming = rows.filter((row) => row.upcoming);
   const past = rows.filter((row) => !row.upcoming);
 
+  if (booking) {
+    return (
+      <BookVisit
+        record={record}
+        onBack={() => setBooking(false)}
+        onDone={() => {
+          setBooking(false);
+          onChanged();
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <Button className="w-full" size="lg" onClick={() => setBooking(true)}>
+        <CalendarDays className="h-4 w-4" />
+        {tr("appointments.book")}
+      </Button>
       {upcoming.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Coming up
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {tr("appointments.upcoming")}
           </p>
           {upcoming.map((row) => (
-            <AppointmentCard key={row.reference} row={row} />
+            <AppointmentCard key={row.reference} row={row} record={record} onChanged={onChanged} />
           ))}
         </div>
       )}
       {past.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Past
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {tr("appointments.past")}
           </p>
           {past.slice(0, 10).map((row) => (
-            <AppointmentCard key={row.reference} row={row} />
+            <AppointmentCard key={row.reference} row={row} record={record} onChanged={onChanged} />
           ))}
         </div>
       )}
-      {rows.length === 0 && <Empty>No appointments.</Empty>}
+      {rows.length === 0 && <Empty>{tr("appointments.none")}</Empty>}
     </div>
   );
 }
 
-function AppointmentCard({ row }: { row: Appointment }) {
+function AppointmentCard({
+  row,
+  record,
+  onChanged,
+}: {
+  row: Appointment;
+  record: string;
+  onChanged: () => void;
+}) {
+  const [cancelling, setCancelling] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const when = new Date(row.when);
+
+  const cancel = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api.post("/me/", {
+        action: "cancel_appointment",
+        reference: row.reference,
+        ...(record ? { record } : {}),
+      });
+      onChanged();
+    } catch (err) {
+      setProblem(err instanceof ApiError ? err.message : "Could not cancel.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between gap-3 py-4">
-        <div>
-          <p className="font-medium">{dateTime(row.when)}</p>
+    <div className={cn("rounded-3xl border bg-card p-4", !row.upcoming && "opacity-80")}>
+      <div className="flex items-start gap-4">
+        <div className="grid w-14 shrink-0 overflow-hidden rounded-2xl border text-center">
+          <span className={cn(
+            "py-0.5 text-[11px] font-semibold uppercase",
+            row.upcoming ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+          )}>
+            {dateLeaf(when).month}
+          </span>
+          <span className="py-1 text-xl font-semibold tabular-nums">{dateLeaf(when).day}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">{row.provider}</p>
           <p className="text-sm text-muted-foreground">
-            {row.provider}
+            {formatTime(when)}
             {row.facility && ` · ${row.facility}`}
           </p>
-          {row.reason && <p className="text-sm">{row.reason}</p>}
+          {row.reason && <p className="mt-1 text-sm">{row.reason}</p>}
         </div>
-        <Badge variant="outline">{row.status.replace(/_/g, " ")}</Badge>
-      </CardContent>
-    </Card>
+        <Badge variant="outline" className="shrink-0 capitalize">
+          {row.status.replace(/_/g, " ")}
+        </Badge>
+      </div>
+      {row.upcoming && row.can_cancel && !cancelling && (
+        <button
+          type="button"
+          onClick={() => setCancelling(true)}
+          className="mt-3 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-destructive hover:underline"
+        >
+          {tr("appointments.cancel")}
+        </button>
+      )}
+      {row.upcoming && !row.can_cancel && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {tr("appointments.tooLate")}
+        </p>
+      )}
+      {cancelling && (
+        <div className="mt-3 space-y-2 rounded-2xl bg-muted p-3 text-sm">
+          <p>{tr("appointments.confirmCancel")}</p>
+          {problem && <p className="text-destructive">{problem}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" disabled={busy} onClick={() => void cancel()}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {tr("appointments.yesCancel")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setCancelling(false)}>
+              {tr("appointments.keep")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1061,7 +1423,7 @@ function Medicines({
                   )}
                 </p>
                 <p className="text-muted-foreground">
-                  {line.dose} · {line.frequency}
+                  {directions(line.dose, line.frequency, line.directions || `${line.dose} · ${line.frequency}`, line.prn_indication ?? "")}
                   {line.duration_days ? ` · ${line.duration_days} days` : ""}
                 </p>
                 {line.instructions && <p>{line.instructions}</p>}

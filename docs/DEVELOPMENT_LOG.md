@@ -12170,3 +12170,49 @@ enrolled would be left to help. The session tells the console, which shows the
 enrolment screen instead of the application and lifts it once the recovery
 codes have been acknowledged — not the instant it switches on, which would
 whisk the codes off the screen before anybody saved them.
+
+
+## 279 - The patient app, in Nepali and in Bikram Sambat
+
+*12 September 2026.*
+
+The patient app was English-only, for the audience that most needs Nepali, and
+every date in it was Gregorian — not the calendar a Nepali patient plans a
+hospital visit in. "The 13th" in the wrong calendar is a missed appointment.
+
+**Bikram Sambat from a maintained library, not a table.** BS month lengths are
+not computable; they are published year by year. `nepali-date-converter` was
+checked against the known new-year dates — 1 Baishakh 2081 (13 April 2024),
+2082 (14 April 2025) and 2083 (14 April 2026) — before anything used it. A
+hand-typed month table in a medical app is a way to tell a patient the wrong
+day, and the error would not be visible to anybody who reads Gregorian.
+
+**What is translated and what is not.** What the app says — sign-in, the home
+screen, the tab bar, booking, appointments, results and medicines — is in
+both languages, with a switch that shows the other language's name in that
+language. What the hospital writes — a doctor's name, a test name, a diagnosis,
+a report — is shown as written.
+
+Three rules decided by looking at it, not in advance:
+
+- **Medicines are phrased from structured fields**, not by translating the
+  server's sentence: "1 capsule, दिनको तीन पटक" rather than half of each. The
+  server now sends dose, frequency code and PRN indication separately.
+- **Counts the app produces are in Devanagari** in Nepali ("४ वटा नतिजा",
+  "३१ खाली") so they sit naturally beside Nepali dates; **numbers the hospital
+  prints stay 0–9** — a hospital number, a bill total, a phone number — because
+  they are read aloud at a counter and typed into eSewa. The rule is in one
+  place: a number passed as a number is a count; passed as a string, it is left
+  alone.
+- **Time chips do not repeat the part of the day** under a heading that already
+  says it; the first screenshot had "बिहान" on every chip under "बिहान".
+
+And one claim made accurate: the staff login page said "Bikram Sambat dates".
+The console uses BS for fiscal years and payroll months and shows Gregorian
+dates everywhere else. It now says what is true, and BS dates in the console
+are on the checklist.
+
+### Not yet
+
+Nepali on the bills, referrals, messages, sessions, profile-correction and
+access-log screens; BS dates in the staff console.
