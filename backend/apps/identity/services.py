@@ -253,3 +253,118 @@ def revoke_all_roles(user, actor=None, reason: str = "") -> int:
     for assignment in assignments:
         revoke_role(assignment, actor=actor, reason=reason)
     return len(assignments)
+
+
+#: Letters and digits a person can read aloud over the phone without
+#: confusion — no 0/O, 1/l/I, 5/S.
+_READABLE = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRTUVWXYZ2346789"
+
+
+def _only_within(organization, user, actor, what: str, yourself: str) -> None:
+    """Refuse an administrator action on a login that reaches beyond this
+    organization, or on the administrator's own account. Shared by the
+    temporary password and the second-factor reset, which hand over the same
+    thing — a way to sign in as the person — and so draw the same lines."""
+    if actor is not None and getattr(actor, "uuid", None) == user.uuid:
+        raise IdentityError(yourself)
+    if user.is_platform_staff:
+        raise IdentityError("Platform staff accounts are reset by the platform team.")
+
+    membership = Membership.objects.filter(user=user, organization=organization).first()
+    if membership is None or membership.status != MembershipStatus.ACTIVE:
+        raise IdentityError("That person does not have active access to this organization.")
+    elsewhere = (
+        Membership.objects.filter(user=user, status=MembershipStatus.ACTIVE)
+        .exclude(organization=organization)
+        .exists()
+    )
+    if elsewhere:
+        raise IdentityError(
+            f"{user.email} also signs in to another organization, so their "
+            f"{what} can only be changed by them or by platform support.",
+        )
+
+
+def reset_second_factor(organization, user, actor=None, reason: str = "") -> None:
+    """Turn off somebody's two-step sign-in so they can set it up again.
+
+    For the phone that fell in the river with the recovery codes in the same
+    pocket. Without it, two-step sign-in is a way to lock a nurse out of the
+    system at the start of a night shift with nobody able to let them back in.
+    A reason is required, and the reset is audited, because it is a way to
+    weaken somebody's sign-in that they did not ask for.
+    """
+    if not reason.strip():
+        raise IdentityError("Say why — for example, 'lost phone, identity checked in person'.")
+    _only_within(organization, user, actor, "two-step sign-in",
+                 "Turn off your own two-step sign-in from your account instead.")
+    if not user.mfa_enabled:
+        raise IdentityError(f"{user.email} does not have two-step sign-in on.")
+
+    user.mfa_enabled = False
+    user.mfa_enabled_at = None
+    user.mfa_secret = ""
+    user.mfa_last_step = None
+    user.mfa_recovery_codes = []
+    user.save(update_fields=[
+        "mfa_enabled", "mfa_enabled_at", "mfa_secret", "mfa_last_step",
+        "mfa_recovery_codes",
+    ])
+    record(
+        AuditAction.UPDATE,
+        entity_type="identity.User",
+        entity_id=user.uuid,
+        entity_label=f"Two-step sign-in reset for {user.full_name or user.email}",
+        reason=reason,
+        metadata={"by": getattr(actor, "email", "")},
+    )
+
+
+def issue_temporary_password(organization, user, actor=None, reason: str = "") -> str:
+    """Give somebody a one-time password, which they must change on first use.
+
+    **The only way a person without a password could ever get one.** Invited
+    staff and onboarded owners are created with an unusable password — rightly,
+    since a password chosen by somebody else is a password somebody else
+    knows — and until this existed there was no path from there to signing in
+    at all: no reset email, no set-password link, no administrator action. An
+    organization could be onboarded and its owner could never log in.
+
+    Returned once, to be handed over in person or read out; never stored in
+    the clear and never written to the audit log. `must_change_password` means
+    the first thing the holder does is replace it with one only they know.
+
+    Refused where it would reach further than this organization:
+
+    * **Somebody who also belongs to another organization.** A login is one
+      account across every organization it belongs to, so resetting it here
+      would hand this organization's administrator the keys to the others.
+    * **Platform staff**, whose accounts reach every customer.
+    * **Yourself** — change your own password from your account, with your
+      current one, rather than through the administrator path.
+    """
+    import secrets
+
+    _only_within(organization, user, actor, "password", "Change your own password from your account instead.")
+
+    temporary = "-".join(
+        "".join(secrets.choice(_READABLE) for _ in range(4)) for _ in range(3)
+    )
+    user.set_password(temporary)
+    user.must_change_password = True
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.save(update_fields=[
+        "password", "password_changed_at", "must_change_password",
+        "failed_login_attempts", "locked_until",
+    ])
+
+    record(
+        AuditAction.UPDATE,
+        entity_type="identity.User",
+        entity_id=user.uuid,
+        entity_label=f"Temporary password issued to {user.full_name or user.email}",
+        reason=reason,
+        metadata={"by": getattr(actor, "email", "")},
+    )
+    return temporary

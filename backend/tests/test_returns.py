@@ -312,3 +312,69 @@ def test_a_doctor_cannot_read_the_refund_queue(tenant):
     if doctor is None:
         pytest.skip(f"no {DOCTOR}")
     assert doctor.get("/api/pos/returns/").status_code == 403
+
+
+# -- the credit note reverses what was paid ---------------------------------
+
+
+def _credit_arithmetic(line: dict):
+    """What `_recalculate` will make of a credit line: qty x price - discount + tax."""
+    return line["quantity"] * line["unit_price"] - line["discount_amount"] + line["tax_amount"]
+
+
+def _returned(*, quantity, unit_price, discount_amount, tax_amount, total, back, vat="0"):
+    from decimal import ROUND_HALF_UP, Decimal
+    from types import SimpleNamespace
+
+    line = SimpleNamespace(
+        quantity=Decimal(quantity), unit_price=Decimal(unit_price),
+        discount_amount=Decimal(discount_amount), tax_amount=Decimal(tax_amount),
+        tax_percent=Decimal(vat), total=Decimal(total),
+        product=SimpleNamespace(code="X"), product_name="X", batch_number="B",
+    )
+    back = Decimal(back)
+    refund = (line.total * back / line.quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return SimpleNamespace(sale_line=line, quantity=back, refund_amount=refund)
+
+
+def test_a_credit_note_line_gives_back_the_vat_that_was_charged():
+    """Three plasters back from a 13% VAT sale: credit 10.17, not the 9.00 shelf price.
+
+    The line used to carry zero tax, so the note was credited without its VAT
+    and the refund — correctly computed at 10.17 — was refused as more than
+    the note owed. Found by the first VAT-rated product the demo ever sold.
+    """
+    from decimal import Decimal
+
+    from apps.pos.services import _credit_line
+
+    row = _returned(quantity="10", unit_price="3.00", discount_amount="0",
+                    tax_amount="3.90", total="33.90", back="3", vat="13")
+    line = _credit_line(row)
+    assert _credit_arithmetic(line) == Decimal("-10.17"), line
+    assert line["tax_amount"] == Decimal("-1.17")
+
+
+def test_a_credit_note_line_keeps_the_discount_the_customer_had():
+    """A discounted line is credited at the discounted price, not the list price."""
+    from decimal import Decimal
+
+    from apps.pos.services import _credit_line
+
+    row = _returned(quantity="10", unit_price="12.00", discount_amount="12.00",
+                    tax_amount="0", total="108.00", back="3")
+    line = _credit_line(row)
+    assert _credit_arithmetic(line) == Decimal("-32.40"), line
+    assert line["discount_amount"] == Decimal("-3.60")
+
+
+def test_awkward_shares_still_land_on_the_paisa():
+    """A third of a line whose tax and discount do not divide evenly."""
+    from decimal import Decimal
+
+    from apps.pos.services import _credit_line
+
+    row = _returned(quantity="3", unit_price="7.00", discount_amount="1.00",
+                    tax_amount="2.60", total="22.60", back="1", vat="13")
+    line = _credit_line(row)
+    assert _credit_arithmetic(line) == -row.refund_amount, line

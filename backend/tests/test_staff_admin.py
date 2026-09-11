@@ -101,12 +101,22 @@ def test_the_staff_list_joins_two_databases(tenant, owner):
     by_email = {row["email"]: row for row in body["results"]}
     doctor = by_email.get(f"doctor@{DEMO}.test")
     assert doctor is not None, "the demo doctor is missing from the staff list"
-    assert [r["role_code"] for r in doctor["roles"]] == ["doctor"], (
+    # The demo doctor holds the role at two sites — the clinic, and since
+    # `seed_demo_population` the hospital — so the check is that every
+    # assignment arrived, not that there is exactly one.
+    codes = [r["role_code"] for r in doctor["roles"]]
+    assert codes and set(codes) == {"doctor"}, (
         "the doctor's role assignment lives in the tenant database and did "
         "not make it into the joined payload"
     )
     # The scope label names *where*, not just how far. See the serializer.
-    assert "—" in doctor["roles"][0]["scope_label"], doctor["roles"][0]
+    for role in doctor["roles"]:
+        assert "—" in role["scope_label"], role
+    if len(doctor["roles"]) > 1:
+        places = {role["scope_label"] for role in doctor["roles"]}
+        assert len(places) == len(doctor["roles"]), (
+            "two assignments at two facilities rendered as the same place"
+        )
 
 
 def test_the_list_costs_two_queries_not_one_per_person(tenant, owner):

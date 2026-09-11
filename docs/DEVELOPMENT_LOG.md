@@ -11694,3 +11694,183 @@ validator, and got eleven failures — then reached for a lightness cap, which
 fixed the cyan and broke indigo, violet and green. Two wrong instincts in a row
 about the same thing, both caught by a script rather than by my eye, which is
 the argument for having the script.
+
+
+## 275 - "Opening a till also shows nothing in the dropdown"
+
+*11 September 2026. The brief, still: the ward and nurse workspace look
+generated, the login and signup are not good enough, seed enough data for
+multiple scenarios, every small component should serve an objective. Added
+mid-round: opening a till shows an empty dropdown.*
+
+### Every dashboard read zero, and it was not the dashboards
+
+Measured before touching anything: the emergency department had two arrivals
+in its whole history, the counter two sales, the queue four tokens, and every
+one of them dated whichever day a seed last ran. The narrative seeds each tell
+one story once — FEFO with one antibiotic, an allergy check with one allergic
+patient — which is right for a mechanism and wrong for a hospital. Six patients
+and five products do not look like anything.
+
+Two commands, and the split between them is the design:
+
+- **`seed_demo_population`** builds what a hospital would already have, once:
+  160 people on the register (children and the elderly over-represented as an
+  OPD's catchment is; one in eight with a stated age; one in ten with no
+  phone), a 29-line formulary stocked through `post_movement`, and a fifty-bed
+  estate in gendered bays. Topped up to a floor, never added to.
+- **`seed_demo_day`** is today. It does not generate a day — it **tops the day
+  up** to where a day this far along should be, then moves every open case
+  along its own clock. The emergency department runs from midnight, because it
+  has no opening hours; the counter and the clinic from seven. Each patient's
+  wait, whether they give up, how long their consultation takes, whether their
+  course is stable or deteriorating — every one is drawn from a generator
+  seeded by that patient's own reference, so a run at nine and a run at eleven
+  agree about the same person.
+
+The first version was a run-once generator with a marker. At 08:16 it produced
+a day that was 76 minutes long, and a second run either refused or doubled
+everything. Topping up is what lets it run every half hour — which it now does,
+as the first task Celery beat has ever had, and only where
+`NIROVA_DEMO_DAY_SLUG` is set.
+
+**Through the service layer, with one liberty.** `arrive`, `triage`,
+`mark_seen`, `dispose`, `issue_token`, `create_sale`, `admit`, `discharge`,
+`place_order`, `enter_results`, `verify_order` — each enforces in the demo what
+it enforces in production. The liberty is time: an arrival placed at 09:40 is
+stamped 09:40. `arrive` and `triage` take the timestamp as a field; the
+services that stamp `now` are corrected immediately afterwards. And it refuses
+to invent what the product guards against — nobody is dispositioned "admitted"
+without an admission, nothing prescription-only crosses the counter.
+
+### The seed found a bug in returns
+
+Both commands joined `TENANT_SEEDS`, so `test_seeds.py` runs them twice. On
+its first run `seed_pos_demo` failed: the new formulary's first 13%-VAT product
+was the one its return scenario picked, and the refund — 3 of 10 plasters,
+Rs 10.17 — was refused as more than the credit note's Rs 9.00.
+
+Two defects, not one. The credit note's lines carried quantity and unit price
+with zero tax and zero discount, so `_recalculate` credited the shelf price.
+And even a correct note rounds to the rupee, as every invoice does, so a
+paisa-precise refund would still have been refused. Now `_credit_line` carries
+the returned share of the discount and the tax — the tax taken as the
+remainder so the line lands on the paisa — and the refund is rounded to the
+rupee at request time, so the figure the cashier is shown is the figure paid.
+Every product the demo had sold until this morning was VAT-exempt.
+
+### The till dropdown
+
+`OpenTill` listed pharmacies, clinics and hospitals, chose the first —
+alphabetically the clinic, which has no dispensary — and offered "Sells from"
+with nothing in it and a disabled button. The fix is to derive facilities from
+where a till can actually sell: active, dispensable stock locations, grouped by
+facility. It also shows the tills already open (opening COUNTER-1 under a
+colleague is refused by the server; the screen now says so first and suggests
+a free one) and counts the float by note.
+
+### The ward
+
+The ward endpoint returned beds with a name and a reference, so the board
+could say "301-A, Kamala Adhikari" and nothing a ward whiteboard says.
+`GET /api/ipd/board/` returns the facility in one request — age, sex, night,
+due home, consultant, diagnosis, NEWS2 — and holds the access tiers: the
+diagnosis and the score reach only `patient.clinical.read`, and only for
+patients with a care relationship where the organization requires one. The test
+for that was proved by setting `allowed = True` and watching it fail.
+
+The nurse's card was the other half of "AI-generated": a monospace bed code,
+`NEWS2: 5 [MEDIUM]` in brackets and capitals, gradient washes, three boxed
+counters and a pulsing badge — everything shouting, the same whether the
+patient was fine or not. The rebuild is quiet when the score is routine, names
+the response it obliges when it is not, colours the scoring observation in
+place, and says **when the next observations are due** from the RCP minimum
+frequency — the question a nurse with six patients asks most, and one the
+screen had never answered.
+
+Two server defects found on the way: every age on that screen was `""`, read
+from an `age_display` that never existed, so every card said "Adult" —
+including the paediatric ward's. And "My patients" with nothing assigned fell
+back to the whole ward silently, labelling forty-one patients "assigned to you";
+it still falls back, and now says so.
+
+The demo nurse and doctor were rostered at the clinic alone — nowhere near the
+wards and emergency department. They now also hold roles at the hospital,
+granted through `assign_role` like any other.
+
+### Sign in, sign up, and the first password
+
+The login's right-hand panel had been the one thing meant to show the product,
+drawn at 45% opacity with eleven-pixel labels. It is now a headline a director
+would repeat and three real screens composed at a legible size, using the real
+NEWS2 component. The form answers what is asked on it: forgotten password,
+whether the service is up, how a new hospital starts.
+
+There was no signup. `POST /api/auth/register/` records a request and never
+provisions — a database per anonymous form is a database per bot — with a
+per-address and per-email limit and a honeypot that tells a bot it succeeded.
+The platform team's queue turns a request into a tenant with
+`onboard_organization`, from the request's own answers.
+
+Writing the forgotten-password copy found the worst gap of the round. "Your
+administrator can issue a new one" was not true: nothing could. Invited staff
+and onboarded owners are created with unusable passwords, and there was no
+route from there to signing in — an organization could be onboarded and its
+owner could never log in. `issue_temporary_password` is behind
+`user.deactivate`, refuses yourself, platform staff, and anybody who also
+belongs to another organization (a login spans both; one must not hold the
+other's keys), never writes the password to the audit trail, and sets
+`must_change_password` — which the client now enforces before anything opens.
+The API does not yet refuse other calls while it is set; that is recorded as
+open.
+
+### Found by leaving it running
+
+**The scheduler's first run was refused by the product.** Discharging a
+patient whose stay had run up laboratory charges failed with "600.00 of charges
+have not been invoiced" — correctly. The generator had signed the billing
+clearance and walked on. It now does what the billing desk does: invoices the
+stay's charges and takes the balance, and only then signs. A refusal from any
+one patient is reported and the rest of the ward's round continues.
+
+**Before seven it rang up sales at one in the morning.** `_opening` fell back
+to midnight "so an early run has something to show", which is harmless run by
+hand at eight and absurd run by a scheduler at half past two. The counter and
+the clinic are closed before seven; the emergency department, the wards and the
+laboratory's advancing orders are not.
+
+**Every board still opened on the clinic.** The dashboard defaulted to the
+first facility — the one place with no emergency department, no wards and no
+counter — so a director saw "0 in department · NPR 0" on a day the hospital had
+twenty-seven arrivals. Leadership and finance now open on the whole
+organization, each panel read at the facility its department runs at and named
+so; a pharmacist opens on the pharmacy; everyone else on the hospital.
+
+### The laboratory report
+
+With verified results arriving every day, the lab report joined the invoice on
+`PrintableDocument`. It prints only once an order is verified — a report printed
+between entry and verification is the document verification exists to stop —
+names who entered the values and who released them, flags abnormal values as
+H, L or CRITICAL in words because monochrome printers drop colour, and states
+who was told of a critical value and how.
+
+### A test that assumed one assignment
+
+`test_the_staff_list_joins_two_databases` asserted the demo doctor held exactly
+one role. She now deliberately holds it at two sites. The assertion now checks
+what the test is for — every assignment arrives from the tenant database — and
+that two assignments at two facilities are not rendered as the same place.
+
+### What I got wrong
+
+- The first `seed_demo_day` was run-once with a marker, which could not survive
+  the time of day it happened to run at. Caught by running it at 08:16.
+- I wrote "your administrator can issue a new one" before checking it could.
+  It could not, and that turned out to be the most important thing found.
+- The first ward generator would have sent the narrative seed's patients home
+  mid-story. It manages only the wards it created.
+- I wrote the emergency waits as "inside the targets for most" and set each
+  one to start *at* its target, with jitter on top. The dashboard then showed a
+  department breaching 72%. The waits now sit inside each target; only the
+  deliberate slow patients breach.

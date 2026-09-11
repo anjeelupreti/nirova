@@ -904,7 +904,13 @@ def request_return(
             created_by_id=actor.uuid,
         )
 
-    sale_return.refund_total = money(total)
+    # To the whole rupee, because the credit note that pays it out is an
+    # invoice and every invoice is rounded (`_recalculate`). Left at the paisa,
+    # a return of three plasters from a 13%-VAT sale came to Rs 10.17 while
+    # its credit note — correctly — said Rs 10.00, and the refund was refused
+    # as more than the note owed. Nepal has no paisa coin to hand back; the
+    # figure the cashier is shown at request is now the figure they pay.
+    sale_return.refund_total = money(total.quantize(RUPEE, rounding=ROUND_HALF_UP))
     sale_return.save(update_fields=["refund_total", "updated_at"])
 
     record(
@@ -916,6 +922,39 @@ def request_return(
         metadata={"refund_total": str(sale_return.refund_total)},
     )
     return sale_return
+
+
+def _credit_line(row) -> dict:
+    """One credit-note line that reverses exactly what the customer paid.
+
+    **It used to reverse only the shelf price.** The line carried the quantity
+    and unit price and zero tax and zero discount, and `_recalculate` totals an
+    invoice from those — so a return from a VAT-rated sale was credited without
+    its VAT, and a return from a discounted sale was credited the undiscounted
+    price. Nobody noticed because every product the demo sold was VAT-exempt
+    and undiscounted; the first plaster sold at 13% found it.
+
+    The discount and tax are the returned proportion of what the sale line
+    charged, and the tax share is taken as the remainder so the line's own
+    arithmetic — quantity × price − discount + tax — lands on the paisa of the
+    refund, whatever the rounding of the two shares would have done apart.
+    """
+    line = row.sale_line
+    share = row.quantity / line.quantity
+    gross = (row.quantity * line.unit_price).quantize(PAISA, rounding=ROUND_HALF_UP)
+    discount = (line.discount_amount * share).quantize(PAISA, rounding=ROUND_HALF_UP)
+    tax = row.refund_amount - (gross - discount)
+    return {
+        "service_code": line.product.code,
+        "description": f"Return: {line.product_name} [{line.batch_number}]",
+        "category": "pharmacy",
+        "quantity": -row.quantity,
+        "unit_price": line.unit_price,
+        "discount_amount": -discount,
+        "tax_rate": line.tax_percent,
+        "tax_amount": -tax,
+        "total": -row.refund_amount,
+    }
 
 
 @tenant_atomic_method
@@ -951,23 +990,7 @@ def approve_return(
 
     # -- 1. Credit note, against the sale's own invoice --------------------
     original = Invoice.objects.filter(uuid=sale.invoice_uuid).first()
-    credit_lines = [
-        {
-            "service_code": row.sale_line.product.code,
-            "description": (
-                f"Return: {row.sale_line.product_name} "
-                f"[{row.sale_line.batch_number}]"
-            ),
-            "category": "pharmacy",
-            "quantity": -row.quantity,
-            "unit_price": row.sale_line.unit_price,
-            "discount_amount": MONEY_ZERO,
-            "tax_rate": row.sale_line.tax_percent,
-            "tax_amount": MONEY_ZERO,
-            "total": -row.refund_amount,
-        }
-        for row in lines
-    ]
+    credit_lines = [_credit_line(row) for row in lines]
     credit_note = create_retail_invoice(
         organization=organization,
         facility=sale.facility,

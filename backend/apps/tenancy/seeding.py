@@ -54,6 +54,13 @@ TENANT_SEEDS = [
     "seed_bloodbank_demo",
     "seed_referrals_demo",
     "seed_portal_demo",
+    # The population a hospital would already have — a register of people
+    # and a stocked formulary — and then today, topped up to the hour. After
+    # every narrative seed, because each of those tells its story with named
+    # patients and products that must already exist, and the day must not
+    # have walked one of them into the emergency department first.
+    "seed_demo_population",
+    "seed_demo_day",
     # Late, because it reports on what everything above raised.
     "seed_notifications_demo",
     # Last, and the only one that goes through HTTP. Every other seed runs at

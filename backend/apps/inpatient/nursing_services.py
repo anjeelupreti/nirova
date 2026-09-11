@@ -834,7 +834,12 @@ def get_nurse_workspace_summary(
                 "patient_uuid": str(adm.patient.uuid),
                 "patient_name": adm.patient.full_name,
                 "patient_mrn": adm.patient.mrn,
-                "patient_age": adm.patient.age_display if hasattr(adm.patient, "age_display") else "",
+                # `age_display` never existed, so this was "" for every
+                # patient and every card said "Adult" — including the children
+                # on the paediatric ward, whose doses depend on their age.
+                "patient_age": (
+                    f"{adm.patient.age_years}" if adm.patient.age_years is not None else ""
+                ),
                 "patient_gender": adm.patient.gender,
                 "admitted_at": adm.admitted_at.isoformat(),
                 "length_of_stay_days": adm.length_of_stay_days,
@@ -873,6 +878,10 @@ def get_nurse_workspace_summary(
         "shift": shift,
         "date": s_date.isoformat(),
         "scope": scope,
+        # "Mine" with nothing assigned this shift falls back to the whole ward
+        # rather than an empty screen — but says so. It used to fall back
+        # silently, and the page labelled forty-one patients "assigned to you".
+        "showing_whole_ward": scope == "mine" and not my_assignments,
         "facility_name": getattr(facility, "name", ""),
         "total_patients": total_patients,
         "high_risk_count": high_risk_count,

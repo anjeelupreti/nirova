@@ -9,6 +9,7 @@ from apps.inpatient.api import (
     OutcomesView,
     WardViewSet,
 )
+from apps.inpatient.board import BedBoardView
 from apps.inpatient.nursing_api import (
     AdministerDoseView,
     BedsideRoundView,
@@ -29,6 +30,7 @@ router.register("nurse-workspace/tasks", NursingTaskViewSet, basename="nurse-tas
 
 urlpatterns = [
     # Before the router, so specific endpoints are not matched as admission references.
+    path("board/", BedBoardView.as_view(), name="ipd-board"),
     path("census/", CensusView.as_view(), name="ipd-census"),
     path("outcomes/", OutcomesView.as_view(), name="ipd-outcomes"),
     path("accrue/", AccrualRunView.as_view(), name="ipd-accrue"),

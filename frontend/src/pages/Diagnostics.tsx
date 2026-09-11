@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Printer,
   AlertTriangle,
   CheckCircle2,
   FlaskConical,
@@ -23,6 +24,9 @@ import {
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { useSession } from "@/hooks/useSession";
+import { DocumentPreview } from "@/components/documents/DocumentPreview";
+import { LabReportDocument } from "@/components/documents/LabReportDocument";
 import { cn } from "@/lib/utils";
 import type {
   CriticalAlert,
@@ -77,9 +81,9 @@ const STATUS_LABEL: Record<string, string> = {
 /** Colour a result by how far outside normal it is. */
 const FLAG_STYLE: Record<string, string> = {
   normal: "",
-  low: "text-amber-700 dark:text-amber-400 font-medium",
-  high: "text-amber-700 dark:text-amber-400 font-medium",
-  abnormal: "text-amber-700 dark:text-amber-400 font-medium",
+  low: "text-warning font-medium",
+  high: "text-warning font-medium",
+  abnormal: "text-warning font-medium",
   critical_low: "text-destructive font-semibold",
   critical_high: "text-destructive font-semibold",
 };
@@ -383,6 +387,8 @@ function OrderDetail({
   onEnterResults: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const { session } = useSession();
   const [rejectReason, setRejectReason] = useState("");
   const [showReject, setShowReject] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -534,7 +540,31 @@ function OrderDetail({
                 Verify and release
               </Button>
             )}
+            {/* Only a verified order has a report; see LabReportDocument. */}
+            {(order.status === "verified" || order.status === "released") &&
+              order.results.length > 0 && (
+                <Button size="sm" variant="outline" onClick={() => setPrinting(true)}>
+                  <Printer className="h-4 w-4" />
+                  View & print report
+                </Button>
+              )}
           </div>
+        )}
+
+        {printing && (
+          <DocumentPreview
+            open
+            onClose={() => setPrinting(false)}
+            title={`Laboratory report · ${order.test_name}`}
+            subtitle={order.patient_name}
+            printTarget={`lab-report-${order.uuid}`}
+          >
+            <LabReportDocument
+              order={order}
+              organization={session?.organization?.display_name ?? "Nirova"}
+              printedBy={session?.user.display_name}
+            />
+          </DocumentPreview>
         )}
 
         {order.status === "resulted" && (

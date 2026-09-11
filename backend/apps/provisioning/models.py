@@ -315,3 +315,64 @@ class ChangeRequestComment(BaseModel):
 
     def __str__(self):
         return f"Comment on {self.request.reference}"
+
+
+class RegistrationStatus(models.TextChoices):
+    NEW = "new", "New"
+    CONTACTED = "contacted", "Contacted"
+    ONBOARDED = "onboarded", "Onboarded"
+    DECLINED = "declined", "Declined"
+
+
+class RegistrationRequest(BaseModel):
+    """A hospital, clinic or pharmacy asking to use the product.
+
+    **Not a tenant, and deliberately not one yet.** Provisioning creates a
+    physical database; letting an anonymous form do that would let anyone on
+    the internet create databases on our servers. So signing up records who
+    is asking and what they run, and a person on the platform team turns it
+    into a tenant — with `onboard_organization`, the same path the platform
+    console already uses — after a conversation. That is also how every
+    hospital system is actually bought: nobody puts a two-hundred-bed hospital
+    on a product they found five minutes ago.
+    """
+
+    reference = models.CharField(max_length=32, unique=True, db_index=True)
+    organization_name = models.CharField(max_length=255)
+    business_type = models.CharField(max_length=32, db_index=True)
+    pan_number = models.CharField(max_length=32, blank=True)
+    province = models.CharField(max_length=64, blank=True)
+    district = models.CharField(max_length=64, blank=True)
+    facility_count = models.PositiveSmallIntegerField(default=1)
+    bed_count = models.PositiveIntegerField(default=0)
+    #: Module codes they said they need, as the catalogue names them.
+    modules = models.JSONField(default=list, blank=True)
+    current_system = models.CharField(max_length=128, blank=True)
+
+    contact_name = models.CharField(max_length=255)
+    contact_email = models.EmailField(db_index=True)
+    contact_phone = models.CharField(max_length=32, blank=True)
+    contact_role = models.CharField(max_length=128, blank=True)
+    message = models.TextField(blank=True)
+
+    status = models.CharField(
+        max_length=16, choices=RegistrationStatus.choices,
+        default=RegistrationStatus.NEW, db_index=True,
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+
+    reviewed_by_email = models.CharField(max_length=254, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="registration_requests",
+    )
+
+    class Meta:
+        db_table = "cp_registration_request"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} — {self.organization_name}"

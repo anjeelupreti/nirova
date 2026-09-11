@@ -26,6 +26,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   Building2,
+  Inbox,
   CheckCircle2,
   Database,
   Layers,
@@ -64,11 +65,14 @@ import {
   TableRow,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { Registrations } from "@/pages/platform/Registrations";
 
-type Tab = "overview" | "customers" | "subscriptions" | "plans";
+type Tab = "overview" | "registrations" | "customers" | "subscriptions" | "plans";
 
 const TABS: { id: Tab; label: string; icon: typeof Building2 }[] = [
   { id: "overview", label: "Overview", icon: TrendingUp },
+  // Before Customers: a registration is a customer who has not happened yet.
+  { id: "registrations", label: "Registrations", icon: Inbox },
   { id: "customers", label: "Customers", icon: Building2 },
   { id: "subscriptions", label: "Subscriptions", icon: Layers },
   { id: "plans", label: "Plans", icon: PieChart },
@@ -125,6 +129,7 @@ export default function PlatformPage() {
       </div>
 
       {tab === "overview" && <Overview />}
+      {tab === "registrations" && <Registrations />}
       {tab === "customers" && <Customers />}
       {tab === "subscriptions" && <Subscriptions />}
       {tab === "plans" && <Plans />}
@@ -209,7 +214,7 @@ function Overview() {
           value={rupees(revenue.expansion_mrr)}
           hint={`${revenue.expansion_share_percent}% of MRR`}
           tone={
-            revenue.expansion_share_percent > 50 ? "text-emerald-600" : undefined
+            revenue.expansion_share_percent > 50 ? "text-good" : undefined
           }
         />
         <Stat
@@ -336,7 +341,7 @@ function Overview() {
                     <TableCell
                       className={cn(
                         "text-right tabular-nums",
-                        row.share_percent > 25 && "font-medium text-amber-600",
+                        row.share_percent > 25 && "font-medium text-warning",
                       )}
                     >
                       {row.share_percent}%
@@ -428,7 +433,7 @@ function Overview() {
               <Row
                 label="Awaiting provisioning"
                 value={organizations.pending_provisioning}
-                tone="text-amber-600"
+                tone="text-warning"
               />
             )}
           </CardContent>
@@ -477,7 +482,7 @@ function Overview() {
                 value={data.change_requests.awaiting_platform}
                 tone={
                   data.change_requests.awaiting_platform > 0
-                    ? "text-amber-600"
+                    ? "text-warning"
                     : undefined
                 }
               />
@@ -560,7 +565,7 @@ function Customers() {
                 </TableCell>
                 <TableCell>
                   {row.database_status === "ready" ? (
-                    <span className="flex items-center gap-1 text-xs text-emerald-600">
+                    <span className="flex items-center gap-1 text-xs text-good">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       {row.database_alias}
                     </span>
@@ -662,7 +667,7 @@ function Subscriptions() {
                     <TableCell className="text-right tabular-nums">
                       {rupees(row.contracted_price)}
                       {Number(row.discount_percent) > 0 && (
-                        <span className="block text-xs text-emerald-600">
+                        <span className="block text-xs text-good">
                           −{row.discount_percent}%
                         </span>
                       )}

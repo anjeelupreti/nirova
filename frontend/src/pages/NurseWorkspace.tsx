@@ -14,13 +14,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity,
   AlertOctagon,
   AlertTriangle,
   BedDouble,
   CheckCircle2,
   Clock,
-  Droplets,
   ListTodo,
   Loader2,
   Pill,
@@ -29,12 +27,12 @@ import {
   Search,
   Send,
   ShieldCheck,
-  Stethoscope,
   UserCheck,
   X,
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { BedsidePatientCard } from "@/components/nursing/BedsidePatientCard";
 import { cn } from "@/lib/utils";
 import type {
   EmarLine,
@@ -72,9 +70,9 @@ import { PageHeader } from "@/components/ui/layout";
 /* -------------------------------------------------------------------------- */
 
 const SHIFT_LABELS: Record<string, { label: string; time: string; color: string }> = {
-  morning: { label: "Morning Shift", time: "07:00 – 15:00", color: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300" },
-  evening: { label: "Evening Shift", time: "15:00 – 23:00", color: "bg-blue-500/10 text-blue-700 border-blue-500/30 dark:text-blue-300" },
-  night: { label: "Night Shift", time: "23:00 – 07:00", color: "bg-indigo-500/10 text-indigo-700 border-indigo-500/30 dark:text-indigo-300" },
+  morning: { label: "Morning Shift", time: "07:00 – 15:00", color: "bg-warning/10 text-warning border-warning/40" },
+  evening: { label: "Evening Shift", time: "15:00 – 23:00", color: "bg-info/10 text-info border-info/40" },
+  night: { label: "Night Shift", time: "23:00 – 07:00", color: "bg-info/10 text-info border-info/40" },
 };
 
 function liveCalculateNEWS2(values: {
@@ -235,9 +233,12 @@ export default function NurseWorkspacePage() {
         const facRes = await api.get<Paginated<Facility>>("/org/facilities/");
         const facs = facRes.results ?? [];
         setFacilities(facs);
-        if (facs.length > 0) {
-          setSelectedFacility(facs[0].uuid);
-        }
+        // Wards are at the hospital. Defaulting to the first facility put a
+        // nurse who covers the clinic and the hospital on the clinic, which
+        // has one three-bed ward, and her fifty-bed hospital was a dropdown
+        // away that nothing told her to open.
+        const home = facs.find((row) => row.facility_type === "hospital") ?? facs[0];
+        if (home) setSelectedFacility(home.uuid);
 
         const wardRes = await api.get<Paginated<Ward>>("/ipd/wards/");
         const wList = wardRes.results ?? [];
@@ -324,12 +325,12 @@ export default function NurseWorkspacePage() {
                   {SHIFT_LABELS[summary.shift]?.label || summary.shift}
                 </Badge>
               )}
-              <Badge variant="secondary" className="font-mono text-xs">
-                {new Date().toLocaleDateString("en-NP", { weekday: "short", month: "short", day: "numeric" })}
-              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+              </span>
             </>
           }
-          description="Bedside rounding console: assigned patients, vital sign rounds with NEWS2 alerts, eMAR, and shift handover."
+          description="Your patients this shift — who needs seeing first, when observations are due, medicines and handover."
         />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -337,7 +338,7 @@ export default function NurseWorkspacePage() {
             <Select
               value={selectedFacility}
               onChange={(e) => setSelectedFacility(e.target.value)}
-              className="w-40 text-xs"
+              className="w-56 text-xs"
             >
               {facilities.map((f) => (
                 <option key={f.uuid} value={f.uuid}>
@@ -353,8 +354,10 @@ export default function NurseWorkspacePage() {
             onChange={(e) => setSelectedWard(e.target.value)}
             className="w-40 text-xs"
           >
-            <option value="">All Wards</option>
-            {wards.map((w) => (
+            <option value="">All wards</option>
+            {wards
+              .filter((w) => !selectedFacility || w.facility === selectedFacility)
+              .map((w) => (
               <option key={w.uuid} value={w.uuid}>
                 {w.name}
               </option>
@@ -367,7 +370,7 @@ export default function NurseWorkspacePage() {
             onChange={(e) => setShiftFilter(e.target.value)}
             className="w-32 text-xs"
           >
-            <option value="">Current Shift</option>
+            <option value="">This shift</option>
             <option value="morning">Morning</option>
             <option value="evening">Evening</option>
             <option value="night">Night</option>
@@ -383,7 +386,7 @@ export default function NurseWorkspacePage() {
                 scope === "mine" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              My Patients
+              My patients
             </button>
             <button
               type="button"
@@ -393,7 +396,7 @@ export default function NurseWorkspacePage() {
                 scope === "ward" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Ward Census
+              Whole ward
             </button>
           </div>
 
@@ -404,7 +407,7 @@ export default function NurseWorkspacePage() {
             className="text-xs"
           >
             <UserCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
-            Assign Nurse
+            Assign
           </Button>
 
           <Button
@@ -429,55 +432,57 @@ export default function NurseWorkspacePage() {
               <span className="text-xs font-medium text-muted-foreground">Inpatients</span>
               <BedDouble className="h-4 w-4 text-primary" />
             </div>
-            <div className="mt-1 text-2xl font-bold">{summary.total_patients}</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{summary.total_patients}</div>
             <span className="text-[11px] text-muted-foreground">
-              {scope === "mine" ? "Assigned to you" : "On duty ward board"}
+              {summary.showing_whole_ward
+                ? "None assigned to you yet"
+                : scope === "mine"
+                  ? "Assigned to you"
+                  : "Whole ward"}
             </span>
           </Card>
 
           <Card
             className={cn(
               "cursor-pointer p-3 transition-all",
-              riskFilter === "high" && "ring-2 ring-destructive",
-              summary.high_risk_count > 0 && "border-destructive/40 bg-destructive/5"
+              riskFilter === "high" && "border-primary ring-1 ring-primary",
+              summary.high_risk_count > 0 && "border-critical/40"
             )}
             onClick={() => setRiskFilter(riskFilter === "high" ? "all" : "high")}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-destructive">High Deterioration</span>
-              <AlertOctagon className="h-4 w-4 text-destructive animate-pulse" />
+              <span className="text-xs font-medium text-muted-foreground">Emergency response</span>
+              <AlertOctagon className="h-4 w-4 text-critical" />
             </div>
-            <div className="mt-1 text-2xl font-bold text-destructive">{summary.high_risk_count}</div>
-            <span className="text-[11px] text-destructive/80 font-medium">NEWS2 ≥ 7 (Critical)</span>
+            <div className={cn("mt-1 text-2xl font-semibold tabular-nums", summary.high_risk_count > 0 ? "text-critical" : "text-foreground")}>{summary.high_risk_count}</div>
+            <span className="text-[11px] text-muted-foreground">NEWS2 of 7 or more</span>
           </Card>
 
           <Card
             className={cn(
               "cursor-pointer p-3 transition-all",
-              riskFilter === "medium" && "ring-2 ring-amber-500",
-              summary.medium_risk_count > 0 && "border-amber-500/40 bg-amber-500/5"
+              riskFilter === "medium" && "border-primary ring-1 ring-primary",
+              summary.medium_risk_count > 0 && "border-warning/40"
             )}
             onClick={() => setRiskFilter(riskFilter === "medium" ? "all" : "medium")}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Moderate Risk</span>
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <span className="text-xs font-medium text-muted-foreground">Urgent review</span>
+              <AlertTriangle className="h-4 w-4 text-warning" />
             </div>
-            <div className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-400">
+            <div className={cn("mt-1 text-2xl font-semibold tabular-nums", summary.medium_risk_count > 0 ? "text-warning" : "text-foreground")}>
               {summary.medium_risk_count}
             </div>
-            <span className="text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium">
-              NEWS2 5–6 (Urgent)
-            </span>
+            <span className="text-[11px] text-muted-foreground">NEWS2 of 5 or 6</span>
           </Card>
 
           <Card className="p-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Shift Tasks</span>
+              <span className="text-xs font-medium text-muted-foreground">Shift tasks</span>
               <ListTodo className="h-4 w-4 text-primary" />
             </div>
-            <div className="mt-1 text-2xl font-bold">{summary.total_tasks_pending}</div>
-            <span className="text-[11px] text-muted-foreground">Pending bedside duties</span>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{summary.total_tasks_pending}</div>
+            <span className="text-[11px] text-muted-foreground">Still to do this shift</span>
           </Card>
         </div>
       )}
@@ -489,32 +494,53 @@ export default function NurseWorkspacePage() {
         <div className="relative flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search bed, patient name, MRN, or diagnosis…"
+            placeholder="Find a patient, bed, MRN or diagnosis"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 text-xs"
           />
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Filter Risk:</span>
-          {(["all", "high", "medium", "low"] as const).map((r) => (
+        <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm" role="tablist" aria-label="NEWS2 band">
+          {(
+            [
+              ["all", "Everyone"],
+              ["high", "Emergency"],
+              ["medium", "Urgent"],
+              ["low", "Routine"],
+            ] as const
+          ).map(([r, label]) => (
             <button
               key={r}
               type="button"
+              role="tab"
+              aria-selected={riskFilter === r}
               onClick={() => setRiskFilter(r)}
               className={cn(
-                "rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wider transition-all",
+                "rounded-md px-3 py-1 transition-colors",
                 riskFilter === r
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  ? "bg-background font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {r}
+              {label}
             </button>
           ))}
         </div>
       </div>
+
+      {summary?.showing_whole_ward && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-info/30 bg-info-subtle px-4 py-3 text-sm text-info-subtle-foreground">
+          <span>
+            Nobody has assigned you patients for this shift, so the whole ward is
+            shown. Take your beds to see only yours.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setShowAssignModal(true)}>
+            <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+            Take beds
+          </Button>
+        </div>
+      )}
 
       {/* -------------------------------------------------------------------- */}
       {/* Error state                                                          */}
@@ -565,220 +591,17 @@ export default function NurseWorkspacePage() {
       {/* Bedside Patient Cards Grid                                           */}
       {/* -------------------------------------------------------------------- */}
       {!loading && filteredPatients.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {filteredPatients.map((patient) => {
-            const isCritical = patient.news2.risk_level === "high";
-            const isMedium = patient.news2.risk_level === "medium";
-
-            return (
-              <Card
-                key={patient.admission_uuid}
-                className={cn(
-                  "relative flex flex-col justify-between overflow-hidden border transition-all hover:shadow-md",
-                  isCritical && "border-destructive/60 shadow-destructive/5 ring-1 ring-destructive/40 bg-gradient-to-b from-destructive/5 to-transparent",
-                  isMedium && "border-amber-500/50 shadow-amber-500/5 bg-gradient-to-b from-amber-500/5 to-transparent"
-                )}
-              >
-                {/* Bed Badge & Risk Header */}
-                <div className="flex items-center justify-between border-b px-4 py-2.5 bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="default" className="font-mono text-xs font-bold tracking-wide">
-                      {patient.bed_code}
-                    </Badge>
-                    <span className="text-xs font-medium text-muted-foreground truncate max-w-[120px]">
-                      {patient.ward_name}
-                    </span>
-                    {patient.is_mine && (
-                      <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px]">
-                        My Patient
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* NEWS2 Indicator Badge */}
-                  <Badge
-                    className={cn(
-                      "font-mono font-bold text-xs px-2 py-0.5",
-                      isCritical && "bg-destructive text-destructive-foreground animate-pulse",
-                      isMedium && "bg-amber-500 text-white",
-                      !isCritical && !isMedium && "bg-emerald-600 text-white"
-                    )}
-                  >
-                    NEWS2: {patient.news2.score} [{patient.news2.risk_level.toUpperCase()}]
-                  </Badge>
-                </div>
-
-                {/* Patient Information & Demographics */}
-                <div className="p-4 space-y-3">
-                  <div>
-                    <div className="flex items-baseline justify-between">
-                      <h3 className="text-base font-bold text-foreground truncate">{patient.patient_name}</h3>
-                      <span className="font-mono text-xs text-muted-foreground">{patient.patient_mrn}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                      <span>{patient.patient_gender?.toUpperCase()}</span>
-                      <span>•</span>
-                      <span>{patient.patient_age || "Adult"}</span>
-                      <span>•</span>
-                      <span>Stay: {patient.length_of_stay_days}d</span>
-                      <span>•</span>
-                      <span className="truncate">{patient.consultant_name}</span>
-                    </div>
-                    <p className="text-xs font-medium text-foreground/90 mt-1 line-clamp-1">
-                      {patient.admitting_diagnosis || "Under evaluation"}
-                    </p>
-                  </div>
-
-                  {/* NEWS2 Triggers & Recommendation Box if deteriorated */}
-                  {(isCritical || isMedium) && (
-                    <div
-                      className={cn(
-                        "rounded-md p-2 text-xs space-y-1",
-                        isCritical
-                          ? "bg-destructive/10 text-destructive border border-destructive/30"
-                          : "bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30"
-                      )}
-                    >
-                      <div className="flex items-center justify-between font-semibold">
-                        <span className="flex items-center gap-1">
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          {isCritical ? "Critical Deterioration Alert" : "Elevated Risk Warning"}
-                        </span>
-                        <span className="text-[10px] uppercase">{patient.news2.risk_level}</span>
-                      </div>
-                      <p className="text-[11px] leading-tight opacity-90">{patient.news2.recommendation}</p>
-                      {patient.news2.triggers.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1 pt-1 border-t border-current/20">
-                          {patient.news2.triggers.map((tr, i) => (
-                            <span key={i} className="font-mono text-[10px] bg-background/60 rounded px-1.5 py-0.5">
-                              {tr.parameter}: {tr.value} (+{tr.score})
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Latest Vitals Strip */}
-                  <div className="rounded-lg border bg-card p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Activity className="h-3 w-3 text-primary" /> Latest Bedside Vitals
-                      </span>
-                      {patient.vitals?.recorded_at ? (
-                        <span>{new Date(patient.vitals.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                      ) : (
-                        <span className="text-destructive font-medium">None today</span>
-                      )}
-                    </div>
-
-                    {patient.vitals ? (
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">BP</span>
-                          <span className="font-bold font-mono">{patient.vitals.bp || "—"}</span>
-                        </div>
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">HR</span>
-                          <span className="font-bold font-mono">{patient.vitals.pulse ? `${patient.vitals.pulse} bpm` : "—"}</span>
-                        </div>
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">SpO2</span>
-                          <span className="font-bold font-mono">{patient.vitals.spo2 ? `${patient.vitals.spo2}%` : "—"}</span>
-                        </div>
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">RR</span>
-                          <span className="font-bold font-mono">{patient.vitals.rr ? `${patient.vitals.rr} bpm` : "—"}</span>
-                        </div>
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">Temp</span>
-                          <span className="font-bold font-mono">{patient.vitals.temp ? `${patient.vitals.temp}°C` : "—"}</span>
-                        </div>
-                        <div className="rounded bg-muted/40 p-1">
-                          <span className="text-[10px] text-muted-foreground block">Pain</span>
-                          <span className="font-bold font-mono">{patient.vitals.pain !== null ? `${patient.vitals.pain}/10` : "—"}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic text-center py-2">
-                        No observations recorded. Tap 'Record Vitals' to begin.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Operational indicators: Fluid, eMAR, Tasks */}
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="flex flex-col rounded border p-2 bg-muted/20">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
-                        <Droplets className="h-3 w-3 text-blue-500" /> Fluid 24h
-                      </span>
-                      <span className="font-bold font-mono mt-0.5">
-                        {patient.fluid_balance_24h.net_ml >= 0 ? `+${patient.fluid_balance_24h.net_ml}` : patient.fluid_balance_24h.net_ml} mL
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col rounded border p-2 bg-muted/20">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
-                        <Pill className="h-3 w-3 text-emerald-500" /> eMAR Today
-                      </span>
-                      <span className="font-bold font-mono mt-0.5">
-                        {patient.emar.administrations_today} doses
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col rounded border p-2 bg-muted/20">
-                      <span className="text-muted-foreground flex items-center gap-1 text-[10px]">
-                        <ListTodo className="h-3 w-3 text-amber-500" /> Open Tasks
-                      </span>
-                      <span className="font-bold font-mono mt-0.5">
-                        {patient.tasks.pending_count} pending
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card Action Footer Bar */}
-                <div className="grid grid-cols-4 gap-1 border-t bg-muted/30 p-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-[11px] font-medium"
-                    onClick={() => setSelectedPatientForRound(patient)}
-                  >
-                    <Stethoscope className="mr-1 h-3.5 w-3.5 text-primary" />
-                    Vitals
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-[11px] font-medium"
-                    onClick={() => setSelectedPatientForEmar(patient)}
-                  >
-                    <Pill className="mr-1 h-3.5 w-3.5 text-emerald-600" />
-                    eMAR
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-[11px] font-medium"
-                    onClick={() => setSelectedPatientForHandover(patient)}
-                  >
-                    <Send className="mr-1 h-3.5 w-3.5 text-blue-600" />
-                    SBAR
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-[11px] font-medium"
-                    onClick={() => setSelectedPatientForTasks(patient)}
-                  >
-                    <ListTodo className="mr-1 h-3.5 w-3.5 text-amber-600" />
-                    Tasks
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {filteredPatients.map((patient) => (
+            <BedsidePatientCard
+              key={patient.admission_uuid}
+              patient={patient}
+              onObserve={() => setSelectedPatientForRound(patient)}
+              onMeds={() => setSelectedPatientForEmar(patient)}
+              onHandover={() => setSelectedPatientForHandover(patient)}
+              onTasks={() => setSelectedPatientForTasks(patient)}
+            />
+          ))}
         </div>
       )}
 
@@ -969,8 +792,8 @@ function BedsideRoundModal({
             className={cn(
               "rounded-lg border p-3 flex items-center justify-between transition-all",
               liveNews.color === "red" && "bg-destructive/10 border-destructive/40 text-destructive",
-              liveNews.color === "amber" && "bg-amber-500/10 border-amber-500/40 text-amber-800 dark:text-amber-300",
-              liveNews.color === "green" && "bg-emerald-500/10 border-emerald-500/40 text-emerald-800 dark:text-emerald-300"
+              liveNews.color === "amber" && "bg-warning/10 border-warning/40 text-warning",
+              liveNews.color === "green" && "bg-good/10 border-good/40 text-good"
             )}
           >
             <div>
@@ -983,8 +806,8 @@ function BedsideRoundModal({
               className={cn(
                 "font-bold text-xs px-2.5 py-1",
                 liveNews.color === "red" && "bg-destructive text-destructive-foreground",
-                liveNews.color === "amber" && "bg-amber-500 text-white",
-                liveNews.color === "green" && "bg-emerald-600 text-white"
+                liveNews.color === "amber" && "bg-warning text-white",
+                liveNews.color === "green" && "bg-good text-white"
               )}
             >
               {liveNews.risk_level.toUpperCase()}
@@ -1288,7 +1111,7 @@ function EmarModal({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <Pill className="h-5 w-5 text-emerald-600" />
+              <Pill className="h-5 w-5 text-good" />
               <h2 className="text-lg font-bold">Electronic Medication Administration Record (eMAR)</h2>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1339,7 +1162,7 @@ function EmarModal({
                           <TableCell>
                             <span className="font-bold text-xs block">{line.display_name}</span>
                             {line.is_prn && (
-                              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/40">
+                              <Badge variant="outline" className="text-[10px] text-warning border-warning/40">
                                 PRN: {line.prn_indication || "As needed"}
                               </Badge>
                             )}
@@ -1356,8 +1179,8 @@ function EmarModal({
                                   variant="outline"
                                   className={cn(
                                     "text-[10px] uppercase font-bold",
-                                    line.last_administered.status === "given" && "text-emerald-700 bg-emerald-50 border-emerald-300",
-                                    line.last_administered.status === "held" && "text-amber-700 bg-amber-50 border-amber-300",
+                                    line.last_administered.status === "given" && "text-good bg-good-subtle border-good/40",
+                                    line.last_administered.status === "held" && "text-warning bg-warning-subtle border-warning/40",
                                     line.last_administered.status === "refused" && "text-destructive bg-destructive/10 border-destructive/30"
                                   )}
                                 >
@@ -1374,7 +1197,7 @@ function EmarModal({
                           <TableCell className="text-right">
                             <Button
                               size="sm"
-                              className="h-7 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="h-7 text-xs font-medium bg-good hover:bg-good text-white"
                               onClick={() => handleOpenAdminister(line)}
                             >
                               Administer
@@ -1421,8 +1244,8 @@ function EmarModal({
                               variant="outline"
                               className={cn(
                                 "text-[10px] font-bold uppercase",
-                                adm.status === "given" && "text-emerald-700 bg-emerald-50 border-emerald-300",
-                                adm.status === "held" && "text-amber-700 bg-amber-50 border-amber-300",
+                                adm.status === "given" && "text-good bg-good-subtle border-good/40",
+                                adm.status === "held" && "text-warning bg-warning-subtle border-warning/40",
                                 adm.status === "refused" && "text-destructive bg-destructive/10 border-destructive/30"
                               )}
                             >
@@ -1630,7 +1453,7 @@ function SbarHandoverModal({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <Send className="h-5 w-5 text-blue-600" />
+              <Send className="h-5 w-5 text-info" />
               <h2 className="text-lg font-bold">Shift Handover (SBAR)</h2>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1650,11 +1473,11 @@ function SbarHandoverModal({
                 Last Handover by {patient.handover.outgoing_nurse_name} ({patient.handover.shift} shift)
               </span>
               {patient.handover.is_acknowledged ? (
-                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300">
+                <Badge variant="outline" className="bg-good-subtle text-good border-good/40">
                   <ShieldCheck className="mr-1 h-3 w-3" /> Acknowledged by {patient.handover.incoming_nurse_name}
                 </Badge>
               ) : (
-                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+                <Badge variant="outline" className="bg-warning-subtle text-warning border-warning/40">
                   Pending Incoming Nurse Receipt
                 </Badge>
               )}
@@ -1688,7 +1511,7 @@ function SbarHandoverModal({
           </div>
 
           <div>
-            <Label className="text-xs font-bold text-blue-600">S — Situation (Current Clinical State & Concerns)</Label>
+            <Label className="text-xs font-bold text-info">S — Situation (Current Clinical State & Concerns)</Label>
             <Textarea
               rows={2}
               value={situation}
@@ -1699,7 +1522,7 @@ function SbarHandoverModal({
           </div>
 
           <div>
-            <Label className="text-xs font-bold text-indigo-600">B — Background (History, Allergies, Surgeries)</Label>
+            <Label className="text-xs font-bold text-info">B — Background (History, Allergies, Surgeries)</Label>
             <Textarea
               rows={2}
               value={background}
@@ -1709,7 +1532,7 @@ function SbarHandoverModal({
           </div>
 
           <div>
-            <Label className="text-xs font-bold text-amber-600">A — Assessment (Vitals, NEWS2, Lines, Fluid, Drains)</Label>
+            <Label className="text-xs font-bold text-warning">A — Assessment (Vitals, NEWS2, Lines, Fluid, Drains)</Label>
             <Textarea
               rows={2}
               value={assessment}
@@ -1720,7 +1543,7 @@ function SbarHandoverModal({
           </div>
 
           <div>
-            <Label className="text-xs font-bold text-emerald-600">R — Recommendation (Incoming Shift Plan & Orders)</Label>
+            <Label className="text-xs font-bold text-good">R — Recommendation (Incoming Shift Plan & Orders)</Label>
             <Textarea
               rows={2}
               value={recommendation}
@@ -1825,7 +1648,7 @@ function NursingTasksModal({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <ListTodo className="h-5 w-5 text-amber-600" />
+              <ListTodo className="h-5 w-5 text-warning" />
               <h2 className="text-lg font-bold">Shift Duties & Nursing Tasks</h2>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1864,7 +1687,7 @@ function NursingTasksModal({
                     </Badge>
                   </div>
                   {t.completed_by_name && (
-                    <span className="text-[10px] text-emerald-600 font-medium block">
+                    <span className="text-[10px] text-good font-medium block">
                       ✓ Done by {t.completed_by_name} at {new Date(t.completed_at!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   )}
