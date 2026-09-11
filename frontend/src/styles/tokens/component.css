@@ -1,0 +1,83 @@
+/**
+ * Tier 3 — component knobs.
+ *
+ * Only what a specific component needs and no semantic token can express: a
+ * height, a width, a duration. Kept out of `semantic.css` so that file stays
+ * readable as a colour system, and out of the components themselves so a
+ * measurement two things must agree on — the header's height and the
+ * sidebar's `top` — is written once.
+ */
+
+:root {
+  /* -- Shell geometry ---------------------------------------------------- */
+  /*
+   * The sidebar's `top` and its height both derive from the header height, and
+   * they were three separate magic numbers (`h-14`, `top-14`,
+   * `calc(100vh-3.5rem)`) that happened to agree. Changing the header meant
+   * finding all three, and missing one meant a sidebar overlapping the header
+   * or floating below it.
+   */
+  --header-height: 3.5rem;
+  --sidebar-width: 15rem;
+  --sidebar-width-collapsed: 3.5rem;
+  --content-max: 100rem;
+
+  /* -- Density ----------------------------------------------------------- */
+  /*
+   * Set by `usePreferences` as a data attribute on <html>, so a screen that
+   * builds its own rows honours the choice without knowing the preference
+   * exists. Compact fits roughly a third more rows, which is what a triage
+   * board wants and what a billing form does not.
+   *
+   * Density now moves more than row padding: a compact table also tightens its
+   * cell gutters and drops its line-height, because a row that is shorter but
+   * still gutter-spaced for comfort just looks squashed.
+   */
+  --row-padding-y: 0.625rem;
+  --row-padding-x: 0.75rem;
+  --row-leading: 1.5;
+  --control-height: 2.25rem;
+  --control-height-sm: 2rem;
+
+  /* -- Charts ------------------------------------------------------------ */
+  /*
+   * Mark geometry, named. Thin marks, 2px strokes, markers no smaller than
+   * 8px so they remain a hit target, and a 2px gap in the surface colour
+   * between stacked segments so the boundary is a gap rather than a hairline
+   * of a third colour.
+   */
+  --chart-stroke: 2px;
+  --chart-marker: 8px;
+  --chart-segment-gap: 2px;
+  --chart-radius: 4px;
+  --chart-grid-dash: 3 3;
+}
+
+:root[data-density="compact"] {
+  --row-padding-y: 0.3125rem;
+  --row-padding-x: 0.5rem;
+  --row-leading: 1.35;
+  --control-height: 2rem;
+  --control-height-sm: 1.75rem;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The patient application                                                    */
+/* -------------------------------------------------------------------------- */
+/*
+ * **True black, unlike the console.** `semantic.css` explains why the console
+ * moved off pure black: halation on an LCD under fluorescent light. The
+ * patient application is the opposite case — a phone, held close, often in a
+ * dark room, frequently on OLED where black pixels are switched off entirely.
+ * The argument that was wrong for the ward is right here, so the surface is
+ * overridden rather than shared.
+ *
+ * Applied by the patient app's own root element, so the console can never pick
+ * it up by accident.
+ */
+.dark [data-surface="patient"],
+.dark[data-surface="patient"] {
+  --background: 0 0% 0%;
+  --card: 0 0% 5%;
+  --popover: 0 0% 7%;
+}

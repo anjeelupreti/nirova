@@ -34,8 +34,27 @@ import api from "@/lib/api";
 export type Theme = "system" | "light" | "dark";
 export type Density = "comfortable" | "compact";
 
+/**
+ * The five identities in `styles/tokens/palettes.css`.
+ *
+ * Light/dark is a *mode*; this is the palette, and the two are independent —
+ * every one of these has a validated dark form. Conflating them is the
+ * commonest way a theme picker ends up with eight options and four of them
+ * unreadable.
+ */
+export type Palette = "vital" | "meridian" | "command" | "verdant" | "ember";
+
+export const PALETTES: { value: Palette; label: string; blurb: string }[] = [
+  { value: "vital", label: "Vital", blurb: "Luminous teal, coral counterpoint" },
+  { value: "meridian", label: "Meridian", blurb: "Deep indigo and amber" },
+  { value: "command", label: "Command", blurb: "Navy chrome, electric cyan" },
+  { value: "verdant", label: "Verdant", blurb: "Fresh green with a violet lift" },
+  { value: "ember", label: "Ember", blurb: "Warm rose and teal" },
+];
+
 export interface Preferences {
   theme: Theme;
+  palette: Palette;
   density: Density;
   landing: string;
   reduced_motion: boolean;
@@ -53,6 +72,7 @@ export interface Preferences {
  */
 const FALLBACK: Preferences = {
   theme: "system",
+  palette: "vital",
   density: "comfortable",
   landing: "auto",
   reduced_motion: false,
@@ -98,6 +118,11 @@ function applyToDocument(preferences: Preferences, systemIsDark: boolean) {
   // states rather than styles: CSS reads them through `[data-density]`, and
   // anything that needs to branch in JavaScript can read them too without
   // parsing a class list.
+  // The palette. `palettes.css` also declares Vital on bare `:root`, so a
+  // page rendered before this runs is already complete rather than unstyled —
+  // this only switches it.
+  root.dataset.palette = preferences.palette;
+
   root.dataset.density = preferences.density;
   root.dataset.reducedMotion = preferences.reduced_motion ? "true" : "false";
 

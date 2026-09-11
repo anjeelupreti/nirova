@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CircleAlert,
@@ -104,11 +104,23 @@ function PatientDetailPanel({ patient }: { patient: PatientDetail }) {
               {patient.mrn}
             </CardDescription>
           </div>
-          <Badge variant={patient.is_merged ? "secondary" : "success"}>
-            {patient.is_merged
-              ? `merged → ${patient.merged_into_mrn}`
-              : patient.status}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {/* The door to the whole record. This panel is the quick look at
+                the counter; history, results, medications and the account
+                live on `/patients/:uuid`, which can be linked to and
+                bookmarked where a panel in component state could not. */}
+            <Link
+              to={`/patients/${patient.uuid}`}
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity duration-quick hover:opacity-90"
+            >
+              Open full record
+            </Link>
+            <Badge variant={patient.is_merged ? "secondary" : "success"}>
+              {patient.is_merged
+                ? `merged → ${patient.merged_into_mrn}`
+                : patient.status}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -145,7 +157,7 @@ function PatientDetailPanel({ patient }: { patient: PatientDetail }) {
             <dd>
               {patient.age_years ?? "unknown"}
               {patient.is_dob_estimated && (
-                <span className="ml-1 text-xs text-amber-600">(estimated)</span>
+                <span className="ml-1 text-xs text-warning">(estimated)</span>
               )}
             </dd>
           </div>

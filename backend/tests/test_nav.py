@@ -73,11 +73,41 @@ PROBE = {
     "/workspace": "/api/me/workspace/",
     "/notifications": "/api/notifications/summary/",
     "/self-service": "/api/hr/me/summary/",
+    # The dashboard is deliberately not probed. It has no endpoint of its own:
+    # it is composed of panels that each read a summary the viewer may or may
+    # not be entitled to, and each panel declares its permission and is not
+    # rendered when the answer is no. Probing any one of them would report the
+    # screen as closed to somebody who in fact opens it and sees the panels
+    # they are allowed -- which is the whole design. `/me/workspace/`, the one
+    # source every signed-in user can read, is already probed via `/workspace`.
+    "/dashboard": None,
+    # The settings hub, and deliberately not probed for the same reason as the
+    # dashboard: it has no endpoint of its own. It is an index of destinations,
+    # each of which is gated on the permission that governs *it*, and a section
+    # nobody can open is not rendered. Every one of those destinations is
+    # probed on its own row below. Open to anybody signed in, because "your
+    # profile and your preferences" is not an administrative act.
+    "/settings": None,
+    # Roles and permissions. `/admin/roles/` rather than `/admin/staff/`: the
+    # role catalogue is what the screen loads first and what it is *about*, and
+    # a person who can list staff but not roles would see an empty studio.
+    "/access": "/api/admin/roles/",
 }
 
 
 def _nav():
-    app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.tsx"
+    # The navigation moved out of `App.tsx` into `components/shell/nav.ts` when
+    # the command palette was built, because three things now consume it -- the
+    # rail, the narrow strip and the palette -- and a second copy would be a
+    # rail and a palette that disagree about what the product contains.
+    #
+    # This test failed loudly on the move rather than silently passing, which is
+    # what the `len(items) > 20` assertion below is for: a parser that stops
+    # matching must not look like a product with no screens.
+    app = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "frontend" / "src" / "components" / "shell" / "nav.ts"
+    )
     if not app.exists():
         # **Skip, do not crash.** This test reads the frontend source, which
         # sits beside the backend in the repository and *not* inside the

@@ -23,6 +23,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -102,7 +103,50 @@ export default function PeoplePage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facility, setFacility] = useState("");
-  const [selected, setSelected] = useState<string | null>(null);
+
+  /*
+    **Which colleague is open lives in the URL, not in component state.**
+
+    It was `useState<string | null>(null)`, and the profile behind it is a good
+    screen — record, credentials, history, pay, and whether they may practise.
+    It simply could not be *reached*: no link to send a colleague, no bookmark,
+    no second tab, and the browser's back button left the whole screen rather
+    than closing the profile, because as far as the router was concerned
+    nothing had happened.
+
+    `?employee=CODE` rather than a `/people/:code` route, deliberately. The
+    profile needs the directory's facility filter and tab state around it to
+    return to; a separate route would have to rebuild that context or drop the
+    user somewhere generic on "back". A search parameter keeps one screen with
+    one state, and it is just as linkable.
+
+    `replace` rather than push when *closing*, so opening and closing four
+    profiles does not leave eight entries the back button has to walk out of.
+  */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selected = searchParams.get("employee");
+
+  const open = useCallback(
+    (employeeCode: string) => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("employee", employeeCode);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const close = useCallback(() => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("employee");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   useEffect(() => {
     void api
@@ -112,12 +156,7 @@ export default function PeoplePage() {
   }, []);
 
   if (selected) {
-    return (
-      <EmployeeProfile
-        employeeCode={selected}
-        onBack={() => setSelected(null)}
-      />
-    );
+    return <EmployeeProfile employeeCode={selected} onBack={close} />;
   }
 
   return (
@@ -164,10 +203,10 @@ export default function PeoplePage() {
       </div>
 
       {tab === "overview" && (
-        <Overview facility={facility} onOpen={setSelected} />
+        <Overview facility={facility} onOpen={open} />
       )}
       {tab === "directory" && (
-        <Directory facility={facility} onOpen={setSelected} />
+        <Directory facility={facility} onOpen={open} />
       )}
       {tab === "positions" && <Positions facility={facility} />}
     </div>
@@ -272,7 +311,7 @@ function Overview({
               ? `${headcount.probation_overdue} past their date`
               : undefined
           }
-          tone={headcount.probation_overdue > 0 ? "text-amber-600" : undefined}
+          tone={headcount.probation_overdue > 0 ? "text-warning" : undefined}
         />
         <Stat
           label="Turnover"
@@ -293,7 +332,7 @@ function Overview({
           <CardContent>
             {expiring.length === 0 ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <CheckCircle2 className="h-4 w-4 text-good" />
                 Nothing lapses in the next three months.
               </div>
             ) : (
@@ -347,7 +386,7 @@ function Overview({
           <CardContent>
             {headcount.vacant_positions.length === 0 ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <CheckCircle2 className="h-4 w-4 text-good" />
                 Every budgeted post is filled.
               </div>
             ) : (
@@ -366,7 +405,7 @@ function Overview({
                       <TableCell className="text-right tabular-nums">
                         {row.filled} / {row.budgeted}
                       </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums text-amber-600">
+                      <TableCell className="text-right font-medium tabular-nums text-warning">
                         {row.vacancies}
                       </TableCell>
                     </TableRow>
@@ -755,7 +794,7 @@ function HireDialog({
               ))}
             </Select>
             {chosen?.requires_licence && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning">
                 This position needs a professional registration. Until one is
                 recorded and verified, they cannot treat patients.
               </p>
@@ -1048,7 +1087,7 @@ function RecordTab({ employee }: { employee: Employee }) {
             <Field
               label="Probation to"
               value={employee.probation_ends_on}
-              tone={employee.probation_overdue ? "text-amber-600" : undefined}
+              tone={employee.probation_overdue ? "text-warning" : undefined}
             />
           )}
           {employee.confirmed_on && (
@@ -1093,7 +1132,7 @@ function RecordTab({ employee }: { employee: Employee }) {
               tone={
                 employee.emergency_contact_name
                   ? undefined
-                  : "text-amber-600"
+                  : "text-warning"
               }
             />
           </div>
@@ -1833,7 +1872,7 @@ function Positions({ facility }: { facility: string }) {
                 <TableCell
                   className={cn(
                     "text-right tabular-nums",
-                    row.vacancies > 0 && "font-medium text-amber-600",
+                    row.vacancies > 0 && "font-medium text-warning",
                   )}
                 >
                   {row.vacancies}

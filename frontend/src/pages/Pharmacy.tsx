@@ -104,9 +104,9 @@ const BUCKET_TONE: Record<string, string> = {
   expired: "text-destructive font-semibold",
   "7_days": "text-destructive font-semibold",
   "15_days": "text-destructive",
-  "30_days": "text-amber-700 dark:text-amber-400 font-medium",
-  "60_days": "text-amber-700 dark:text-amber-400",
-  "90_days": "text-amber-700 dark:text-amber-400",
+  "30_days": "text-warning font-medium",
+  "60_days": "text-warning",
+  "90_days": "text-warning",
 };
 
 const BUCKET_LABEL: Record<string, string> = {
@@ -492,7 +492,7 @@ function StockPanel({ locationUuid }: { locationUuid: string }) {
                       level.days_to_expiry < 30 && "text-destructive font-medium",
                       level.days_to_expiry >= 30 &&
                         level.days_to_expiry < 90 &&
-                        "text-amber-700 dark:text-amber-400",
+                        "text-warning",
                     )}
                   >
                     {level.days_to_expiry}
@@ -534,7 +534,7 @@ function StockPanel({ locationUuid }: { locationUuid: string }) {
                         l.days_to_expiry < 30 && "text-destructive font-medium",
                         l.days_to_expiry >= 30 &&
                           l.days_to_expiry < 90 &&
-                          "text-amber-700 dark:text-amber-400",
+                          "text-warning",
                       )}
                     >
                       {l.days_to_expiry}

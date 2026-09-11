@@ -587,7 +587,7 @@ function RunDetail({
             </>
           )}
           {run.status === "paid" && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
+            <span className="flex items-center gap-1 text-sm text-good">
               <CheckCircle2 className="h-4 w-4" />
               Paid{run.paid_at && ` on ${new Date(run.paid_at).toLocaleDateString()}`}
             </span>
@@ -1111,7 +1111,7 @@ function TaxWorkings({ slip }: { slip: Payslip }) {
                 <TableCell className="text-xs">
                   {band.band}
                   {band.waived && (
-                    <span className="block text-emerald-600">
+                    <span className="block text-good">
                       {band.waiver_reason}
                     </span>
                   )}
@@ -1125,7 +1125,7 @@ function TaxWorkings({ slip }: { slip: Payslip }) {
                 <TableCell
                   className={cn(
                     "text-right tabular-nums",
-                    band.waived && "text-emerald-600 line-through",
+                    band.waived && "text-good line-through",
                   )}
                 >
                   {Number(band.tax).toLocaleString("en-IN")}
@@ -1335,7 +1335,7 @@ function Rates() {
                   <TableCell>
                     {row.label || `Band ${row.sequence}`}
                     {row.waived_for_ssf_contributors && (
-                      <span className="block text-xs text-emerald-600">
+                      <span className="block text-xs text-good">
                         waived for SSF contributors — the contribution replaces
                         it
                       </span>

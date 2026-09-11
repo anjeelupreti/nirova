@@ -1,0 +1,334 @@
+/**
+ * Tier 2 — semantics. What each colour is *for*.
+ *
+ * Every token here resolves to a primitive or a palette ramp, and every
+ * component reads only from here. Light and dark are two mappings of one ramp
+ * set rather than two palettes, which is what stops the themes drifting into
+ * being two different designs.
+ *
+ * The shadcn/ui contract (`--background`, `--primary`, `--muted`, …) is kept
+ * name-for-name, so 44 screens and every existing utility class kept working
+ * when this was introduced and only the values moved.
+ *
+ * ---
+ *
+ * **Three changes here are the answer to "the colour combination is boring and
+ * dim", and they are worth naming because none of them is "pick a brighter
+ * hue".**
+ *
+ * 1. **`--primary` is the vivid step with dark ink, not a deep step with white
+ *    ink.** Insisting every button carry white text forces the fill dark
+ *    enough to do so — which for teal, green and cyan means throwing away the
+ *    part of the hue worth having. `palettes.css` solves for whichever ink
+ *    fits and hands over both. The teal went from `#007865` to `#10B7A0`.
+ *
+ * 2. **The chrome is tinted and the accent appears in it.** A grey rail beside
+ *    a white page is the default of every scaffold. The rail now sits on a
+ *    brand-tinted neutral and the active item carries the brand.
+ *
+ * 3. **There is a second accent.** One accent used sparingly on grey is not a
+ *    colour scheme, it is a monochrome with a highlight. `--accent-*` is a
+ *    complementary hue per palette, for the places the brand would be wrong:
+ *    a secondary chart series, a highlight that is not an action, the ring on
+ *    a live indicator.
+ */
+
+:root {
+  /* -- Surfaces ---------------------------------------------------------- */
+  /*
+   * The page is `neutral-50` and cards are white. Depth on a light ground
+   * comes from a raised surface being lighter than what it sits on, plus a
+   * hairline; a white page with white cards has to invent the difference with
+   * a shadow, which is why the old console looked flat until something
+   * hovered.
+   */
+  --background: var(--neutral-50);
+  --foreground: var(--neutral-900);
+
+  --card: var(--neutral-0);
+  --card-foreground: var(--neutral-900);
+
+  --popover: var(--neutral-0);
+  --popover-foreground: var(--neutral-900);
+
+  /* -- Brand ------------------------------------------------------------- */
+  /*
+   * `--brand-primary` and its ink are solved together in `palettes.css`. Do
+   * not substitute a step here: the pair is what passes contrast, and picking
+   * one of them locally is how a theme ends up with unreadable buttons.
+   */
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--brand-primary-ink);
+  --primary-subtle: var(--brand-50);
+  --primary-subtle-foreground: var(--brand-800);
+  /* The deep step, for ink on a light ground — a link, a selected label. */
+  --primary-ink: var(--brand-700);
+
+  /* -- Accent — the second voice ----------------------------------------- */
+  --accent-solid: var(--accent-500);
+  --accent-solid-foreground: var(--neutral-0);
+  --accent-subtle: var(--accent-50);
+  --accent-subtle-foreground: var(--accent-800);
+  --accent-ink: var(--accent-600);
+
+  /* -- Hero — a deep brand surface --------------------------------------- */
+  /*
+   * For the one banner at the top of a portal or a workspace: the staff
+   * self-service header, the patient portal, the sign-in panel.
+   *
+   * **It exists because those were hand-rolled gradients of literal hues** —
+   * `from-blue-700 via-indigo-700 to-slate-800` on self-service — which meant
+   * three things at once: they ignored the palette, they were unreadable in
+   * dark mode, and the ink on them had to be hardcoded white, so any token
+   * that landed there by a search-and-replace became invisible.
+   *
+   * A dark brand surface is a real, recurring need, so it gets real tokens
+   * and the ink comes with it.
+   */
+  --hero: var(--brand-800);
+  --hero-2: var(--brand-600);
+  --hero-foreground: var(--brand-50);
+  --hero-muted: var(--brand-200);
+
+  /* -- Supporting -------------------------------------------------------- */
+  --secondary: var(--neutral-100);
+  --secondary-foreground: var(--neutral-800);
+  --muted: var(--neutral-100);
+  --muted-foreground: var(--neutral-600);
+  /* shadcn's `--accent` means "hover fill", which collides with the real
+     accent above. Kept for compatibility, renamed in spirit: it is a
+     neutral hover, and nothing brand-coloured should use it. */
+  --accent: var(--neutral-100);
+  --accent-foreground: var(--neutral-900);
+
+  --destructive: var(--signal-critical);
+  --destructive-foreground: var(--neutral-0);
+
+  /* -- Lines ------------------------------------------------------------- */
+  /*
+   * Three weights, because one was never enough. `--border` is the ordinary
+   * hairline; `--border-strong` separates two *regions* rather than two rows —
+   * a table header from its body, the rail from the page; `--input` is heavier
+   * still so a field looks like something you can type into.
+   */
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --input: var(--neutral-300);
+  --ring: var(--brand-500);
+
+  /* -- Application chrome ------------------------------------------------ */
+  /*
+   * **The shell is a different surface from the page, and it is tinted.**
+   * Previously header, rail and content were all `--background`, so the
+   * application had no frame — it read as one undifferentiated sheet with
+   * links floating at the left, which is most of why the navigation "looked
+   * like a list of things" rather than like navigation.
+   */
+  --shell: var(--neutral-100);
+  --shell-foreground: var(--neutral-700);
+  --shell-border: var(--neutral-200);
+  --shell-item-hover: var(--neutral-200);
+  --shell-item-active: var(--neutral-0);
+  --shell-item-active-foreground: var(--neutral-900);
+  --shell-heading: var(--neutral-500);
+  /* The active item's tint and spine. Brand, not grey — the one place in the
+     chrome where the identity should be unmistakable. */
+  --shell-item-selected: var(--brand-50);
+  --shell-item-selected-foreground: var(--brand-800);
+
+  /* -- Status ------------------------------------------------------------ */
+  /*
+   * Each signal as a triple: the ink, a tint to fill a chip with, and the ink
+   * that goes *on* that tint. Without all three, every screen invents its own
+   * — which is exactly what produced 325 hardcoded colour utilities across
+   * `src/pages`, most of them invisible in dark mode because nobody wrote the
+   * `dark:` half.
+   */
+  --good: var(--signal-good);
+  --good-subtle: 143 55% 93%;
+  --good-subtle-foreground: 143 80% 22%;
+
+  --warning: var(--signal-warning);
+  --warning-subtle: 45 90% 93%;
+  --warning-subtle-foreground: 36 90% 25%;
+
+  --serious: var(--signal-serious);
+  --serious-subtle: 24 85% 94%;
+  --serious-subtle-foreground: 22 75% 30%;
+
+  --critical: var(--signal-critical);
+  --critical-subtle: 0 80% 95%;
+  --critical-subtle-foreground: 0 70% 35%;
+
+  --info: var(--signal-info);
+  --info-subtle: 212 80% 94%;
+  --info-subtle-foreground: 212 75% 30%;
+
+  --neutral-signal: var(--signal-muted);
+  --neutral-subtle: var(--neutral-100);
+  --neutral-subtle-foreground: var(--neutral-700);
+
+  /* -- Chart surface ----------------------------------------------------- */
+  /*
+   * A chart's grid and axes must be *recessive*: they are scaffolding, and a
+   * gridline that competes with the data is worse than no gridline. Separate
+   * tokens rather than reuses of `--border`, because the correct weight for a
+   * gridline is lighter than for a table rule.
+   *
+   * `--chart-emphasis` is the brand, and it is the only route the palette has
+   * into a chart — see the note in `primitive.css` about why the series ramp
+   * stays constant.
+   */
+  --chart-grid: var(--neutral-200);
+  --chart-axis: var(--neutral-400);
+  --chart-label: var(--neutral-600);
+  --chart-surface: var(--neutral-0);
+  --chart-emphasis: var(--brand-600);
+  --chart-recede: var(--neutral-300);
+
+  /* -- Shape ------------------------------------------------------------- */
+  /*
+   * **Cards are rounder than controls**, which the old single `--radius`
+   * could not express. A container and the buttons inside it sharing one
+   * radius is the specific thing that makes an interface look untouched by a
+   * designer: real ones nest, outer larger than inner.
+   */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius: var(--radius-md);
+
+  /* -- Elevation --------------------------------------------------------- */
+  /*
+   * Four named levels. On a light ground the shadow does the work; the dark
+   * block below replaces these with hairlines and lighter surfaces, because a
+   * shadow on near-black is invisible and every dark interface that relies on
+   * one looks flat.
+   */
+  --elevation-flat: 0 0 0 1px hsl(var(--border));
+  --elevation-raised: 0 1px 2px -1px hsl(var(--neutral-900) / 0.08),
+                      0 1px 3px 0 hsl(var(--neutral-900) / 0.06);
+  --elevation-floating: 0 4px 6px -2px hsl(var(--neutral-900) / 0.08),
+                        0 12px 20px -4px hsl(var(--neutral-900) / 0.12);
+  --elevation-modal: 0 8px 12px -4px hsl(var(--neutral-900) / 0.1),
+                     0 24px 48px -12px hsl(var(--neutral-900) / 0.22);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Dark                                                                       */
+/* -------------------------------------------------------------------------- */
+/*
+ * **The background is `neutral-1000`, not pure black — a deliberate reversal
+ * of an earlier decision.**
+ *
+ * The previous stylesheet argued for `0 0% 0%` on OLED grounds, and for a
+ * phone at a bedside at three in the morning that argument is right. It is
+ * wrong for the console, which is used on an LCD at a nurses' station under
+ * fluorescent light, where pure black behind light text produces halation —
+ * every border and glyph edge blooms, and a ward list becomes tiring to read
+ * within a shift. The patient application, which *is* the phone at the
+ * bedside, keeps true black; see `component.css`.
+ */
+.dark {
+  --background: var(--neutral-1000);
+  --foreground: var(--neutral-100);
+
+  --card: var(--neutral-950);
+  --card-foreground: var(--neutral-100);
+
+  --popover: var(--neutral-925);
+  --popover-foreground: var(--neutral-100);
+
+  /*
+   * The brand lifts to its dark-mode step, which `palettes.css` solved at
+   * 6.5:1 against this card. White ink on it, because at that lightness the
+   * hue is bright enough that dark ink is the harder read — the opposite of
+   * the light-mode decision, and the reason both are computed rather than
+   * assumed.
+   */
+  --primary: var(--brand-400);
+  --primary-foreground: var(--neutral-1000);
+  --primary-subtle: var(--brand-950);
+  --primary-subtle-foreground: var(--brand-300);
+  --primary-ink: var(--brand-300);
+
+  --accent-solid: var(--accent-400);
+  --accent-solid-foreground: var(--neutral-1000);
+  --accent-subtle: var(--accent-950);
+  --accent-subtle-foreground: var(--accent-300);
+  --accent-ink: var(--accent-400);
+
+  /* The hero goes deeper still on a dark page — it has to stay distinct from
+     a card that is already near-black, so it borrows saturation rather than
+     lightness to separate itself. */
+  --hero: var(--brand-950);
+  --hero-2: var(--brand-900);
+  --hero-foreground: var(--brand-100);
+  --hero-muted: var(--brand-300);
+
+  --secondary: var(--neutral-900);
+  --secondary-foreground: var(--neutral-100);
+  --muted: var(--neutral-900);
+  --muted-foreground: var(--neutral-400);
+  --accent: var(--neutral-850);
+  --accent-foreground: var(--neutral-100);
+
+  --destructive: var(--signal-critical);
+  --destructive-foreground: var(--neutral-1000);
+
+  --border: var(--neutral-850);
+  --border-strong: var(--neutral-800);
+  --input: var(--neutral-800);
+  --ring: var(--brand-400);
+
+  /*
+   * The chrome goes *darker* than the page in dark mode and lighter than it in
+   * light mode. Both directions read as "behind": the shell recedes and the
+   * content comes forward, which is the relationship that matters and is not
+   * the same as a fixed lightness.
+   */
+  --shell: var(--neutral-975);
+  --shell-foreground: var(--neutral-400);
+  --shell-border: var(--neutral-900);
+  --shell-item-hover: var(--neutral-900);
+  --shell-item-active: var(--neutral-850);
+  --shell-item-active-foreground: var(--neutral-100);
+  --shell-heading: var(--neutral-500);
+  --shell-item-selected: var(--brand-950);
+  --shell-item-selected-foreground: var(--brand-300);
+
+  --good-subtle: 143 45% 11%;
+  --good-subtle-foreground: 139 50% 62%;
+  --warning-subtle: 42 60% 11%;
+  --warning-subtle-foreground: 44 80% 58%;
+  --serious-subtle: 23 55% 12%;
+  --serious-subtle-foreground: 23 70% 68%;
+  --critical-subtle: 0 45% 13%;
+  --critical-subtle-foreground: 0 72% 72%;
+  --info-subtle: 212 50% 13%;
+  --info-subtle-foreground: 213 77% 72%;
+  --neutral-subtle: var(--neutral-900);
+  --neutral-subtle-foreground: var(--neutral-400);
+
+  --chart-grid: var(--neutral-900);
+  --chart-axis: var(--neutral-700);
+  --chart-label: var(--neutral-400);
+  --chart-surface: var(--neutral-950);
+  --chart-emphasis: var(--brand-400);
+  --chart-recede: var(--neutral-800);
+
+  /*
+   * Elevation as lightness, not shadow. The surface tokens already climb
+   * (950 card → 925 popover), so these carry only the hairline that separates
+   * a raised thing from what is behind it, plus enough spread on the two
+   * highest levels to suggest the modal is genuinely off the page.
+   */
+  --elevation-flat: 0 0 0 1px hsl(var(--border));
+  --elevation-raised: 0 0 0 1px hsl(var(--border));
+  --elevation-floating: 0 0 0 1px hsl(var(--border-strong)),
+                        0 12px 24px -8px hsl(0 0% 0% / 0.7);
+  --elevation-modal: 0 0 0 1px hsl(var(--border-strong)),
+                     0 24px 56px -12px hsl(0 0% 0% / 0.85);
+}

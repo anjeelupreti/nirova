@@ -1,147 +1,331 @@
+/*
+ * Order matters and is not negotiable: the token tiers load before Tailwind's
+ * base layer, so a utility can override a token-derived default but a token
+ * can never fight a utility for the same property.
+ *
+ * `palettes.css` comes first because `primitive.css` and `semantic.css` both
+ * resolve against the brand and neutral ramps it declares. Getting that order
+ * wrong is not a subtle failure — every semantic token resolves to nothing and
+ * the console renders in the browser's defaults — so the order is asserted in
+ * `backend/tests/test_design_tokens.py` rather than remembered.
+ */
+@import "./styles/tokens/palettes.css";
+@import "./styles/tokens/primitive.css";
+@import "./styles/tokens/semantic.css";
+@import "./styles/tokens/component.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /*
-   * shadcn/ui token palette. Colours are declared as HSL channel triples so
-   * Tailwind can apply opacity modifiers (bg-primary/10) to them.
-   */
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    /* On white, a raised surface is still white -- depth comes from the
-       shadow. On black there is no shadow to see, which is why the dark
-       palette lifts this and the light one does not. */
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 175 84% 24%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 175 84% 24%;
-    --radius: 0.6rem;
-  }
-
-  /*
-   * Dark: actually dark.
-   *
-   * The palette this replaces was shadcn's slate default -- `222 47% 8%`,
-   * which is hue 222 at 47% saturation. That is a *blue*, and it read as one:
-   * the whole interface had a blue-green cast that nobody had chosen. Every
-   * surface below is at **zero saturation**, so a grey is a grey.
-   *
-   * **The background is 0%: pitch black.** On an OLED screen those pixels are
-   * switched off, which is the point of a dark theme on a phone at a bedside
-   * at three in the morning.
-   *
-   * Depth then has to come from lightness alone, because there is no hue to
-   * carry it. The ladder is deliberate and the steps are small -- a surface
-   * that jumps to 20% on black looks like a mistake rather than a card:
-   *
-   *     0%   background   the page itself
-   *     5%   card         anything raised off it
-   *     7%   popover      raised off that: menus, panels, tooltips
-   *    12%   muted        fills: skeletons, chips, a hovered row
-   *    16%   border       lines, which must be visible without being seen
-   *
-   * **The foreground is 96%, not 100%.** Pure white on pure black haloes --
-   * the text appears to bleed into the background at small sizes, and reading
-   * a ward list in it is tiring. 96% is indistinguishable as a colour and
-   * markedly easier to read.
-   *
-   * The accent colours are lifted rather than reused from the light theme.
-   * A hue that reads well on white is usually too dark on black: the teal
-   * goes from 24% lightness to 50%, and the red from 51% to 60%, so both
-   * clear the contrast floor against a background that gives them nothing.
-   */
-  .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 96%;
-
-    --card: 0 0% 5%;
-    --card-foreground: 0 0% 96%;
-
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 96%;
-
-    --primary: 172 70% 50%;
-    /* Black text on the teal, not white: at 50% lightness the teal is bright
-       enough that white on it fails contrast and black on it passes easily. */
-    --primary-foreground: 0 0% 4%;
-
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 96%;
-
-    --muted: 0 0% 12%;
-    /* 64% clears 4.5:1 against the card and stays clearly secondary. Lower
-       and it is decoration; higher and it competes with the real text. */
-    --muted-foreground: 0 0% 64%;
-
-    --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 96%;
-
-    --destructive: 0 72% 60%;
-    --destructive-foreground: 0 0% 4%;
-
-    --border: 0 0% 16%;
-    --input: 0 0% 18%;
-    --ring: 172 70% 50%;
-  }
-
   * {
     @apply border-border;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: var(--font-sans);
+    /*
+     * **Tabular figures everywhere, by default.**
+     *
+     * This product is roughly sixty per cent numbers — bed counts, doses,
+     * batch quantities, money — and proportional digits make a column of them
+     * ragged and a live-updating one jitter. Twenty-five of forty-four screens
+     * had remembered `tabular-nums` and nineteen had not, which is precisely
+     * the kind of thing that should never have been a per-screen decision.
+     *
+     * Prose sets `font-variant-numeric: normal` back on where a number is
+     * inside a sentence rather than in a column; `.numeric-proportional` is
+     * there for that.
+     */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+
+  /*
+   * Headings carry the display face's tighter tracking. At 24px and above,
+   * default letter-spacing reads as loose — the single most common tell of an
+   * interface nobody set type for.
+   */
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.018em;
+  }
+
+  /*
+   * A monospace for identifiers. The rule: anywhere a human reads a code back
+   * to another human — an MRN over the phone, a batch number off a box, an
+   * invoice number to a payer — it is monospace, because that is what makes
+   * a transposed digit visible. It is also, on its own, most of the difference
+   * between looking like a hospital system and looking like a website.
+   */
+  code, kbd, samp, pre, .font-mono {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  :root {
+    --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-display: var(--font-sans);
+    --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono",
+      "Roboto Mono", Menlo, Consolas, monospace;
+  }
+
+  /* Colour the native scrollbars and form controls to match. The preferences
+     provider also sets this inline; this is the resting default, so a page
+     rendered before JavaScript runs is not light-on-dark for a frame. */
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  /*
+   * Focus, visible and consistent.
+   *
+   * Every interactive element gets the same ring from one rule rather than
+   * from a `focus-visible:` pair repeated per component — which is how a
+   * console ends up with four different focus treatments and three elements
+   * that have none at all. `:focus-visible` rather than `:focus`, so a mouse
+   * click does not leave a ring behind.
+   */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+}
+
+@layer components {
+  /*
+   * The type scale, as classes.
+   *
+   * Named sizes rather than `text-2xl` chosen per screen. The old console had
+   * page titles at three different sizes because each of forty-four screens
+   * picked its own, and nothing was wrong on any one of them — they simply did
+   * not agree, and a product whose title changes size between pages reads as
+   * several small applications.
+   */
+  .type-display {
+    @apply text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.02em];
+  }
+  .type-title {
+    @apply text-xl font-semibold leading-tight tracking-[-0.018em];
+  }
+  .type-heading {
+    @apply text-sm font-semibold leading-snug tracking-[-0.006em];
+  }
+  .type-body {
+    @apply text-sm leading-normal;
+  }
+  .type-label {
+    @apply text-xs font-medium leading-none;
+  }
+  .type-caption {
+    @apply text-xs leading-normal text-muted-foreground;
+  }
+  /*
+   * A section heading in the shell and above a group of fields. Uppercase at
+   * this size needs the tracking opened back up — the one place letter-spacing
+   * should be positive.
+   */
+  .type-eyebrow {
+    @apply text-[0.6875rem] font-semibold uppercase leading-none tracking-[0.06em];
+  }
+  /* An identifier: MRN, batch, invoice number. See the `code` rule above. */
+  .type-code {
+    font-family: var(--font-mono);
+    @apply text-[0.8125rem] tracking-[-0.01em];
+  }
+  /* A figure meant to be read as the answer, not as a cell. */
+  .type-figure {
+    @apply text-[1.75rem] font-semibold leading-none tracking-[-0.02em];
+    font-variant-numeric: tabular-nums;
+  }
+
+  .numeric-proportional {
+    font-variant-numeric: proportional-nums;
+  }
+
+  /*
+   * A row whose padding follows the density preference. Applied by `Table`
+   * and by any screen that builds its own rows, so the preference reaches
+   * both.
+   */
+  .row-density {
+    padding-block: var(--row-padding-y);
+    padding-inline: var(--row-padding-x);
+    line-height: var(--row-leading);
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Preferences that change the whole interface                                */
+/* Print                                                                      */
 /* -------------------------------------------------------------------------- */
+/*
+ * **A hospital prints constantly** — a prescription the patient carries to a
+ * pharmacy, an invoice for an insurer, a payslip, a discharge summary, a
+ * consent form, a lab report a physician signs. This product had no print
+ * stylesheet at all, which meant every one of those came out as a screenshot
+ * of the application: the navigation rail down the left, the command palette
+ * button, a dark background burning through a cartridge.
+ *
+ * The approach is deliberately not "open a new window and re-style it". That
+ * loses every stylesheet, so the printable has to be rebuilt inline and ends
+ * up looking nothing like the screen. Instead `printElement` stamps
+ * `data-printing="<id>"` on <html>, and the rules below hide everything that
+ * is not inside that element. The printed layout is the same layout, because
+ * it is the same element.
+ */
+@media print {
+  /*
+   * **Force the light palette.** A dark theme is a full page of toner and
+   * white-on-black text that most printers render as grey-on-grey. Nobody
+   * wants their dark preference honoured on paper, and Chrome's
+   * `print-color-adjust` default means it would otherwise be.
+   */
+  :root,
+  :root.dark {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 30%;
+    --border: 0 0% 80%;
+    --border-strong: 0 0% 60%;
+    color-scheme: light;
+  }
+
+  body {
+    background: #fff !important;
+    /* 11pt rather than the screen's 14px: paper is read closer and a printed
+       page set at screen size wastes a third of the sheet. */
+    font-size: 11pt;
+  }
+
+  /* Chrome and Safari drop background fills by default, which turns every
+     status chip into invisible text. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Never on paper: navigation, the palette trigger, anything interactive. */
+  nav,
+  header[class*="sticky"],
+  [data-print="hide"],
+  [role="tablist"] {
+    display: none !important;
+  }
+
+  /* Shadows and rounded corners cost toner and say nothing in print. */
+  * {
+    box-shadow: none !important;
+  }
+
+  /* A table split mid-row across a page break is unreadable, and a heading
+     stranded at the foot of a page is the classic typesetting error. */
+  tr,
+  img,
+  figure {
+    break-inside: avoid;
+  }
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+
+  /* A link printed as blue underlined text is a dead end on paper; the URL is
+     what a reader needs, and only for links that leave the application. */
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9pt;
+    color: #555;
+  }
+
+  @page {
+    margin: 14mm 12mm;
+  }
+}
+
+/*
+ * Printing one element.
+ *
+ * `visibility` rather than `display`, and the difference matters: hiding the
+ * ancestors with `display: none` would take the target down with them. Making
+ * everything invisible and the target visible again keeps the box tree intact,
+ * and the target is then lifted to the top-left of the sheet so it does not
+ * print inset by the width of a sidebar that is no longer visible.
+ */
+@media print {
+  /*
+   * Take everything that is neither the printable, inside it, nor a container
+   * of it **out of layout entirely**.
+   *
+   * `visibility: hidden` alone — the rule below, kept as the fallback — hides
+   * the application but leaves its *height*, so a one-page invoice printed from
+   * the bottom of a long billing screen came out as the invoice followed by
+   * blank pages the height of the screen behind it. `display: none` on the
+   * non-ancestors removes that, and `:has()` is what makes "non-ancestor"
+   * expressible in CSS at all. Browsers without `:has()` get the visibility
+   * rule and, at worst, a blank trailing page.
+   */
+  :root[data-printing] body *:not([data-printable]):not([data-printable] *):not(:has([data-printable])) {
+    display: none !important;
+  }
+
+  /* The ancestors that remain are the app's frame; flatten them so the
+     document starts at the top-left of the sheet rather than inset by a
+     sidebar that is no longer drawn. */
+  :root[data-printing] body *:has([data-printable]) {
+    position: static !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  :root[data-printing] body * {
+    visibility: hidden;
+  }
+  :root[data-printing] [data-printable],
+  :root[data-printing] [data-printable] * {
+    visibility: visible;
+  }
+  :root[data-printing] [data-printable] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+}
 
 @layer base {
   /*
-   * Row height, set by `usePreferences` as a data attribute on <html>.
-   *
-   * A variable rather than a class on every table, so a screen that builds
-   * its own rows still honours the choice without knowing it exists. Compact
-   * fits roughly a third more rows on screen, which is what a triage board or
-   * a bed list wants and what a billing form does not.
-   */
-  :root {
-    --row-padding-y: 0.625rem;
-  }
-
-  :root[data-density="compact"] {
-    --row-padding-y: 0.375rem;
-  }
-
-  /*
    * Motion, off on request.
    *
-   * Two ways in, and both are honoured. The media query is the device asking
-   * -- somebody who set "reduce motion" in their operating system has already
+   * Two ways in, and both are honoured. The media query is the device asking —
+   * somebody who set "reduce motion" in their operating system has already
    * said this once and should not have to say it again. The data attribute is
    * this application asking, for people on a shared machine whose device
    * setting is not theirs to change.
    *
    * `!important` because it must beat utility classes, and 0.01ms rather than
-   * 0 so that transition and animation end events still fire -- code that
-   * waits for one would hang forever at exactly zero.
+   * 0 so transition and animation end events still fire — code that waits for
+   * one would hang forever at exactly zero.
    */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -164,11 +348,13 @@
   }
 
   /*
-   * Colour the native scrollbars and form controls to match the theme. The
-   * provider also sets this inline; this is the resting default so a page
-   * rendered before JavaScript runs is not light-on-dark for a frame.
+   * Scrollbars that belong to the theme. The default on Windows is a wide
+   * light-grey bar that sits on a dark sidebar like a strip of tape.
    */
-  :root.dark {
-    color-scheme: dark;
+  @supports (scrollbar-width: thin) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: hsl(var(--border-strong)) transparent;
+    }
   }
 }

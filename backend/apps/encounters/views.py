@@ -294,10 +294,33 @@ class ClinicalSummaryView(APIView):
     does next.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read")]
+    # **The Clinical tier, not the Identity tier.** This response carries recent
+    # encounters and their *diagnoses* — which `docs/ACCESS_DESIGN.md` places in
+    # the Clinical tier: `patient.clinical.read`, plus a care relationship with
+    # this patient, or break-glass. It was gated on `patient.read`, the Identity
+    # tier every front desk holds, at facility scope and with no relationship
+    # check, so a receptionist could read the diagnoses of anybody registered
+    # at their facility. The read was logged, which made it discoverable
+    # afterwards and did nothing to prevent it.
+    #
+    # Found while building the patient record page, alongside the same defect in
+    # `ActiveMedicationsView`. `PatientResultsView` had been written correctly
+    # all along and is the pattern copied here, down to the explicit
+    # `check_object_permissions` — which a plain `APIView` never calls, so
+    # listing `HasClinicalAccess` without it would look enforced and do nothing.
+    #
+    # The one screen that calls this — Consultation — is opened by a clinician
+    # working an encounter with this patient, which *is* the care relationship,
+    # so the legitimate path is unchanged.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.read", scope=Scope.OWN),
+        HasClinicalAccess,
+    ]
 
     def get(self, request, uuid):
         patient = get_object_or_404(Patient, uuid=uuid)
+        self.check_object_permissions(request, patient)
         record_patient_access(patient, reason="Clinical summary")
         return Response(patient_clinical_summary(patient))
 

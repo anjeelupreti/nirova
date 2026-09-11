@@ -50,6 +50,9 @@ import {
   TableRow,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { InvoiceDocument } from "@/components/documents/InvoiceDocument";
+import { DocumentPreview } from "@/components/documents/DocumentPreview";
+import { useSession } from "@/hooks/useSession";
 
 const PAYMENT_METHODS = [
   ["cash", "Cash"],
@@ -103,6 +106,14 @@ export default function BillingPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /*
+    The invoice being previewed, by *number*. The account summary carries
+    numbers and not UUIDs, so the preview resolves the full invoice itself
+    rather than this page guessing.
+  */
+  const [viewing, setViewing] = useState<string | null>(null);
+  const { session } = useSession();
 
   useEffect(() => {
     void (async () => {
@@ -539,6 +550,9 @@ export default function BillingPage() {
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead className="text-right">Paid</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-right">
+                        <span className="sr-only">Print</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -568,6 +582,17 @@ export default function BillingPage() {
                             {invoice.status.replace(/_/g, " ")}
                           </Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          {invoice.number ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setViewing(invoice.number)}
+                            >
+                              View &amp; print
+                            </Button>
+                          ) : null}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -577,7 +602,89 @@ export default function BillingPage() {
           )}
         </>
       )}
+
+      {patient && viewing ? (
+        <InvoicePreview
+          patientUuid={patient.uuid}
+          number={viewing}
+          facility={facilities.find((entry) => entry.uuid === facilityUuid) ?? null}
+          organization={session?.organization?.display_name ?? "Nirova"}
+          printedBy={session?.user.display_name}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The full invoice behind a row in the history, on paper.
+ *
+ * Fetched when opened rather than with the account: the account summary is one
+ * request for the whole history, and pulling every line of every invoice a
+ * patient has ever had to print one of them is a lot of payload for a counter
+ * that prints two a day.
+ */
+function InvoicePreview({
+  patientUuid,
+  number,
+  facility,
+  organization,
+  printedBy,
+  onClose,
+}: {
+  patientUuid: string;
+  number: string;
+  facility: Facility | null;
+  organization: string;
+  printedBy?: string;
+  onClose: () => void;
+}) {
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<Paginated<Invoice>>(`/billing/invoices/?patient=${patientUuid}&page_size=200`)
+      .then((page) => {
+        if (cancelled) return;
+        const found = page.results.find((entry) => entry.number === number);
+        if (found) setInvoice(found);
+        else setProblem(`Invoice ${number} could not be found for this patient.`);
+      })
+      .catch((failure) => {
+        if (cancelled) return;
+        setProblem(
+          failure instanceof ApiError ? failure.message : "The invoice could not be read.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [patientUuid, number]);
+
+  return (
+    <DocumentPreview
+      open
+      onClose={onClose}
+      title={`Invoice ${number}`}
+      subtitle={invoice?.bill_to_name}
+      printTarget={invoice ? `invoice-${invoice.uuid}` : "none"}
+    >
+      {problem ? (
+        <p className="p-6 text-sm text-critical">{problem}</p>
+      ) : !invoice ? (
+        <p className="p-6 type-caption">Reading the invoice…</p>
+      ) : (
+        <InvoiceDocument
+          invoice={invoice}
+          organization={organization}
+          facility={facility}
+          printedBy={printedBy}
+        />
+      )}
+    </DocumentPreview>
   );
 }
 

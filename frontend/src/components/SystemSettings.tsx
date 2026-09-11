@@ -181,7 +181,7 @@ export default function SystemSettings() {
 
           <CardContent className="space-y-3">
             {setting.caution && (
-              <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-300">
+              <p className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-subtle p-2 text-xs text-warning-subtle-foreground">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {setting.caution}
               </p>

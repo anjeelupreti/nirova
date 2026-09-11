@@ -158,8 +158,8 @@ const badgeVariants = cva(
           "border-transparent bg-destructive/10 text-destructive",
         // Amber, for states that are neither fine nor failed: over a warning
         // threshold, awaiting a decision, in a grace period.
-        warning: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400",
-        success: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+        warning: "border-transparent bg-warning/15 text-warning",
+        success: "border-transparent bg-good/15 text-good",
         outline: "text-foreground",
       },
     },
@@ -259,7 +259,7 @@ export function Progress({
   const percent = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   const toneClass = {
     default: "bg-primary",
-    warning: "bg-amber-500",
+    warning: "bg-warning",
     danger: "bg-destructive",
   }[tone];
 
@@ -400,8 +400,12 @@ const alertVariants = cva(
         default: "bg-background text-foreground",
         destructive:
           "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive",
+        // The ink-on-tint pair, not the bare ink. `text-warning` on a 5% wash
+        // is about 3.7:1 — the amber is light enough that it fails small text —
+        // which is what the colour codemod produced from `text-amber-800`. The
+        // subtle pair was contrast-checked as a pair (6.8:1 light, 8.7:1 dark).
         warning:
-          "border-amber-500/40 bg-amber-500/5 text-amber-800 dark:text-amber-300 [&>svg]:text-amber-600",
+          "border-warning/40 bg-warning-subtle text-warning-subtle-foreground [&>svg]:text-warning",
         info: "border-primary/30 bg-primary/5 text-foreground [&>svg]:text-primary",
       },
     },

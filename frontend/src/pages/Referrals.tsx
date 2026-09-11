@@ -335,7 +335,7 @@ function Worklist({
                     <TableCell>
                       <Badge variant="outline">{humanise(row.status)}</Badge>
                       {row.awaiting_answer && (
-                        <span className="block text-xs text-amber-600">
+                        <span className="block text-xs text-warning">
                           awaiting answer
                         </span>
                       )}
@@ -729,7 +729,7 @@ function ReferralDetail({
                     key={response.uuid}
                     className={cn(
                       "rounded-md border p-3 text-sm",
-                      response.is_interim && "border-amber-500/50",
+                      response.is_interim && "border-warning/40",
                     )}
                   >
                     <div className="mb-1 flex flex-wrap items-baseline gap-2">
@@ -748,7 +748,7 @@ function ReferralDetail({
                           : "keeping the patient"}
                       </Badge>
                     </div>
-                    <p className="rounded-md border-l-4 border-emerald-500/60 bg-muted/40 p-2">
+                    <p className="rounded-md border-l-4 border-good/40 bg-muted/40 p-2">
                       {response.answer}
                     </p>
                     {response.findings && (
@@ -1146,7 +1146,7 @@ function Performance({ facility }: { facility: string }) {
             label="Lapsed"
             value={String(report.lapsed)}
             hint={`${report.did_not_attend} did not attend`}
-            tone={report.lapsed > 0 ? "text-amber-600" : undefined}
+            tone={report.lapsed > 0 ? "text-warning" : undefined}
           />
         </CardContent>
       </Card>
@@ -1240,7 +1240,7 @@ function Performance({ facility }: { facility: string }) {
                   <TableCell
                     className={cn(
                       "text-right tabular-nums",
-                      row.answered < row.seen && "text-amber-600",
+                      row.answered < row.seen && "text-warning",
                     )}
                   >
                     {row.answered}

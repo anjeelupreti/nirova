@@ -240,7 +240,7 @@ function Shelf({ facility }: { facility: string }) {
           label="Quarantined"
           value={String(stock.quarantined)}
           hint="not yet released"
-          tone={stock.quarantined > 0 ? "text-amber-600" : undefined}
+          tone={stock.quarantined > 0 ? "text-warning" : undefined}
         />
         <Fact
           label="Expiring this week"
@@ -736,8 +736,8 @@ function Processing() {
             </div>
 
             {donation.blockers.length > 0 && (
-              <div className="rounded-md border border-amber-500/50 bg-amber-50/60 p-2 dark:bg-amber-950/10">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              <div className="rounded-md border border-warning/40 bg-warning-subtle/60 p-2">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-warning">
                   Cannot be released
                 </p>
                 <ul className="space-y-0.5 text-sm">
@@ -991,7 +991,7 @@ function Donors({ facility }: { facility: string }) {
               key={row.donor_number}
               className={cn(
                 "flex flex-wrap items-baseline justify-between gap-2 rounded-md border px-3 py-2 text-sm",
-                row.eligible_now && "border-emerald-500/50",
+                row.eligible_now && "border-good/40",
               )}
             >
               <span>
@@ -1004,7 +1004,7 @@ function Donors({ facility }: { facility: string }) {
                 className={cn(
                   "text-xs",
                   row.eligible_now
-                    ? "text-emerald-600"
+                    ? "text-good"
                     : "text-muted-foreground",
                 )}
               >
@@ -1121,7 +1121,7 @@ function Donors({ facility }: { facility: string }) {
                   {lookback.rows.map((row) => (
                     <TableRow
                       key={row.unit}
-                      className={cn(row.patient && "bg-amber-50/60 dark:bg-amber-950/10")}
+                      className={cn(row.patient && "bg-warning-subtle/60")}
                     >
                       <TableCell className="font-mono text-xs">
                         {row.unit}
@@ -1283,7 +1283,7 @@ function Safety({ facility }: { facility: string }) {
                 <span
                   className={cn(
                     "h-3 rounded-sm",
-                    reason === "expired" ? "bg-amber-500/70" : "bg-destructive/60",
+                    reason === "expired" ? "bg-warning/70" : "bg-destructive/60",
                   )}
                   style={{
                     width: `${
@@ -1303,7 +1303,7 @@ function Safety({ facility }: { facility: string }) {
             </div>
           ))}
           {Object.keys(wastage.by_reason).length === 0 && (
-            <p className="flex items-center gap-2 py-4 text-sm text-emerald-600">
+            <p className="flex items-center gap-2 py-4 text-sm text-good">
               <CheckCircle2 className="h-4 w-4" />
               Nothing has been thrown away.
             </p>

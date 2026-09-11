@@ -754,7 +754,7 @@ function Journals({ onPosted }: { onPosted: () => void }) {
                       {day(entry.posting_date)}
                       {entry.posted_late && (
                         <span
-                          className="ml-1 text-xs text-amber-600"
+                          className="ml-1 text-xs text-warning"
                           title={`Dated ${entry.document_date} — its own month was closed`}
                         >
                           (dated {day(entry.document_date)})
@@ -1044,7 +1044,7 @@ function PostDialog({
             className={cn(
               "flex items-baseline justify-between rounded-md border p-3 text-sm",
               totals.difference === 0 && totals.debit > 0
-                ? "border-emerald-500/50 bg-emerald-50/60 dark:bg-emerald-950/20"
+                ? "border-good/40 bg-good-subtle/60"
                 : "border-destructive/50 bg-destructive/5",
             )}
           >
@@ -1349,7 +1349,7 @@ function Bank() {
 
       {state && (
         <>
-          <Card className={cn(Number(state.difference) !== 0 && "border-amber-500/50")}>
+          <Card className={cn(Number(state.difference) !== 0 && "border-warning/40")}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Wallet className="h-4 w-4" />
@@ -1367,7 +1367,7 @@ function Bank() {
                 label="Difference"
                 value={rupees(state.difference)}
                 tone={
-                  Number(state.difference) !== 0 ? "text-amber-600" : undefined
+                  Number(state.difference) !== 0 ? "text-warning" : undefined
                 }
               />
             </CardContent>

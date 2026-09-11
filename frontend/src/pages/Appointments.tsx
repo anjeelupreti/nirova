@@ -106,11 +106,11 @@ const STATUS: Record<string, { label: string; className: string }> = {
   // guessed: a new booking is `scheduled`, not "booked", and a map missing the
   // one status every new appointment has would have shown the raw string on
   // every row of a fresh diary.
-  requested: { label: "Requested", className: "text-amber-600" },
+  requested: { label: "Requested", className: "text-warning" },
   scheduled: { label: "Scheduled", className: "" },
   confirmed: { label: "Confirmed", className: "" },
-  arrived: { label: "Arrived", className: "text-emerald-600" },
-  in_consultation: { label: "In consultation", className: "text-emerald-600" },
+  arrived: { label: "Arrived", className: "text-good" },
+  in_consultation: { label: "In consultation", className: "text-good" },
   completed: { label: "Completed", className: "text-muted-foreground" },
   cancelled: { label: "Cancelled", className: "text-muted-foreground line-through" },
   no_show: { label: "Did not attend", className: "text-muted-foreground line-through" },
@@ -510,7 +510,7 @@ function AppointmentRow({
       <TableCell>
         <span className="text-sm">{status.label}</span>
         {appointment.is_overdue && !closed && (
-          <span className="ml-2 text-xs text-amber-600">overdue</span>
+          <span className="ml-2 text-xs text-warning">overdue</span>
         )}
       </TableCell>
       <TableCell className="text-right">

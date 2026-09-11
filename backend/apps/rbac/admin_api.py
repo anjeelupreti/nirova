@@ -35,12 +35,17 @@ orderings here (by name, by role) are split across the two.
 """
 
 from django.db import transaction
+from django.utils.text import slugify
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.common.exceptions import PermissionDeniedError
+from apps.common.exceptions import (
+    DomainError,
+    PermissionDeniedError,
+    SegregationOfDutiesViolation,
+)
 from apps.common.pagination import DefaultPagination
 from apps.common.permissions import HasPermission, get_authorization
 from apps.identity.models import Membership, MembershipStatus, User
@@ -113,6 +118,7 @@ class StaffMemberSerializer(serializers.Serializer):
     invited_at = serializers.DateTimeField(allow_null=True)
     joined_at = serializers.DateTimeField(allow_null=True)
     last_active_at = serializers.DateTimeField(allow_null=True)
+    mfa_enabled = serializers.BooleanField(default=False)
     # Never a password hash, never `is_platform_staff`. An organization
     # administrator has no business knowing which of their colleagues is also
     # a member of the vendor's staff.
@@ -170,7 +176,54 @@ class RoleSerializer(serializers.ModelSerializer):
             "uuid", "code", "name", "description", "max_scope",
             "permissions", "permission_count", "requires_approval_to_assign",
             "grantable", "beyond_your_authority",
+            # Added when the role editor was built. Without them a screen
+            # cannot tell a customer's own role from one that ships with the
+            # product, so it either offers a delete that will be refused or
+            # hides it from everything -- and `grantable_roles` is the field
+            # that makes delegation legible rather than mysterious.
+            "is_system", "is_superuser_role", "grantable_roles",
+            "display_order", "editable", "deletable", "holders",
         ]
+
+    editable = serializers.SerializerMethodField()
+    deletable = serializers.SerializerMethodField()
+    holders = serializers.SerializerMethodField()
+
+    def get_editable(self, obj) -> bool:
+        """Whether *this* caller could save a change to it.
+
+        Computed here for the same reason `grantable` is: a form somebody
+        fills in and is then refused is worse than a control that was never
+        offered. The superuser role is nobody's to edit.
+        """
+        if obj.is_superuser_role:
+            return False
+        authorization = self.context.get("authorization")
+        if authorization is None:
+            return False
+        if getattr(authorization, "is_organization_owner", False):
+            return True
+        return authorization.has("role.manage", Scope.OWN)
+
+    def get_deletable(self, obj) -> bool:
+        """System roles stay; held roles stay until they are not held."""
+        if obj.is_system or obj.is_superuser_role:
+            return False
+        return self.get_editable(obj) and self.get_holders(obj) == 0
+
+    def get_holders(self, obj) -> int:
+        """How many people hold it, active assignments only.
+
+        Read from a map the view attaches when it has one, so a list of
+        fifteen roles is one query rather than fifteen. Falls back to counting
+        for the detail view, where there is a single row and no map.
+        """
+        counts = self.context.get("holder_counts")
+        if counts is not None:
+            return counts.get(obj.pk, 0)
+        return RoleAssignment.objects.filter(
+            role=obj, status=AssignmentStatus.ACTIVE,
+        ).count()
 
     def get_permission_count(self, obj) -> int:
         return len(obj.permissions or [])
@@ -253,6 +306,10 @@ def _member_payload(membership, roles) -> dict:
         "invited_at": membership.invited_at,
         "joined_at": membership.joined_at,
         "last_active_at": user.last_active_at,
+        # Whether they have two-step sign-in — an administrator deciding who
+        # to chase before a security review needs to see it, and the reset
+        # action only makes sense where it is on.
+        "mfa_enabled": user.mfa_enabled,
         "roles": roles,
     }
 
@@ -273,6 +330,25 @@ def _organization(request):
             "No organization selected. Send the X-Organization header.",
         )
     return organization
+
+
+def _holder_counts(roles) -> dict:
+    """How many people hold each of these roles, in one query.
+
+    The obvious implementation is a count per role, which is fine against
+    fifteen seeded roles and is a query per row on a customer who has written
+    forty of their own. `values(...).annotate(...)` is one round trip whatever
+    the number.
+    """
+    from django.db.models import Count
+
+    rows = (
+        RoleAssignment.objects
+        .filter(role__in=roles, status=AssignmentStatus.ACTIVE)
+        .values("role_id")
+        .annotate(total=Count("id"))
+    )
+    return {row["role_id"]: row["total"] for row in rows}
 
 
 def _scope_targets(scope, facility_uuid, department_uuid):
@@ -485,22 +561,387 @@ class StaffDeactivateView(APIView):
         )
 
 
-class RoleListView(APIView):
-    """Roles that exist, annotated with whether *you* could grant each one."""
+class StaffPasswordView(APIView):
+    """`POST staff/<uuid>/password/` — issue a one-time password.
+
+    Behind `user.deactivate`, the strongest of the user-administration
+    permissions, deliberately: whoever can set a colleague's password can sign
+    in as them until they change it, which is at least as consequential as
+    taking their access away. The service refuses the cases that would reach
+    beyond this organization; see `issue_temporary_password`.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("user.deactivate", scope=Scope.OWN, write="user.deactivate"),
+    ]
+
+    def post(self, request, uuid):
+        from apps.identity.services import IdentityError, issue_temporary_password
+
+        organization = _organization(request)
+        user = User.objects.filter(uuid=uuid).first()
+        if user is None:
+            raise PermissionDeniedError("No such person.")
+        try:
+            temporary = issue_temporary_password(
+                organization, user, actor=request.user,
+                reason=(request.data or {}).get("reason", ""),
+            )
+        except IdentityError as problem:
+            return Response(
+                {"code": "refused", "message": str(problem)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({
+            "email": user.email,
+            "temporary_password": temporary,
+            "must_change_password": True,
+        })
+
+
+class StaffSecondFactorResetView(APIView):
+    """`POST staff/<uuid>/mfa-reset/ {reason}` — for a lost phone.
+
+    Behind `user.deactivate` for the same reason as the temporary password:
+    it weakens how somebody signs in, which is as consequential as removing
+    their access. The service draws the same organizational lines.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("user.deactivate", scope=Scope.OWN, write="user.deactivate"),
+    ]
+
+    def post(self, request, uuid):
+        from apps.identity.services import IdentityError, reset_second_factor
+
+        organization = _organization(request)
+        user = User.objects.filter(uuid=uuid).first()
+        if user is None:
+            raise PermissionDeniedError("No such person.")
+        try:
+            reset_second_factor(
+                organization, user, actor=request.user,
+                reason=(request.data or {}).get("reason", ""),
+            )
+        except IdentityError as problem:
+            return Response(
+                {"code": "refused", "message": str(problem)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"email": user.email, "mfa_enabled": False})
+
+
+class PermissionCatalogueView(APIView):
+    """Every permission this product defines, grouped for a role editor.
+
+    **`grouped_permissions()` has existed in `apps/rbac/permissions.py` since
+    the catalogue was written, with the docstring "for rendering the role
+    editor", and no endpoint served it.** So the console grouped permissions by
+    parsing the code's prefix -- a stand-in that got `patient.clinical.read`
+    into "Patients" by luck and would have got a new module wrong. This is the
+    real thing: the group each permission was *declared* in, its label, its
+    description, whether it is sensitive, and what it conflicts with.
+
+    `role.read` rather than `role.manage`: knowing what a permission means is
+    what makes the role list readable, and somebody who may look at roles must
+    be able to.
+    """
 
     permission_classes = [
         IsAuthenticated, HasPermission.of("role.read", scope=Scope.OWN),
     ]
 
     def get(self, request):
+        from apps.rbac.permissions import grouped_permissions
+
         _organization(request)
-        roles = Role.objects.filter(is_active=True).order_by("name")
+        groups = grouped_permissions()
+        return Response({
+            "groups": [
+                {"group": name, "permissions": permissions}
+                for name, permissions in sorted(groups.items())
+            ],
+            "count": sum(len(items) for items in groups.values()),
+        })
+
+
+class RoleWriteSerializer(serializers.Serializer):
+    """The editable half of a role.
+
+    `code` is accepted on create and ignored on update: it is what
+    `grantable_roles` and every seed reference by, and letting somebody rename
+    it would silently break both. The name is what people read; the code is
+    what the system means.
+    """
+
+    code = serializers.SlugField(max_length=64, required=False)
+    name = serializers.CharField(max_length=128)
+    description = serializers.CharField(allow_blank=True, required=False, default="")
+    permissions = serializers.ListField(
+        child=serializers.CharField(max_length=64), allow_empty=True,
+    )
+    max_scope = serializers.ChoiceField(
+        choices=[choice[0] for choice in Scope.CHOICES], default=Scope.FACILITY,
+    )
+    grantable_roles = serializers.ListField(
+        child=serializers.SlugField(max_length=64), required=False, default=list,
+    )
+    requires_approval_to_assign = serializers.BooleanField(default=False)
+    display_order = serializers.IntegerField(default=100, min_value=0, max_value=32767)
+
+
+def _validate_role_write(data, authorization, existing=None):
+    """The four rules a role must satisfy before it is written.
+
+    Kept out of the serializer because three of them need the *caller's*
+    authority, and a serializer that reaches for the request is a serializer
+    that cannot be tested on its own.
+    """
+    from apps.rbac.permissions import PERMISSION_MAP
+    from apps.rbac.services import check_segregation_of_duties
+
+    codes = sorted(set(data["permissions"]))
+
+    # 1. Every code must exist. **Fails closed**, and this is not pedantry: an
+    #    unknown code is stored happily by a JSONField, resolves to nothing at
+    #    check time, and produces a role that looks powerful in the editor and
+    #    does nothing on the ward. A typo must be a 400, not a mystery.
+    unknown = [code for code in codes if code not in PERMISSION_MAP]
+    if unknown:
+        raise DomainError(
+            "These permissions do not exist.",
+            detail={"unknown_permissions": unknown},
+            code="unknown_permission",
+        )
+
+    # 2. Segregation of duties, at design time. The service has done this
+    #    since it was written; nothing ever called it, because nothing ever
+    #    saved a role through an API.
+    conflicts = check_segregation_of_duties(codes)
+    if conflicts:
+        raise SegregationOfDutiesViolation(
+            "These permissions may not be held by the same person.",
+            detail={"conflicts": [list(pair) for pair in conflicts]},
+        )
+
+    # 3. **You may not create authority you do not hold.** Without this,
+    #    `role.manage` is a privilege-escalation primitive: anybody who may
+    #    edit roles writes themselves one carrying `payroll.approve` and
+    #    assigns it. `assign_role` would catch the assignment, but only
+    #    because `_assert_may_grant` re-checks -- and depending on a second
+    #    guard for the first one's job is how both eventually get removed.
+    #
+    #    The organization owner is exempt, as they are everywhere: they
+    #    already hold everything.
+    if not getattr(authorization, "is_organization_owner", False):
+        beyond = sorted(set(codes) - set(authorization.permissions))
+        if beyond:
+            raise PermissionDeniedError(
+                "A role cannot carry permissions you do not hold yourself.",
+                detail={"beyond_your_authority": beyond},
+            )
+
+    # 4. The superuser role is not editable through this door. It grants
+    #    everything by definition, so "edit" means only "make it grant less",
+    #    which is a lockout waiting to happen and belongs in a migration with
+    #    somebody watching.
+    if existing is not None and existing.is_superuser_role:
+        raise PermissionDeniedError(
+            "The superuser role cannot be edited through the API.",
+        )
+
+    return codes
+
+
+class RoleListView(APIView):
+    """Roles that exist, annotated with whether *you* could grant each one.
+
+    `role.read` to look, `role.manage` to create -- the same split as
+    `StaffListView`. Reading the roles is how anybody understands the access
+    model; writing one is an administrative act.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("role.read", scope=Scope.OWN, write="role.manage"),
+    ]
+
+    def get(self, request):
+        _organization(request)
+        roles = list(Role.objects.filter(is_active=True).order_by("name"))
         return Response(
             RoleSerializer(
                 roles, many=True,
+                context={
+                    "authorization": get_authorization(request),
+                    # One aggregate for the whole list rather than a count per
+                    # role. The obvious version is a query per row and looks
+                    # fine against fifteen seeded roles.
+                    "holder_counts": _holder_counts(roles),
+                },
+            ).data
+        )
+
+    @transaction.atomic
+    def post(self, request):
+        _organization(request)
+        authorization = get_authorization(request)
+
+        serializer = RoleWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        code = data.get("code") or slugify(data["name"])[:64]
+        if not code:
+            raise DomainError("A role needs a code.", code="invalid_role_code")
+        if Role.objects.filter(code=code).exists():
+            raise DomainError(
+                f"A role with the code '{code}' already exists.",
+                detail={"code": code},
+                code="role_exists",
+            )
+
+        codes = _validate_role_write(data, authorization)
+
+        role = Role.objects.create(
+            code=code,
+            name=data["name"],
+            description=data.get("description", ""),
+            permissions=codes,
+            max_scope=data["max_scope"],
+            grantable_roles=data.get("grantable_roles", []),
+            requires_approval_to_assign=data["requires_approval_to_assign"],
+            display_order=data["display_order"],
+            # Never through this door. A customer-written role is theirs to
+            # delete; marking one `is_system` would make it undeletable and
+            # there is no way back without a migration.
+            is_system=False,
+            is_superuser_role=False,
+        )
+        return Response(
+            RoleSerializer(role, context={"authorization": authorization}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RoleDetailView(APIView):
+    """One role: read it, edit it, or retire it."""
+
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("role.read", scope=Scope.OWN, write="role.manage"),
+    ]
+
+    def _role(self, uuid):
+        role = Role.objects.filter(uuid=uuid).first()
+        if role is None:
+            raise DomainError(
+                "No such role.", code="not_found", detail={"uuid": str(uuid)},
+            )
+        return role
+
+    def get(self, request, uuid):
+        _organization(request)
+        return Response(
+            RoleSerializer(
+                self._role(uuid),
                 context={"authorization": get_authorization(request)},
             ).data
         )
+
+    @transaction.atomic
+    def patch(self, request, uuid):
+        _organization(request)
+        authorization = get_authorization(request)
+        role = self._role(uuid)
+
+        # `partial=True` would let a caller send `{"name": "x"}` and have
+        # `permissions` default to `[]` -- silently emptying the role. So the
+        # current values are merged in first and the whole thing is validated,
+        # which also means the segregation check always sees the final set
+        # rather than the delta.
+        merged = {
+            "name": role.name,
+            "description": role.description,
+            "permissions": list(role.permissions or []),
+            "max_scope": role.max_scope,
+            "grantable_roles": list(role.grantable_roles or []),
+            "requires_approval_to_assign": role.requires_approval_to_assign,
+            "display_order": role.display_order,
+            **{
+                key: value for key, value in request.data.items()
+                # `code` and the two flags are not editable; see above.
+                if key in {
+                    "name", "description", "permissions", "max_scope",
+                    "grantable_roles", "requires_approval_to_assign",
+                    "display_order",
+                }
+            },
+        }
+
+        serializer = RoleWriteSerializer(data=merged)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        codes = _validate_role_write(data, authorization, existing=role)
+
+        role.name = data["name"]
+        role.description = data.get("description", "")
+        role.permissions = codes
+        role.max_scope = data["max_scope"]
+        role.grantable_roles = data.get("grantable_roles", [])
+        role.requires_approval_to_assign = data["requires_approval_to_assign"]
+        role.display_order = data["display_order"]
+        role.save()
+
+        return Response(
+            RoleSerializer(role, context={"authorization": authorization}).data
+        )
+
+    @transaction.atomic
+    def delete(self, request, uuid):
+        """Retire a role. Never a hard delete, and never while it is held.
+
+        Two refusals, both deliberate:
+
+        **A system role stays.** They ship with the product, seeds reference
+        them by code, and a customer who tidies one away has broken their own
+        next migration. Their permissions are editable -- customers know their
+        own workflows -- but the row is not theirs to remove.
+
+        **A held role stays until it is not held.** Deactivating a role that
+        forty people hold would take their access away in one request, with no
+        record against any of them, and the audit would show a role edit rather
+        than forty revocations. Revoke first; the message says how many.
+        """
+        _organization(request)
+        role = self._role(uuid)
+
+        if role.is_system:
+            raise PermissionDeniedError(
+                f"'{role.name}' ships with the product and cannot be removed. "
+                "Its permissions can still be changed.",
+                detail={"role": role.code},
+            )
+
+        holders = RoleAssignment.objects.filter(
+            role=role, status=AssignmentStatus.ACTIVE,
+        ).count()
+        if holders:
+            raise DomainError(
+                f"{holders} "
+                f"{'person holds' if holders == 1 else 'people hold'} this role. "
+                "Revoke it from them first, so each revocation is recorded "
+                "against the person it affects.",
+                detail={"holders": holders, "role": role.code},
+                code="role_in_use",
+            )
+
+        role.is_active = False
+        role.save(update_fields=["is_active", "updated_at"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StaffRolesView(APIView):

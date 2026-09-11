@@ -309,7 +309,7 @@ function ReturnRow({
             </div>
           ))}
           {!entry.restock && (
-            <span className="text-xs text-amber-600">not put back on the shelf</span>
+            <span className="text-xs text-warning">not put back on the shelf</span>
           )}
         </TableCell>
         <TableCell className="max-w-[14rem] truncate text-sm">

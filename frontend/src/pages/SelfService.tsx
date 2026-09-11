@@ -376,11 +376,18 @@ export default function SelfServicePage() {
   return (
     <div className="space-y-6 pb-12">
       {/* Header Banner */}
-      <div className="rounded-xl bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-800 p-6 text-white shadow-md">
+      {/*
+        The banner was `from-blue-700 via-indigo-700 to-slate-800` with
+        hardcoded white ink: three literal hues that ignored the palette, had
+        no dark form, and forced every label on top to be hardcoded too. On
+        `hero` tokens it follows whichever palette is selected and the ink
+        comes with the surface.
+      */}
+      <div className="rounded-xl bg-gradient-to-r from-hero via-hero-2 to-hero p-6 text-hero-foreground shadow-raised">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center rounded-md bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-100 ring-1 ring-inset ring-blue-400/30">
+              <span className="inline-flex items-center rounded-md bg-hero-foreground/15 px-2 py-0.5 text-xs font-semibold text-hero-foreground ring-1 ring-inset ring-hero-foreground/25">
                 {/* Was "Staff Portal · §95". A specification section number
                     on a screen a ward attendant opens every morning means
                     nothing to them and tells them the product is unfinished.
@@ -388,11 +395,11 @@ export default function SelfServicePage() {
                 Staff portal
               </span>
               {emp?.department && (
-                <span className="text-xs text-blue-200">· {emp.department}</span>
+                <span className="text-xs text-info-subtle-foreground">· {emp.department}</span>
               )}
             </div>
             <h1 className="text-2xl font-bold tracking-tight mt-1">{emp?.full_name}</h1>
-            <p className="text-sm text-blue-100/80">
+            <p className="text-sm text-hero-muted">
               {emp?.position || "Staff"} ({emp?.code}) · Reports to {emp?.reports_to || "Medical Admin"}
             </p>
           </div>
@@ -400,15 +407,15 @@ export default function SelfServicePage() {
           {/* Quick Punch Action Card */}
           <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/20">
             <div className="text-right">
-              <div className="text-xs text-blue-200">Today's Attendance</div>
+              <div className="text-xs text-info-subtle-foreground">Today's Attendance</div>
               <div className="font-semibold capitalize text-sm">
                 {todayAtt ? (
                   <span className="flex items-center gap-1.5 justify-end">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="h-2 w-2 rounded-full bg-good animate-pulse" />
                     {todayAtt.status} ({todayAtt.worked_hours}h)
                   </span>
                 ) : (
-                  <span className="text-amber-300">Not checked in</span>
+                  <span className="text-warning-subtle-foreground">Not checked in</span>
                 )}
               </div>
             </div>
@@ -419,7 +426,7 @@ export default function SelfServicePage() {
                   variant="secondary"
                   disabled={clocking}
                   onClick={() => handlePunch("in")}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium"
+                  className="bg-good hover:bg-good text-white font-medium"
                 >
                   <LogIn className="h-4 w-4 mr-1.5" /> Check In
                 </Button>
@@ -429,13 +436,13 @@ export default function SelfServicePage() {
                   variant="secondary"
                   disabled={clocking}
                   onClick={() => handlePunch("out")}
-                  className="bg-amber-500 hover:bg-amber-600 text-white font-medium"
+                  className="bg-warning hover:bg-warning text-white font-medium"
                 >
                   <LogOut className="h-4 w-4 mr-1.5" /> Check Out
                 </Button>
               ) : (
-                <Badge variant="outline" className="border-emerald-300 text-emerald-100">
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-300" /> Completed
+                <Badge variant="outline" className="border-good/40 text-good-subtle-foreground">
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-good-subtle-foreground" /> Completed
                 </Badge>
               )}
             </div>
@@ -452,8 +459,8 @@ export default function SelfServicePage() {
         </Alert>
       )}
       {success && (
-        <Alert className="border-emerald-500 text-emerald-800 bg-emerald-50">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+        <Alert className="border-good/40 text-good bg-good-subtle">
+          <CheckCircle2 className="h-4 w-4 text-good" />
           <AlertTitle>Success</AlertTitle>
           <AlertDescription>{success}</AlertDescription>
         </Alert>
@@ -494,7 +501,7 @@ export default function SelfServicePage() {
         >
           <ArrowRightLeft className="h-4 w-4" /> Shift Swaps
           {(summary?.pending_incoming_swaps ?? 0) > 0 && (
-            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.2">
+            <span className="ml-1 rounded-full bg-warning text-white text-xs px-1.5 py-0.2">
               {summary?.pending_incoming_swaps}
             </span>
           )}
@@ -526,15 +533,15 @@ export default function SelfServicePage() {
           <button
             onClick={() => setActiveTab("manager")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap text-indigo-600",
+              "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap text-info",
               activeTab === "manager"
-                ? "border-indigo-600 text-indigo-700 font-semibold"
-                : "border-transparent hover:text-indigo-700"
+                ? "border-info/40 text-info font-semibold"
+                : "border-transparent hover:text-info"
             )}
           >
             <Users className="h-4 w-4" /> Team Approvals
             {(managerQueue?.summary.pending_total ?? 0) > 0 && (
-              <span className="ml-1 rounded-full bg-indigo-600 text-white text-xs px-1.5 py-0.2">
+              <span className="ml-1 rounded-full bg-info text-white text-xs px-1.5 py-0.2">
                 {managerQueue?.summary.pending_total}
               </span>
             )}
@@ -669,7 +676,7 @@ export default function SelfServicePage() {
                         cred.status_tag === "expired"
                           ? "border-destructive bg-destructive/5 text-destructive"
                           : cred.status_tag === "expiring_soon"
-                          ? "border-amber-400 bg-amber-50 text-amber-900"
+                          ? "border-warning/40 bg-warning-subtle text-warning"
                           : "border-border bg-card"
                       )}
                     >
@@ -678,11 +685,11 @@ export default function SelfServicePage() {
                         {cred.status_tag === "expired" ? (
                           <Badge variant="destructive">Expired</Badge>
                         ) : cred.status_tag === "expiring_soon" ? (
-                          <Badge variant="outline" className="text-amber-700 border-amber-400">
+                          <Badge variant="outline" className="text-warning border-warning/40">
                             Expiring in {cred.days_to_expiry}d
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300">
+                          <Badge variant="outline" className="text-good border-good/40">
                             Verified
                           </Badge>
                         )}
@@ -1056,7 +1063,7 @@ export default function SelfServicePage() {
             <Card>
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground font-medium">Pending Approvals</div>
-                <div className="text-2xl font-bold text-indigo-600 mt-1">{managerQueue?.summary.pending_total ?? 0}</div>
+                <div className="text-2xl font-bold text-info mt-1">{managerQueue?.summary.pending_total ?? 0}</div>
               </CardContent>
             </Card>
             <Card>
@@ -1090,7 +1097,7 @@ export default function SelfServicePage() {
             <CardContent>
               {managerQueue?.items.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
+                  <CheckCircle2 className="h-8 w-8 mx-auto text-good mb-2" />
                   All team requests cleared. Nothing pending review!
                 </div>
               ) : (
@@ -1348,11 +1355,11 @@ export default function SelfServicePage() {
       {/* Modal: Printable Payslip Document */}
       {payslipModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-white text-slate-900 rounded-xl shadow-2xl p-8 space-y-6">
+          <div className="w-full max-w-2xl bg-white text-foreground rounded-xl shadow-2xl p-8 space-y-6">
             <div className="flex items-center justify-between border-b pb-4">
               <div>
-                <div className="text-xl font-bold text-blue-900">{payslipModal.organization_name}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xl font-bold text-info">{payslipModal.organization_name}</div>
+                <div className="text-xs text-muted-foreground">
                   {payslipModal.facility_name} · Salary Payslip ({payslipModal.period_label})
                 </div>
               </div>
@@ -1385,7 +1392,7 @@ export default function SelfServicePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded-lg border">
+            <div className="grid grid-cols-2 gap-4 text-xs bg-muted p-3 rounded-lg border">
               <div>
                 <div><strong>Employee:</strong> {payslipModal.employee.name} ({payslipModal.employee.code})</div>
                 <div><strong>Position:</strong> {payslipModal.employee.position}</div>
@@ -1400,7 +1407,7 @@ export default function SelfServicePage() {
 
             <div className="grid grid-cols-2 gap-6 text-sm">
               <div>
-                <div className="font-semibold text-xs uppercase tracking-wider text-slate-500 mb-2">Earnings</div>
+                <div className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2">Earnings</div>
                 <div className="space-y-1.5 border-t pt-2">
                   {payslipModal.earnings.map((e: any) => (
                     <div key={e.name} className="flex justify-between text-xs">
@@ -1416,7 +1423,7 @@ export default function SelfServicePage() {
               </div>
 
               <div>
-                <div className="font-semibold text-xs uppercase tracking-wider text-slate-500 mb-2">Deductions</div>
+                <div className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2">Deductions</div>
                 <div className="space-y-1.5 border-t pt-2">
                   {payslipModal.deductions.map((d: any) => (
                     <div key={d.name} className="flex justify-between text-xs">
@@ -1432,12 +1439,12 @@ export default function SelfServicePage() {
               </div>
             </div>
 
-            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 flex justify-between items-center">
+            <div className="rounded-lg bg-info-subtle border border-info/40 p-4 flex justify-between items-center">
               <div>
-                <div className="text-xs text-blue-700">Net Take-Home Pay</div>
-                <div className="text-xs text-slate-500">Credited to registered bank account</div>
+                <div className="text-xs text-info">Net Take-Home Pay</div>
+                <div className="text-xs text-muted-foreground">Credited to registered bank account</div>
               </div>
-              <div className="text-2xl font-bold text-blue-900">
+              <div className="text-2xl font-bold text-info">
                 NPR {payslipModal.net_pay}
               </div>
             </div>

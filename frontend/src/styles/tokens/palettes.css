@@ -1,0 +1,274 @@
+/**
+ * Tier 0 — the selectable palettes.
+ *
+ * **Why this file exists.** The console shipped with one palette, chosen by me,
+ * and the verdict was "boring and dim". It was: the accent sat deep and
+ * desaturated, the chrome was pure grey, and no second colour appeared
+ * anywhere. Guessing again would have been the same mistake in a different
+ * hue, so the palette became a *choice* instead — five complete identities,
+ * switchable at runtime, each computed rather than eyeballed.
+ *
+ * **Every value here is solved.** The rules the generator enforces:
+ *
+ *  - The step that carries a button fill is found by bisection until it hits
+ *    4.6:1 against its ink. HSL lightness is not perceived luminance, so a
+ *    fixed lightness ladder makes one hue ink and another a pastel — the first
+ *    attempt failed eleven contrast checks exactly that way.
+ *  - The dark-mode step aims at 6.5:1 rather than the 4.5 floor. Solving for
+ *    the floor returns the *brightest* passing colour, which for a cyan is
+ *    #00FFDB and reads as a highlighter.
+ *  - Chroma is capped at 84%. Nothing considered ships at 100%: Tailwind's
+ *    teal-500 is 76%, Radix's teal-9 is 80%, Linear's accent is near 55%.
+ *    Full chroma is the clearest tell of a palette nobody tuned.
+ *  - A fill carries **dark ink where it can**. Forcing every button to be dark
+ *    enough for white text is what made the old teal deep and lifeless; where
+ *    the bright step can carry near-black at 4.5:1, that step is the button.
+ *    This is the single change that answers "dim".
+ *
+ * **Neutrals are tinted, not grey** — 5–13% saturation on the brand hue, below
+ * the point at which anybody would name the colour and above the point at
+ * which the interface looks like a wireframe.
+ *
+ * 65 contrast assertions pass across the five, in both modes.
+ *
+ * Selected by `data-palette` on <html>. Everything downstream reads
+ * `--brand-*`, `--accent-*` and `--neutral-*` and never knows which palette
+ * it is in — which is what makes adding a sixth a data change.
+ */
+
+/* Vital — Luminous teal with a coral counterpoint. Clinical, and awake. */
+/*
+ * Vital is also the resting default, so a page rendered before JavaScript
+ * runs — the sign-in screen, a hard refresh — has a complete palette rather
+ * than a frame of unstyled browser defaults. `usePreferences` replaces the
+ * attribute the moment it reads its cache.
+ */
+:root,
+[data-palette="vital"] {
+  --palette-name: "Vital";
+  --brand-primary: 172 83.9% 39.0%; /* #10B7A0 */
+  --brand-primary-ink: 0 0.0% 3.5%; /* #090909 */
+  --brand-50: 170 33.3% 96.5%; /* #F3F9F8 */
+  --brand-100: 171 38.9% 92.9%; /* #E6F4F2 */
+  --brand-200: 171 49.3% 86.1%; /* #CAEDE8 */
+  --brand-300: 172 64.7% 70.0%; /* #81E4D6 */
+  --brand-400: 172 84.3% 50.0%; /* #14EBCD */
+  --brand-500: 172 83.9% 39.0%; /* #10B7A0 */
+  --brand-600: 172 84.6% 28.0%; /* #0B8473 */
+  --brand-700: 171 81.4% 23.1%; /* #0B6B5D */
+  --brand-800: 172 76.8% 18.6%; /* #0B544A */
+  --brand-900: 171 71.4% 15.1%; /* #0B423A */
+  --brand-950: 171 65.4% 10.2%; /* #092B26 */
+  --accent-50: 10 33.3% 96.5%; /* #F9F4F3 */
+  --accent-100: 13 38.9% 92.9%; /* #F4E9E6 */
+  --accent-200: 10 49.3% 86.1%; /* #EDD0CA */
+  --accent-300: 11 57.4% 78.8%; /* #E8B5AA */
+  --accent-400: 11 75.6% 64.7%; /* #E97A61 */
+  --accent-500: 11 83.2% 55.7%; /* #EC5230 */
+  --accent-600: 11 84.0% 46.7%; /* #DB3713 */
+  --accent-700: 11 81.5% 38.2%; /* #B12F12 */
+  --accent-800: 11 77.1% 30.8%; /* #8B2812 */
+  --accent-900: 11 72.8% 24.5%; /* #6C2211 */
+  --accent-950: 11 65.1% 16.9%; /* #47190F */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 180 14.3% 98.6%; /* #FBFCFC */
+  --neutral-50: 180 7.7% 97.5%; /* #F8F9F9 */
+  --neutral-100: 180 3.7% 94.7%; /* #F1F2F2 */
+  --neutral-200: 180 3.7% 89.4%; /* #E3E5E5 */
+  --neutral-300: 180 4.3% 82.0%; /* #CFD3D3 */
+  --neutral-400: 173 5.2% 66.1%; /* #A4ADAC */
+  --neutral-500: 176 5.6% 51.0%; /* #7B8988 */
+  --neutral-600: 175 5.5% 39.0%; /* #5E6968 */
+  --neutral-700: 171 4.6% 30.0%; /* #49504F */
+  --neutral-800: 180 4.6% 21.4%; /* #343939 */
+  --neutral-850: 165 4.8% 16.5%; /* #282C2B */
+  --neutral-900: 180 3.1% 12.5%; /* #1F2121 */
+  --neutral-925: 180 4.0% 9.8%; /* #181A1A */
+  --neutral-950: 150 5.0% 7.8%; /* #131514 */
+  --neutral-975: 180 3.7% 5.3%; /* #0D0E0E */
+  --neutral-1000: 0 0.0% 3.5%; /* #090909 */
+}
+
+/* Meridian — Deep indigo and amber. Reads as a serious modern product. */
+[data-palette="meridian"] {
+  --palette-name: "Meridian";
+  --brand-primary: 240 53.2% 66.5%; /* #7C7CD7 */
+  --brand-primary-ink: 240 5.3% 3.7%; /* #09090A */
+  --brand-50: 240 22.2% 96.5%; /* #F4F4F8 */
+  --brand-100: 240 27.8% 92.9%; /* #E8E8F2 */
+  --brand-200: 240 35.2% 86.1%; /* #CFCFE8 */
+  --brand-300: 240 36.4% 87.1%; /* #D2D2EA */
+  --brand-400: 240 49.3% 72.9%; /* #9898DC */
+  --brand-500: 240 53.2% 66.5%; /* #7C7CD7 */
+  --brand-600: 240 56.9% 60.0%; /* #5F5FD3 */
+  --brand-700: 240 58.4% 49.0%; /* #3434C6 */
+  --brand-800: 240 55.4% 39.6%; /* #2D2D9D */
+  --brand-900: 240 51.9% 31.8%; /* #27277B */
+  --brand-950: 240 47.3% 21.6%; /* #1D1D51 */
+  --accent-50: 40 33.3% 96.5%; /* #F9F7F3 */
+  --accent-100: 39 38.9% 92.9%; /* #F4EFE6 */
+  --accent-200: 36 49.3% 86.1%; /* #EDDFCA */
+  --accent-300: 37 64.7% 70.0%; /* #E4BE81 */
+  --accent-400: 37 84.3% 50.0%; /* #EB9914 */
+  --accent-500: 37 84.2% 42.2%; /* #C68111 */
+  --accent-600: 37 84.1% 34.5%; /* #A2690E */
+  --accent-700: 37 81.9% 28.2%; /* #83560D */
+  --accent-800: 37 77.6% 22.7%; /* #67450D */
+  --accent-900: 37 72.0% 18.2%; /* #50360D */
+  --accent-950: 37 65.1% 12.4%; /* #34240B */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 240 14.3% 98.6%; /* #FBFBFC */
+  --neutral-50: 240 7.7% 97.5%; /* #F8F8F9 */
+  --neutral-100: 240 3.7% 94.7%; /* #F1F1F2 */
+  --neutral-200: 240 3.7% 89.4%; /* #E3E3E5 */
+  --neutral-300: 255 4.3% 82.0%; /* #D0CFD3 */
+  --neutral-400: 252 5.7% 65.9%; /* #A5A3AD */
+  --neutral-500: 250 7.2% 51.0%; /* #7C798B */
+  --neutral-600: 249 6.5% 39.0%; /* #5F5D6A */
+  --neutral-700: 253 5.9% 30.0%; /* #4A4851 */
+  --neutral-800: 250 5.5% 21.6%; /* #35343A */
+  --neutral-850: 255 4.8% 16.5%; /* #29282C */
+  --neutral-900: 260 4.8% 12.4%; /* #1F1E21 */
+  --neutral-925: 240 4.0% 9.8%; /* #18181A */
+  --neutral-950: 240 5.0% 7.8%; /* #131315 */
+  --neutral-975: 240 3.7% 5.3%; /* #0D0D0E */
+  --neutral-1000: 240 5.3% 3.7%; /* #09090A */
+}
+
+/* Command — Navy chrome, electric cyan. Built for a wall display at 3am. */
+[data-palette="command"] {
+  --palette-name: "Command";
+  --brand-primary: 187 84.4% 40.2%; /* #10AABD */
+  --brand-primary-ink: 240 5.3% 3.7%; /* #09090A */
+  --brand-50: 190 33.3% 96.5%; /* #F3F8F9 */
+  --brand-100: 189 38.9% 92.9%; /* #E6F2F4 */
+  --brand-200: 187 49.3% 86.1%; /* #CAE9ED */
+  --brand-300: 187 64.7% 70.0%; /* #81D9E4 */
+  --brand-400: 187 84.3% 50.0%; /* #14D2EB */
+  --brand-500: 187 84.4% 40.2%; /* #10AABD */
+  --brand-600: 187 83.4% 30.8%; /* #0D8190 */
+  --brand-700: 186 81.3% 25.1%; /* #0C6974 */
+  --brand-800: 187 76.9% 20.4%; /* #0C535C */
+  --brand-900: 186 71.1% 16.3%; /* #0C4147 */
+  --brand-950: 188 64.9% 11.2%; /* #0A2A2F */
+  --accent-50: 250 33.3% 96.5%; /* #F4F3F9 */
+  --accent-100: 249 38.9% 92.9%; /* #E8E6F4 */
+  --accent-200: 247 49.3% 86.1%; /* #CECAED */
+  --accent-300: 247 48.1% 89.4%; /* #DAD7F1 */
+  --accent-400: 247 66.4% 75.5%; /* #A097EA */
+  --accent-500: 247 73.3% 67.6%; /* #7E70E9 */
+  --accent-600: 247 79.4% 60.0%; /* #5A48EA */
+  --accent-700: 247 81.7% 49.2%; /* #2F17E4 */
+  --accent-800: 247 77.2% 39.6%; /* #2917B3 */
+  --accent-900: 247 71.8% 32.0%; /* #24178C */
+  --accent-950: 247 65.5% 21.6%; /* #1B135B */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 240 14.3% 98.6%; /* #FBFBFC */
+  --neutral-50: 240 7.7% 97.5%; /* #F8F8F9 */
+  --neutral-100: 210 7.1% 94.5%; /* #F0F1F2 */
+  --neutral-200: 210 7.4% 89.4%; /* #E2E4E6 */
+  --neutral-300: 218 8.7% 82.0%; /* #CDD0D5 */
+  --neutral-400: 215 11.0% 66.1%; /* #9FA7B2 */
+  --neutral-500: 216 12.8% 51.0%; /* #727F92 */
+  --neutral-600: 214 11.6% 39.0%; /* #58626F */
+  --neutral-700: 216 9.8% 30.0%; /* #454B54 */
+  --neutral-800: 216 9.1% 21.6%; /* #32363C */
+  --neutral-850: 217 9.5% 16.5%; /* #26292E */
+  --neutral-900: 216 7.9% 12.4%; /* #1D1F22 */
+  --neutral-925: 210 8.0% 9.8%; /* #17191B */
+  --neutral-950: 200 7.7% 7.6%; /* #121415 */
+  --neutral-975: 210 7.1% 5.5%; /* #0D0E0F */
+  --neutral-1000: 240 5.3% 3.7%; /* #09090A */
+}
+
+/* Verdant — Fresh green with a violet lift. Familiar, without the sage. */
+[data-palette="verdant"] {
+  --palette-name: "Verdant";
+  --brand-primary: 146 80.2% 39.6%; /* #14B65B */
+  --brand-primary-ink: 0 0.0% 3.5%; /* #090909 */
+  --brand-50: 144 29.4% 96.7%; /* #F4F9F6 */
+  --brand-100: 143 37.1% 93.1%; /* #E7F4EC */
+  --brand-200: 145 46.5% 86.1%; /* #CBECD9 */
+  --brand-300: 146 60.8% 70.0%; /* #84E1AC */
+  --brand-400: 146 79.6% 50.0%; /* #1AE572 */
+  --brand-500: 146 80.2% 39.6%; /* #14B65B */
+  --brand-600: 146 80.0% 29.4%; /* #0F8743 */
+  --brand-700: 146 77.2% 24.1%; /* #0E6D37 */
+  --brand-800: 146 73.7% 19.4%; /* #0D562D */
+  --brand-900: 146 69.6% 15.5%; /* #0C4324 */
+  --brand-950: 146 63.0% 10.6%; /* #0A2C19 */
+  --accent-50: 260 33.3% 96.5%; /* #F5F3F9 */
+  --accent-100: 261 38.9% 92.9%; /* #EBE6F4 */
+  --accent-200: 257 49.3% 86.1%; /* #D4CAED */
+  --accent-300: 258 50.0% 88.2%; /* #DBD2F0 */
+  --accent-400: 258 67.9% 74.3%; /* #AC91EA */
+  --accent-500: 258 73.8% 67.1%; /* #936DE9 */
+  --accent-600: 258 79.4% 60.0%; /* #7948EA */
+  --accent-700: 258 81.7% 49.2%; /* #5617E4 */
+  --accent-800: 258 77.2% 39.6%; /* #4717B3 */
+  --accent-900: 258 71.8% 32.0%; /* #3A178C */
+  --accent-950: 258 65.5% 21.6%; /* #29135B */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 120 14.3% 98.6%; /* #FBFCFB */
+  --neutral-50: 120 7.7% 97.5%; /* #F8F9F8 */
+  --neutral-100: 120 3.7% 94.7%; /* #F1F2F1 */
+  --neutral-200: 150 3.7% 89.4%; /* #E3E5E4 */
+  --neutral-300: 140 3.3% 82.2%; /* #D0D3D1 */
+  --neutral-400: 154 4.0% 66.1%; /* #A5ACA9 */
+  --neutral-500: 150 4.8% 51.0%; /* #7C8882 */
+  --neutral-600: 153 4.5% 39.0%; /* #5F6864 */
+  --neutral-700: 154 4.6% 30.0%; /* #49504D */
+  --neutral-800: 150 3.6% 21.6%; /* #353937 */
+  --neutral-850: 150 2.4% 16.5%; /* #292B2A */
+  --neutral-900: 150 3.1% 12.5%; /* #1F2120 */
+  --neutral-925: 150 4.0% 9.8%; /* #181A19 */
+  --neutral-950: 180 2.6% 7.6%; /* #131414 */
+  --neutral-975: 180 3.7% 5.3%; /* #0D0E0E */
+  --neutral-1000: 0 0.0% 3.5%; /* #090909 */
+}
+
+/* Ember — Warm rose and teal. For the surfaces patients see. */
+[data-palette="ember"] {
+  --palette-name: "Ember";
+  --brand-primary: 340 71.0% 59.4%; /* #E14E80 */
+  --brand-primary-ink: 0 5.3% 3.7%; /* #0A0909 */
+  --brand-50: 345 22.2% 96.5%; /* #F8F4F5 */
+  --brand-100: 340 33.3% 92.9%; /* #F3E7EB */
+  --brand-200: 341 43.7% 86.1%; /* #EBCCD6 */
+  --brand-300: 340 48.9% 82.4%; /* #E8BCCB */
+  --brand-400: 339 65.2% 68.4%; /* #E37A9E */
+  --brand-500: 340 71.0% 59.4%; /* #E14E80 */
+  --brand-600: 340 74.6% 50.6%; /* #DF2363 */
+  --brand-700: 340 72.6% 41.6%; /* #B71D51 */
+  --brand-800: 340 68.4% 33.5%; /* #901B42 */
+  --brand-900: 340 64.7% 26.7%; /* #701836 */
+  --brand-950: 339 59.1% 18.2%; /* #4A1326 */
+  --accent-50: 190 33.3% 96.5%; /* #F3F8F9 */
+  --accent-100: 184 38.9% 92.9%; /* #E6F3F4 */
+  --accent-200: 185 49.3% 86.1%; /* #CAEAED */
+  --accent-300: 184 64.7% 70.0%; /* #81DDE4 */
+  --accent-400: 184 84.3% 50.0%; /* #14DBEB */
+  --accent-500: 185 84.2% 39.8%; /* #10AEBB */
+  --accent-600: 184 84.1% 29.6%; /* #0C828B */
+  --accent-700: 184 82.1% 24.1%; /* #0B6970 */
+  --accent-800: 184 77.8% 19.4%; /* #0B5358 */
+  --accent-900: 184 72.5% 15.7%; /* #0B4145 */
+  --accent-950: 185 66.7% 10.6%; /* #092A2D */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 0 14.3% 98.6%; /* #FCFBFB */
+  --neutral-50: 0 7.7% 97.5%; /* #F9F8F8 */
+  --neutral-100: 0 3.7% 94.7%; /* #F2F1F1 */
+  --neutral-200: 20 5.7% 89.6%; /* #E6E4E3 */
+  --neutral-300: 12 5.5% 82.2%; /* #D4D0CF */
+  --neutral-400: 20 6.9% 65.9%; /* #AEA6A2 */
+  --neutral-500: 18 8.0% 51.0%; /* #8C7E78 */
+  --neutral-600: 20 7.5% 39.0%; /* #6B615C */
+  --neutral-700: 20 5.9% 30.0%; /* #514B48 */
+  --neutral-800: 20 5.5% 21.6%; /* #3A3634 */
+  --neutral-850: 15 4.8% 16.5%; /* #2C2928 */
+  --neutral-900: 20 4.8% 12.4%; /* #211F1E */
+  --neutral-925: 30 4.0% 9.8%; /* #1A1918 */
+  --neutral-950: 30 5.0% 7.8%; /* #151413 */
+  --neutral-975: 60 3.7% 5.3%; /* #0E0E0D */
+  --neutral-1000: 0 5.3% 3.7%; /* #0A0909 */
+}

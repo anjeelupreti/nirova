@@ -92,11 +92,11 @@ const CATEGORY_LABEL: Record<number, string> = {
  * screen does not invent a scheme staff would have to learn.
  */
 const CATEGORY_TONE: Record<number, string> = {
-  1: "bg-red-600 text-white",
-  2: "bg-orange-500 text-white",
-  3: "bg-amber-400 text-black",
-  4: "bg-emerald-500 text-white",
-  5: "bg-sky-500 text-white",
+  1: "bg-critical text-white",
+  2: "bg-serious text-white",
+  3: "bg-warning text-black",
+  4: "bg-good text-white",
+  5: "bg-info text-white",
 };
 
 const PATHWAYS = [
@@ -273,7 +273,7 @@ function Board({
       ) : rows.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-sm text-muted-foreground">
-            <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-600" />
+            <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-good" />
             The department is empty.
           </CardContent>
         </Card>
@@ -313,7 +313,7 @@ function Board({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">
                     {row.is_unidentified ? (
-                      <span className="text-amber-700 dark:text-amber-400">
+                      <span className="text-warning">
                         {row.description || row.patient}
                       </span>
                     ) : (
@@ -1826,7 +1826,7 @@ function Performance({ facility }: { facility: string }) {
               <span
                 className={cn(
                   "tabular-nums",
-                  summary.still_unidentified > 0 && "text-amber-600",
+                  summary.still_unidentified > 0 && "text-warning",
                 )}
               >
                 {summary.still_unidentified}

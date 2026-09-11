@@ -299,7 +299,7 @@ function WorkQueue({
           label="Licences expiring"
           value={String(data.licences_expiring)}
           hint="within 60 days"
-          tone={data.licences_expiring > 0 ? "text-amber-600" : undefined}
+          tone={data.licences_expiring > 0 ? "text-warning" : undefined}
         />
       </div>
 
@@ -313,7 +313,7 @@ function WorkQueue({
         <CardContent>
           {queue.length === 0 ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-good" />
               Nothing is waiting. Every document has moved on.
             </div>
           ) : (
@@ -328,7 +328,7 @@ function WorkQueue({
                     <Icon
                       className={cn(
                         "h-4 w-4",
-                        urgent ? "text-amber-600" : "text-muted-foreground",
+                        urgent ? "text-warning" : "text-muted-foreground",
                       )}
                     />
                     <span className="flex-1 text-sm">{text}</span>
@@ -814,7 +814,7 @@ function Comparison({
               return (
                 <TableRow
                   key={row.uuid}
-                  className={cn(winner && "bg-emerald-50 dark:bg-emerald-950/30")}
+                  className={cn(winner && "bg-good-subtle")}
                 >
                   <TableCell>
                     <span className="font-medium">{row.supplier}</span>
@@ -846,7 +846,7 @@ function Comparison({
                   <TableCell
                     className={cn(
                       "text-right font-medium tabular-nums",
-                      winner && "text-emerald-700 dark:text-emerald-400",
+                      winner && "text-good",
                     )}
                   >
                     {rupees(row.cost_per_unit)}
@@ -1023,7 +1023,7 @@ function Orders({ facility }: { facility: string }) {
                     <TableCell>
                       {line.product_name}
                       {Number(line.free_quantity) > 0 && (
-                        <span className="block text-xs text-emerald-600">
+                        <span className="block text-xs text-good">
                           +{line.free_quantity} free
                         </span>
                       )}
@@ -1262,7 +1262,7 @@ function Receipts({ facility }: { facility: string }) {
                     <div className="text-right text-sm">
                       <p className="tabular-nums">{line.received_quantity}</p>
                       {Number(line.free_quantity) > 0 && (
-                        <p className="text-xs text-emerald-600">
+                        <p className="text-xs text-good">
                           +{line.free_quantity} free
                         </p>
                       )}

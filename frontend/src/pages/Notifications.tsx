@@ -88,37 +88,37 @@ const CATEGORY: Record<
   critical: {
     label: "Critical",
     icon: AlertOctagon,
-    tone: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
+    tone: "bg-critical-subtle text-critical",
     rail: "border-l-red-500",
   },
   warning: {
     label: "Warning",
     icon: AlertTriangle,
-    tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+    tone: "bg-warning-subtle text-warning",
     rail: "border-l-amber-500",
   },
   approval: {
     label: "Approval",
     icon: ClipboardCheck,
-    tone: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
+    tone: "bg-brandaccent-subtle text-brandaccent",
     rail: "border-l-violet-500",
   },
   task: {
     label: "Task",
     icon: CheckCheck,
-    tone: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+    tone: "bg-info-subtle text-info",
     rail: "border-l-sky-500",
   },
   reminder: {
     label: "Reminder",
     icon: Timer,
-    tone: "bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200",
+    tone: "bg-good-subtle text-good",
     rail: "border-l-teal-500",
   },
   information: {
     label: "Information",
     icon: Info,
-    tone: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200",
+    tone: "bg-muted text-foreground",
     rail: "border-l-slate-400",
   },
 };

@@ -285,7 +285,7 @@ export default function FacilityRequestsPage() {
                 <p
                   className={
                     justificationShort
-                      ? "text-xs text-amber-600"
+                      ? "text-xs text-warning"
                       : "text-xs text-muted-foreground"
                   }
                 >

@@ -46,6 +46,16 @@ export default defineConfig({
           // ones imported, but they are imported from twenty different pages,
           // so leaving them unsplit duplicates icons across route chunks.
           "vendor-icons": ["lucide-react"],
+          // Recharts and its d3 dependencies are ~400 kB and are imported by
+          // the dashboard, the design page and every screen that grows a
+          // chart. Unsplit they landed in an anonymous shared chunk that grew
+          // whenever a second page charted anything; named, they are fetched
+          // once on the first chart and cached across every deployment that
+          // does not upgrade them. Nothing that lacks a chart pays for it.
+          "vendor-charts": ["recharts"],
+          // The palette is one keystroke away from every screen, so its code
+          // is on the critical path for the shell rather than for a route.
+          "vendor-command": ["cmdk"],
         },
       },
     },

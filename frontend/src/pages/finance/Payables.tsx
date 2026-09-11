@@ -249,7 +249,7 @@ export function ExpensesPanel({ facilityUuid }: { facilityUuid: string }) {
                     <TableCell className="max-w-[16rem] truncate">
                       {expense.description}
                       {!expense.has_receipt && (
-                        <span className="ml-2 text-xs text-amber-600">
+                        <span className="ml-2 text-xs text-warning">
                           no receipt
                         </span>
                       )}
@@ -616,7 +616,7 @@ export function SupplierInvoicesPanel({ facilityUuid }: { facilityUuid: string }
                         {invoice.status}
                       </Badge>
                       {Number(invoice.variance) !== 0 && (
-                        <div className="text-xs text-amber-600">
+                        <div className="text-xs text-warning">
                           variance {MONEY(invoice.variance)}
                         </div>
                       )}

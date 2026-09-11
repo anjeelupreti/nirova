@@ -188,7 +188,7 @@ export default function Privacy() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {/* Waiting first and biggest. The total sits under it rather
                   than beside it, because the ratio is the thing to read. */}
-              <Card className={cn(queue.pending > 0 && "border-amber-400")}>
+              <Card className={cn(queue.pending > 0 && "border-warning/40")}>
                 <CardContent className="py-4">
                   <p className="text-3xl font-semibold tabular-nums">
                     {queue.pending}
@@ -202,7 +202,7 @@ export default function Privacy() {
                 </CardContent>
               </Card>
 
-              <Card className={cn(queue.live > 0 && "border-red-500")}>
+              <Card className={cn(queue.live > 0 && "border-critical/40")}>
                 <CardContent className="py-4">
                   <p className="text-3xl font-semibold tabular-nums">
                     {queue.live}
@@ -286,7 +286,7 @@ export default function Privacy() {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {grant.is_live ? (
-                            <Badge className="bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200">
+                            <Badge className="bg-critical-subtle text-critical">
                               <Clock className="mr-1 h-3 w-3" />
                               {remaining(grant.expires_at)}
                             </Badge>
@@ -496,7 +496,7 @@ function AccessPatternPanels({ patterns }: { patterns: AccessPatterns }) {
                     key={`${person.who}-${person.role}-${index}`}
                     className={cn(
                       "border-t",
-                      person.is_outlier && "bg-amber-50 dark:bg-amber-950/30",
+                      person.is_outlier && "bg-warning-subtle",
                     )}
                   >
                     <td className="py-1 pr-3">{person.who}</td>

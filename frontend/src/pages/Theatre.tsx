@@ -681,12 +681,12 @@ function CaseDetail({
                   className={cn(
                     "rounded-md border p-3",
                     row.skipped && "border-destructive/50 bg-destructive/5",
-                    row.complete && "border-emerald-500/40",
+                    row.complete && "border-good/40",
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     {row.complete ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <CheckCircle2 className="h-4 w-4 text-good" />
                     ) : row.skipped ? (
                       <ShieldAlert className="h-4 w-4 text-destructive" />
                     ) : (
@@ -717,12 +717,12 @@ function CaseDetail({
                     </p>
                   )}
                   {row.concerns && (
-                    <p className="mt-1 text-sm text-amber-600">
+                    <p className="mt-1 text-sm text-warning">
                       {row.concerns}
                     </p>
                   )}
                   {row.negative_answers.length > 0 && (
-                    <ul className="mt-1 space-y-0.5 text-xs text-amber-600">
+                    <ul className="mt-1 space-y-0.5 text-xs text-warning">
                       {row.negative_answers.map((item) => (
                         <li key={item}>· {item}</li>
                       ))}
@@ -878,8 +878,8 @@ function CaseDetail({
               </CardHeader>
               <CardContent className="space-y-2">
                 {cost.implants.length > 0 && (
-                  <div className="rounded-md border border-amber-500/40 bg-amber-50 p-2 text-sm dark:bg-amber-950/20">
-                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  <div className="rounded-md border border-warning/40 bg-warning-subtle p-2 text-sm">
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-warning">
                       Implants
                     </p>
                     {cost.implants.map((row) => (
@@ -1099,7 +1099,7 @@ function ChecklistDialog({
                       className={cn(
                         "rounded px-2 py-0.5 text-xs",
                         responses[item] === true
-                          ? "bg-emerald-600 text-white"
+                          ? "bg-good text-white"
                           : "border text-muted-foreground",
                       )}
                     >
@@ -1272,7 +1272,7 @@ function ConsumeDialog({
                   value={form.serial_number}
                   onChange={set("serial_number")}
                 />
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-warning">
                   Required. A recall asks which patients have one, and a
                   product code cannot answer that. A serial already recorded
                   against another patient is refused — two people cannot hold
@@ -1411,7 +1411,7 @@ function CancelDialog({
               ))}
             </Select>
             {avoidable && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning">
                 Counted as avoidable by the hospital — this is the number a
                 theatre committee acts on.
               </p>

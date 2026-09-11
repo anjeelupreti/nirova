@@ -1091,7 +1091,7 @@ function PreAuths() {
             key={row.uuid}
             className={cn(
               "rounded-md border p-3",
-              row.status === "partially_approved" && "border-amber-500/50",
+              row.status === "partially_approved" && "border-warning/40",
               row.status === "rejected" && "border-destructive/50",
             )}
           >
@@ -1135,7 +1135,7 @@ function PreAuths() {
               <p className="text-xs text-destructive">{row.rejection_reason}</p>
             )}
             {row.warnings.map((warning) => (
-              <p key={warning} className="mt-1 text-xs text-amber-600">
+              <p key={warning} className="mt-1 text-xs text-warning">
                 ! {warning}
               </p>
             ))}
@@ -1299,7 +1299,7 @@ function Analysis() {
 
   return (
     <div className="space-y-4">
-      <Card className={cn(Number(ageing.overdue) > 0 && "border-amber-500/50")}>
+      <Card className={cn(Number(ageing.overdue) > 0 && "border-warning/40")}>
         <CardHeader>
           <CardTitle className="text-base">Waiting to be paid</CardTitle>
           <CardDescription>

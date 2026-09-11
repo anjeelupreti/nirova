@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 /* -------------------------------------------------------------------------- */
 
 /**
- * Twelve hues at a fixed lightness, so any two are equally readable.
+ * Eight hues, so any two are distinguishable — including under colour-vision deficiency.
  *
  * Not random per render and not stored on the person: derived from their name,
  * so the same colleague is the same colour on every screen and after every
@@ -38,11 +38,23 @@ import { cn } from "@/lib/utils";
  * Deliberately not the semantic palette. A person is not a status, and
  * borrowing `destructive` for somebody whose surname happens to hash there
  * would say something the design did not mean.
+ *
+ * **And the colour codemod did exactly that, which is worth recording.** It
+ * mapped this list's twelve literal hues by family — red to `critical`, amber
+ * to `warning`, green to `good` — so the organization owner rendered as a
+ * bright red circle in the header, reading as an alert on every screen, and
+ * twelve distinct colours collapsed to six. The comment above said not to; the
+ * script could not read it. Caught by screenshot.
+ *
+ * The categorical series ramp is the right source, and not by analogy: it is
+ * the palette this product validated for *identity* — eight hues, in an order
+ * checked for colour-vision deficiency — and it carries no status meaning. It
+ * is constant across the five selectable palettes, so a colleague is the same
+ * colour whichever theme somebody picked.
  */
 const AVATAR_HUES = [
-  "bg-rose-500", "bg-orange-500", "bg-amber-500", "bg-lime-600",
-  "bg-emerald-500", "bg-teal-500", "bg-cyan-600", "bg-sky-500",
-  "bg-indigo-500", "bg-violet-500", "bg-fuchsia-500", "bg-pink-500",
+  "bg-series-1", "bg-series-2", "bg-series-3", "bg-series-4",
+  "bg-series-5", "bg-series-6", "bg-series-7", "bg-series-8",
 ];
 
 function hueFor(seed: string): string {
@@ -222,7 +234,7 @@ export function StatTile({
             <span
               className={cn(
                 "font-medium",
-                intent === "good" && "text-emerald-600 dark:text-emerald-400",
+                intent === "good" && "text-good",
                 intent === "bad" && "text-destructive",
                 intent === "neutral" && "text-muted-foreground",
               )}
@@ -367,7 +379,11 @@ export function TimelineItem({
         className={cn(
           "relative z-10 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-background",
           intent === "neutral" && "bg-muted text-muted-foreground",
-          intent === "good" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+          // Tokens, not `emerald-500`. The component layer sits outside the
+          // `src/pages` ratchet, which is how this survived the burn-down —
+          // and a timeline marker that is emerald in a violet palette is
+          // exactly the drift the token layer exists to stop.
+          intent === "good" && "bg-good-subtle text-good",
           intent === "bad" && "bg-destructive/15 text-destructive",
           intent === "active" && "bg-primary text-primary-foreground",
         )}

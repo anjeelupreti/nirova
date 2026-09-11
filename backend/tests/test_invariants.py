@@ -2546,13 +2546,22 @@ def test_every_console_route_has_a_way_to_reach_it():
     import pathlib
     import re
 
-    app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "App.tsx"
-    if not app.exists():
+    src = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src"
+    app = src / "App.tsx"
+    # The navigation moved out of `App.tsx` into `components/shell/nav.ts` when
+    # the command palette was built (log 273): three things consume it now --
+    # the rail, the narrow strip and the palette -- and a second copy would be
+    # a rail and a palette that disagree about what the product contains.
+    #
+    # So the two halves of this check now come from two files. The
+    # `len(linked) > 10` assertion below is what caught the move rather than
+    # letting it pass silently with zero navigation entries parsed.
+    nav = src / "components" / "shell" / "nav.ts"
+    if not app.exists() or not nav.exists():
         pytest.skip("no console in this checkout")
 
-    source = app.read_text(encoding="utf-8")
-    routes = set(re.findall(r'<Route path="(/[^"*]*)"', source))
-    linked = set(re.findall(r'to: "(/[^"]+)"', source))
+    routes = set(re.findall(r'<Route path="(/[^"*]*)"', app.read_text(encoding="utf-8")))
+    linked = set(re.findall(r'to: "(/[^"]+)"', nav.read_text(encoding="utf-8")))
 
     assert len(routes) > 10, (
         f"only {len(routes)} routes parsed out of App.tsx; the pattern has "
@@ -2566,6 +2575,9 @@ def test_every_console_route_has_a_way_to_reach_it():
     reached_from_elsewhere = {
         "/",          # redirects to the home screen
         "/login",     # shown instead of the shell, never navigated to
+        # Registration: signed-out only, reached from the sign-in screen's
+        # "Register your hospital" links. The shell never shows it.
+        "/signup",
         # Opened from the queue with an encounter in hand. A sidebar link to
         # "the consultation" would have to invent which one.
         "/consultation/:uuid",
@@ -2575,6 +2587,16 @@ def test_every_console_route_has_a_way_to_reach_it():
         # "Oversight" -- among screens about other people, which is the wrong
         # place for the one screen that is about you.
         "/account",
+        # One patient's full record. Opened from a patient -- the search panel,
+        # the command palette, a worklist row -- for the same reason the
+        # consultation is: a sidebar link to "the patient" would have to
+        # invent which one.
+        "/patients/:uuid",
+        # The design system, rendered: every token, state and chart form on one
+        # scroll (log 273). Deliberately not in anybody's sidebar -- it is for
+        # whoever is building the product, not for anybody running a hospital,
+        # and the route is the door.
+        "/design",
     }
 
     orphans = sorted(routes - linked - reached_from_elsewhere)

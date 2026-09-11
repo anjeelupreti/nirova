@@ -1,0 +1,199 @@
+/**
+ * Tier 1 — primitives that do *not* change with the palette.
+ *
+ * **No component may reference a token from this file or from `palettes.css`.**
+ * These are raw material: ramps with no opinion about what any of them is for.
+ * `semantic.css` assigns the meaning, and every component reads only from
+ * there. That indirection is what lets a customer switch the entire identity
+ * from a dropdown without a single component knowing it happened.
+ *
+ * The brand and neutral ramps used to live here. They moved to
+ * `palettes.css`, which declares five of each; what is left is everything that
+ * must stay the same whichever palette is on:
+ *
+ *  - **Chart series.** Validated for colour-vision deficiency as a *set*. A
+ *    palette swap must not silently re-order them; see the note below.
+ *  - **Status signals.** Green means approved in every theme. A product where
+ *    "critical" is a different colour depending on a preference is a product
+ *    that has stopped meaning anything.
+ *  - **Triage acuity.** A clinical convention, not a brand decision.
+ *
+ * Values are `H S% L%` channel triples rather than hex, because Tailwind's
+ * opacity modifiers (`bg-primary/10`) need the channels separately. The hex
+ * each came from is in the comment beside it, since a triple is unreadable and
+ * the hex is what a designer will hand you.
+ */
+
+:root {
+  /* ---------------------------------------------------------------------- */
+  /* Chart series — categorical                                              */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * **These do not follow the brand, and that is deliberate.**
+   *
+   * The tempting design is series slot 1 = the brand colour, so a chart feels
+   * part of the product. It would also mean that switching to the indigo
+   * palette puts indigo at slot 1 *and* slot 3, and that every guarantee below
+   * is void — the set was validated as an ordered whole, not hue by hue.
+   * Re-validating five palettes × eight slots × two modes on every theme
+   * change is not a thing a dropdown can do.
+   *
+   * So the data palette is constant and the brand reaches charts through
+   * `--chart-emphasis` alone: the one series a chart is *about* takes the
+   * brand, the rest take these. That keeps the tie to the product where it is
+   * useful and keeps the guarantee where it matters.
+   *
+   * The slot order is itself the safety mechanism. Run through the
+   * data-visualisation validator against both surfaces:
+   *
+   *   light  worst adjacent CVD ΔE 10.1 · normal-vision ΔE 21.8 · all ≥ 3:1
+   *   dark   worst adjacent CVD ΔE 11.2 · normal-vision ΔE 19.2 · all ≥ 3:1
+   *
+   * (ΔE in OKLab ×100; the CVD figure is the worse of simulated protanopia and
+   * deuteranopia. The targets are 8 and 15.)
+   *
+   * Gold sits at slot 4 rather than beside red because red↔gold measured 6.0
+   * under deuteranopia — inside the floor band — while red↔blue at the same
+   * position clears comfortably. Colours are assigned **in this order and
+   * never cycled**: a ninth series folds into "Other" or the chart is faceted,
+   * because a generated ninth hue is indistinguishable from an existing one
+   * under colour-vision deficiency and silently breaks every figure above.
+   *
+   * For scatter, bubble and choropleth — where every pair is adjacent rather
+   * than only neighbours — the safe count is **three**. `charts/theme.ts`
+   * enforces that rather than leaving it to memory.
+   */
+  --series-1: 170 100% 29%;      /* #00947C teal */
+  --series-2: 20 76% 52.5%;      /* #E2662A orange */
+  --series-3: 238 47.3% 52.4%;   /* #4C4FBF indigo */
+  --series-4: 42 100% 35.5%;     /* #B57F00 gold */
+  --series-5: 331 63.6% 55.9%;   /* #D6478C magenta */
+  --series-6: 94 100% 28%;       /* #3F8F00 green */
+  --series-7: 212 71.8% 47.3%;   /* #2273CF blue */
+  --series-8: 0 62.7% 53.7%;     /* #D33F3F red */
+
+  /* ---------------------------------------------------------------------- */
+  /* Chart scale — sequential, one hue                                       */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * For magnitude: heatmaps, occupancy grids, calendar density. One hue, light
+   * to dark, because a rainbow ramp has no natural order and readers invent
+   * one. Eight steps is enough resolution for a grid and few enough that a
+   * legend can name every one.
+   *
+   * This one *is* keyed to the default teal rather than to the live brand, for
+   * the same reason as the series above: a sequential ramp has to stay
+   * monotonic in perceived lightness, and re-deriving that safely per palette
+   * is work a preference toggle should not be doing.
+   */
+  --scale-1: 165 42.9% 89%;      /* #D7EFE9 */
+  --scale-2: 167 43.4% 77.8%;    /* #AEDFD4 */
+  --scale-3: 168 43.3% 64.7%;    /* #7ECCBC */
+  --scale-4: 169 44.6% 48.8%;    /* #45B4A0 */
+  --scale-5: 170 100% 29%;       /* #00947C */
+  --scale-6: 171 100% 22.7%;     /* #007463 */
+  --scale-7: 171 80% 19.6%;      /* #0A5A4E */
+  --scale-8: 169 67.1% 15.5%;    /* #0D4238 */
+
+  /* ---------------------------------------------------------------------- */
+  /* Signal hues — status and clinical acuity                                */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * Deliberately *not* drawn from the series ramp, and deliberately not from
+   * the palette. A status colour must never be mistakable for "series 4", a
+   * series colour must never read as an alarm, and neither may change because
+   * somebody preferred a different accent. Green is approved in every theme.
+   */
+  /*
+   * **Solved for text, not only for marks.** These were first chosen as
+   * dots, bars and fills, where 3:1 is the bar — and then the colour codemod
+   * put `text-good`, `text-warning` and `text-serious` on some 270 sites as
+   * small text, where the bar is 4.5:1. Measured against the page: six of the
+   * seven failed, amber worst at 3.48:1. Each has been darkened at constant
+   * hue and saturation until it clears 4.6:1 on the *page* (the tinted
+   * neutral-50, which is stricter than a white card).
+   *
+   * Contrast is symmetric, so the same value also carries white text as a
+   * fill — which is what the acuity badges ask of it, see below.
+   */
+  --signal-good: 143 80.4% 28%;      /* #0E813A — was #0F8A3E, 4.19:1 */
+  --signal-warning: 42 100% 29%;     /* #946700 — was #B07B00, 3.48:1 */
+  --signal-serious: 22 73.1% 40.8%;  /* #B4541C — was #C25A1E, 4.14:1 */
+  --signal-critical: 0 73.9% 45.1%;  /* #C81E1E — passed at 5.41:1 */
+  --signal-info: 212 71.8% 45.9%;    /* #2170C9 — was #2273CF, 4.48:1 */
+  --signal-muted: 42 6.5% 39.4%;     /* #6B675E */
+
+  /*
+   * **Triage acuity keeps the clinical convention, and that is a deliberate
+   * exception to the one-hue rule for ordered scales.**
+   *
+   * A five-step ordinal scale should be a single hue stepped light to dark.
+   * Triage is not, anywhere in the world: red–orange–yellow–green–blue is what
+   * Manchester, ESI and every wall chart in every emergency department use,
+   * and staff are trained on it before they ever see this software. Overriding
+   * that for a general design rule would be correct in a textbook and wrong in
+   * a resuscitation bay.
+   *
+   * The mitigation is that acuity is **never colour alone** — `AcuityBadge`
+   * always renders the number, so the colour is confirmation rather than the
+   * message.
+   */
+  /*
+   * The acuity badge puts a white numeral on this fill. At the old values the
+   * "3" on an urgent badge sat at 3.7:1 and the "2" on an emergent one at
+   * 3.87:1 — triage categories a nurse glances at across a department, rendered
+   * below the legibility floor. Categories 2 to 5 are darkened to clear 4.6:1
+   * with white; only 1 already did.
+   */
+  --acuity-1: 0 73.9% 45.1%;     /* #C81E1E resuscitation */
+  --acuity-2: 23 78% 41.5%;      /* #BC5617 emergent — was #D2601A, 3.87:1 */
+  --acuity-3: 42 100% 29%;       /* #946700 urgent — was #B07B00, 3.70:1 */
+  --acuity-4: 94 100% 24.9%;     /* #387F00 standard — was #3F8F00, 4.09:1 */
+  --acuity-5: 212 71.8% 45.9%;   /* #2170C9 non-urgent */
+}
+
+/* -------------------------------------------------------------------------- */
+/* Dark re-steps                                                              */
+/* -------------------------------------------------------------------------- */
+/*
+ * **Not a flip — a second selection.** A hue tuned to sit at 3:1 on white is
+ * too dark to see on near-black, and one bright enough for near-black glares
+ * on white. Every ramp below was re-stepped for the dark surface and re-run
+ * through the validator as its own set.
+ *
+ * The sequential scale reverses direction as well as lightness: on a light
+ * ground more-is-darker, on a dark ground more-is-lighter. Keeping the
+ * direction would mean "a lot" faded into the background.
+ */
+.dark {
+  --series-1: 171 83.7% 33.7%;   /* #0E9E88 */
+  --series-2: 23 70.2% 51.4%;    /* #DA6E2C */
+  --series-3: 241 54.9% 66.1%;   /* #7A79D8 */
+  --series-4: 44 87.8% 38.4%;    /* #B8890C */
+  --series-5: 336 57.7% 62%;     /* #D66692 */
+  --series-6: 95 59.4% 36.7%;    /* #559526 */
+  --series-7: 214 62.1% 55.5%;   /* #4785D4 */
+  --series-8: 0 64.8% 61%;       /* #DC5B5B */
+
+  --scale-1: 172 62.7% 11.6%;    /* #0B302B */
+  --scale-2: 170 66.7% 16.5%;    /* #0E463D */
+  --scale-3: 169 69.9% 22.2%;    /* #116052 */
+  --scale-4: 170 73% 27.6%;      /* #137A68 */
+  --scale-5: 171 83.7% 33.7%;    /* #0E9E88 */
+  --scale-6: 170 51.4% 47.6%;    /* #3BB8A3 */
+  --scale-7: 169 49.2% 62.2%;    /* #6FCEBD */
+  --scale-8: 168 50.8% 76.9%;    /* #A6E2D6 */
+
+  --signal-good: 139 46.8% 46.5%;    /* #3FAE63 */
+  --signal-warning: 44 83.4% 42.5%;  /* #C79612 */
+  --signal-serious: 23 70.3% 55.1%;  /* #DD7B3C */
+  --signal-critical: 0 71.7% 62.5%;  /* #E45B5B */
+  --signal-info: 213 77.3% 63.7%;    /* #5B9BEA */
+  --signal-muted: 44 9.1% 67.6%;     /* #B4B0A5 */
+
+  --acuity-1: 0 82.3% 64.5%;     /* #EF5A5A */
+  --acuity-2: 24 78.9% 57.3%;    /* #E8823C */
+  --acuity-3: 44 80.3% 45.9%;    /* #D3A017 */
+  --acuity-4: 96 57% 42%;        /* #5FA82E */
+  --acuity-5: 213 77.3% 63.7%;   /* #5B9BEA */
+}

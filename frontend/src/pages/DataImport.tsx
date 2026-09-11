@@ -147,10 +147,10 @@ const STEPS: { id: Step; label: string }[] = [
 
 /** Row status → how it reads. Colour is the last signal, never the only one. */
 const ROW_TONE: Record<string, string> = {
-  valid: "text-emerald-600",
+  valid: "text-good",
   invalid: "text-destructive",
-  duplicate: "text-amber-600",
-  imported: "text-emerald-600",
+  duplicate: "text-warning",
+  imported: "text-good",
   skipped: "text-muted-foreground",
   failed: "text-destructive",
   pending: "text-muted-foreground",

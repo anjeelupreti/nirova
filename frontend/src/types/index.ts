@@ -14,6 +14,8 @@ export interface User {
   display_name: string;
   is_platform_staff: boolean;
   mfa_enabled: boolean;
+  /** Set after an administrator issues a temporary password; nothing opens until it is replaced. */
+  must_change_password?: boolean;
 }
 
 export interface Membership {
@@ -79,6 +81,8 @@ export interface Session {
   authorization: Authorization | null;
   entitlements: Entitlements | null;
   tenant_error?: { code: string; message: string };
+  /** The organization requires two-step sign-in and this person has not set it up. */
+  mfa_enrolment_required?: boolean;
 }
 
 export interface Facility {
@@ -1034,6 +1038,10 @@ export interface Sale {
   void_reason: string;
   notes: string;
   lines: SaleLine[];
+  /** Who issued it — a Nepali tax receipt names the seller's PAN. */
+  issuer?: { name: string; address: string; phone: string; pan: string; licence: string };
+  /** The tenders. Empty on the sales list, where they would cost a query a row. */
+  payments?: { method: string; method_label: string; amount: string; reference: string }[];
 }
 
 export interface SaleReturn {
@@ -4596,6 +4604,8 @@ export interface NurseWorkspaceSummary {
   shift: string;
   date: string;
   scope: string;
+  /** Asked for "mine" with nothing assigned this shift, so the whole ward is shown. */
+  showing_whole_ward?: boolean;
   facility_name: string;
   total_patients: number;
   high_risk_count: number;

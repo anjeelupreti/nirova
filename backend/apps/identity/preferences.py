@@ -42,6 +42,24 @@ PREFERENCES = [
         ],
     ),
     Preference(
+        key="palette",
+        label="Colour",
+        description=(
+            "The whole interface, not just an accent. Each one is a complete "
+            "identity with its own neutrals, and every combination in it has "
+            "been checked for contrast in both light and dark."
+        ),
+        kind="choice",
+        default="vital",
+        choices=[
+            ("vital", "Vital — luminous teal"),
+            ("meridian", "Meridian — indigo and amber"),
+            ("command", "Command — navy and cyan"),
+            ("verdant", "Verdant — green and violet"),
+            ("ember", "Ember — rose and teal"),
+        ],
+    ),
+    Preference(
         key="density",
         label="Row height",
         description=(
@@ -66,6 +84,7 @@ PREFERENCES = [
         default="auto",
         choices=[
             ("auto", "Whatever suits my role"),
+            ("/dashboard", "Dashboard"),
             ("/queue", "Queue"),
             ("/patients", "Patients"),
             ("/workspace", "What needs me"),

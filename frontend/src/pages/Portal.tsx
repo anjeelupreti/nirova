@@ -942,7 +942,7 @@ function Adoption() {
             label="Used in 90 days"
             value={String(data.used_in_90_days)}
             tone={
-              data.used_in_90_days < data.active ? "text-amber-600" : undefined
+              data.used_in_90_days < data.active ? "text-warning" : undefined
             }
           />
           <Fact
@@ -963,7 +963,7 @@ function Adoption() {
             hint="offered and never taken up"
             tone={
               data.expired_unused_invitations > 0
-                ? "text-amber-600"
+                ? "text-warning"
                 : undefined
             }
           />
@@ -1142,7 +1142,7 @@ function Corrections({ onUpdated }: { onUpdated: () => void }) {
                       }
                       className={cn(
                         "text-xs capitalize",
-                        row.status === "pending" && "border-amber-500/50 bg-amber-500/10 text-amber-700",
+                        row.status === "pending" && "border-warning/40 bg-warning/10 text-warning",
                       )}
                     >
                       {row.status}

@@ -105,12 +105,12 @@ const TABS: {
 ];
 
 const STATUS_TONE: Record<string, string> = {
-  present: "text-emerald-600",
-  late: "text-amber-600",
-  early_exit: "text-amber-600",
-  half_day: "text-amber-600",
+  present: "text-good",
+  late: "text-warning",
+  early_exit: "text-warning",
+  half_day: "text-warning",
   absent: "text-destructive",
-  on_leave: "text-sky-600",
+  on_leave: "text-info",
   holiday: "text-muted-foreground",
   weekly_off: "text-muted-foreground",
 };
@@ -390,7 +390,7 @@ function MyTime() {
             {todaysRecord &&
               todaysRecord.checked_in_at &&
               !todaysRecord.checked_out_at && (
-                <p className="mt-3 text-sm text-amber-600">
+                <p className="mt-3 text-sm text-warning">
                   Still checked in. An unfinished day is not the same as a short
                   one, and payroll reads them differently.
                 </p>
@@ -426,7 +426,7 @@ function MyTime() {
                       / {row.entitlement}
                     </span>
                     {Number(row.pending) > 0 && (
-                      <span className="ml-1 text-amber-600">
+                      <span className="ml-1 text-warning">
                         ({row.pending} pending)
                       </span>
                     )}
@@ -526,7 +526,7 @@ function MyTime() {
                   <TableCell className="tabular-nums">
                     {clock(row.checked_out_at)}
                     {row.checked_in_at && !row.checked_out_at && (
-                      <span className="ml-1 text-xs text-amber-600">
+                      <span className="ml-1 text-xs text-warning">
                         unfinished
                       </span>
                     )}
@@ -534,7 +534,7 @@ function MyTime() {
                   <TableCell className="text-right tabular-nums">
                     {row.worked_hours}
                     {Number(row.overtime_hours) > 0 && (
-                      <span className="text-xs text-emerald-600">
+                      <span className="text-xs text-good">
                         {" "}
                         +{row.overtime_hours}
                       </span>
@@ -690,7 +690,7 @@ function ApplyLeave({
               </p>
             )}
             {chosen?.requires_document && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-warning">
                 A supporting document is needed beyond{" "}
                 {chosen.document_required_after_days} days.
               </p>
@@ -833,7 +833,7 @@ function LedgerDialog({
                       "text-right font-medium tabular-nums",
                       Number(row.days) < 0
                         ? "text-destructive"
-                        : "text-emerald-600",
+                        : "text-good",
                     )}
                   >
                     {Number(row.days) > 0 ? "+" : ""}
@@ -1075,7 +1075,7 @@ function Away({ facility }: { facility: string }) {
         <CardContent>
           {pending.length === 0 ? (
             <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-good" />
               Nothing is waiting.
             </div>
           ) : (
@@ -1284,7 +1284,7 @@ function TeamAttendance({ facility }: { facility: string }) {
             <p
               className={cn(
                 "mt-1 text-2xl font-semibold tabular-nums",
-                summary.unclosed_days > 0 && "text-amber-600",
+                summary.unclosed_days > 0 && "text-warning",
               )}
             >
               {summary.unclosed_days}
@@ -1351,7 +1351,7 @@ function TeamAttendance({ facility }: { facility: string }) {
                   <TableCell
                     className={cn(
                       "text-right tabular-nums",
-                      row.late_minutes > 60 && "text-amber-600",
+                      row.late_minutes > 60 && "text-warning",
                     )}
                   >
                     {row.late_minutes}m

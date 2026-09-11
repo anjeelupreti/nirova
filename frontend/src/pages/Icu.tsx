@@ -156,12 +156,12 @@ function staleness(value: string | null) {
   const hours = Math.floor(minutes / 60);
   return {
     text: `${hours}h ago`,
-    tone: hours >= 4 ? "text-destructive" : "text-amber-600",
+    tone: hours >= 4 ? "text-destructive" : "text-warning",
   };
 }
 
 const balanceTone = (ml: number) =>
-  ml > 2000 ? "text-destructive" : ml < -1500 ? "text-amber-600" : "";
+  ml > 2000 ? "text-destructive" : ml < -1500 ? "text-warning" : "";
 
 export default function IcuPage() {
   const [tab, setTab] = useState<Tab>("board");
@@ -356,7 +356,7 @@ function Board({
                   "border-destructive/60 bg-destructive/5",
                 row.critical_alerts === 0 &&
                   row.unacknowledged_alerts > 0 &&
-                  "border-amber-500/50",
+                  "border-warning/40",
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -379,7 +379,7 @@ function Board({
                     {row.sofa ?? "—"}
                     {row.sofa !== null && row.sofa_complete === false && (
                       <span
-                        className="text-amber-600"
+                        className="text-warning"
                         title="Partial score — some systems had no data"
                       >
                         *
@@ -622,7 +622,7 @@ function Chart({
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               {stay.blockers.length === 0 ? (
-                <p className="flex items-center gap-2 text-emerald-600">
+                <p className="flex items-center gap-2 text-good">
                   <CheckCircle2 className="h-4 w-4" />
                   Nothing holding this patient in the unit.
                 </p>
@@ -779,7 +779,7 @@ function Alerts({
             <span className="min-w-0 flex-1">
               {row.message}
               {row.from_unvalidated_device && (
-                <span className="ml-1 text-xs text-amber-600">
+                <span className="ml-1 text-xs text-warning">
                   · from an unvalidated monitor reading
                 </span>
               )}
@@ -906,7 +906,7 @@ function Observations({
               {stay.observations.map((row) => (
                 <TableRow
                   key={row.uuid}
-                  className={cn(!row.is_validated && "bg-amber-50/60 dark:bg-amber-950/10")}
+                  className={cn(!row.is_validated && "bg-warning-subtle/60")}
                 >
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {clock(row.recorded_at)}
@@ -1045,7 +1045,7 @@ function Sparkline({ points }: { points: TrendPoint[] }) {
                 4
               }
               r="4"
-              className="fill-amber-500"
+              className="fill-warning"
               vectorEffect="non-scaling-stroke"
             />
           ),
@@ -1226,7 +1226,7 @@ function Fluids({
                   <span
                     className={cn(
                       "h-3 rounded-sm",
-                      row.cumulative_ml >= 0 ? "bg-sky-500/70" : "bg-amber-500/70",
+                      row.cumulative_ml >= 0 ? "bg-info/70" : "bg-warning/70",
                     )}
                     style={{
                       width: `${(Math.abs(row.cumulative_ml) / peak) * 100}%`,
@@ -1420,18 +1420,18 @@ function Severity({ sofa }: { sofa: SofaDay[] }) {
                     "h-4 rounded-sm",
                     row.complete
                       ? "bg-primary"
-                      : "border border-dashed border-amber-500 bg-amber-500/30",
+                      : "border border-dashed border-warning/40 bg-warning/30",
                   )}
                   style={{ width: `${(row.total / peak) * 100}%` }}
                 />
               </span>
               <span className="w-8 shrink-0 text-right font-medium tabular-nums">
                 {row.total}
-                {!row.complete && <span className="text-amber-600">*</span>}
+                {!row.complete && <span className="text-warning">*</span>}
               </span>
             </div>
             {!row.complete && (
-              <p className="pl-14 text-xs text-amber-600">
+              <p className="pl-14 text-xs text-warning">
                 no data for {row.missing.map(humanise).join(", ")} — scored as
                 zero, so the real score is higher
               </p>
@@ -2141,7 +2141,7 @@ function Performance({ facility }: { facility: string }) {
               label="Outcome unknown"
               value={String(unit.outcome_unknown)}
               hint={`${unit.transferred_out} out, ${unit.left_against_advice} LAMA`}
-              tone={unit.outcome_unknown > 0 ? "text-amber-600" : undefined}
+              tone={unit.outcome_unknown > 0 ? "text-warning" : undefined}
             />
             <Fact
               label="Median stay"
@@ -2261,8 +2261,8 @@ function Performance({ facility }: { facility: string }) {
                   className={cn(
                     "h-3 rounded-sm",
                     (row.answered_percent ?? 0) >= 90
-                      ? "bg-emerald-500/70"
-                      : "bg-amber-500/70",
+                      ? "bg-good/70"
+                      : "bg-warning/70",
                   )}
                   style={{ width: `${row.answered_percent ?? 0}%` }}
                 />

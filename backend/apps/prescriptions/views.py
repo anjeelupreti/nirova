@@ -237,10 +237,29 @@ class ActiveMedicationsView(APIView):
     is the list a clinician checks before adding anything new.
     """
 
-    permission_classes = [IsAuthenticated, HasPermission.of("patient.read", scope=Scope.OWN)]
+    # **`patient.safety.read`, not `patient.read`.** `docs/ACCESS_DESIGN.md`
+    # puts active medications in the Safety tier — organization-wide for
+    # clinical and pharmacy roles, and *logged* — and puts only name, MRN and
+    # contact details in the Identity tier that `patient.read` grants.
+    #
+    # This view had been written against the Identity tier, so a receptionist
+    # could read any patient's current drug list without a care relationship
+    # and without the read being recorded. Found while building the patient
+    # record page, which would otherwise have put that leak one click from
+    # every front desk. No screen called this endpoint before then, so
+    # tightening it broke nothing that worked.
+    permission_classes = [
+        IsAuthenticated,
+        HasPermission.of("patient.safety.read", scope=Scope.OWN),
+    ]
 
     def get(self, request, uuid):
         patient = get_object_or_404(Patient, uuid=uuid)
+        # Logged, as the design requires for the Safety tier. The Clinical tier
+        # additionally requires a care relationship; Safety deliberately does
+        # not — "withholding this is the dangerous option" — so there is no
+        # `HasClinicalAccess` here, and that absence is the design, not a gap.
+        record_patient_access(patient, reason="Active medications")
         medications = active_medications(patient)
         return Response(
             {

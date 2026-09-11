@@ -11241,3 +11241,456 @@ the class-level `write=` actually adds, which is that `audit_writes` can see it
 and a fourth action cannot escape it.
 
 279 tests pass. `manage.py audit_writes` reports zero.
+
+## 273 - "Total flop until now" - the console, taken apart and rebuilt
+
+The report was blunt and mostly right: the theme reads as generated, the
+sidebar is a list of things, there is no dashboard, no visualisation, no roles
+screen, no card view, no profile of anybody. *"I cannot pitch this."*
+
+What follows is what was actually true, because the difference between
+"missing" and "built and never wired" changed what needed doing.
+
+### Measured before writing anything
+
+| Claim | What the code said |
+|---|---|
+| No dashboard | Correct. No `/dashboard` route; `home` was `isPlatformOnly ? "/platform" : "/patients"`, so **all seventeen seeded roles landed on the patient list** - a pharmacist, a controller and a payroll officer included. `/workspace` is an approval inbox, which is a different thing. |
+| No visualisation | Correct, and total. Zero charting dependencies, zero `<svg>` charts. Thirteen registered reports render as tables. |
+| No roles/permissions UI | Correct. `Role` carries permissions, inheritance, a max scope, a delegable set; `PermissionOverride` grants *and denies* per user; SoD conflicts are enforced at design time and at approval. The API exposes one read, `GET /admin/roles/`, and no screen called it. |
+| No card view | Correct. Every list is a `<Table>`; 34 of 44 pages render one directly. |
+| Sidebar is an undifferentiated list | Half right. `NAV_GROUPS` *was* grouped into ten labelled groups and the reasoning was sound. Nothing about the rendering said so: one weight throughout, no group icons, no collapse, no pins, no counts, and the rail on the same background as the page. **Structure that is invisible is not structure.** |
+| Theme looks AI-generated | Correct, and the cause is specific: it is the unmodified shadcn starter with `--primary` swapped to teal. Defaults are what a generator produces. |
+
+And the category that was worse than "missing":
+
+* **`SegmentedControl`** - the exact control a table/card switch needs - written, exported, **used by nothing**.
+* **`Timeline`** - the exact component a patient record needs - same.
+* **`@radix-ui/react-tabs`** - installed since the first commit, **zero imports**, while **seventeen screens hand-rolled their own tab strip**, each with its own `type Tab`, its own `const TABS`, and no keyboard support.
+* **`landing`** - declared in `preferences.py`, offered as a control on My account, saved to the user row, **and read by nothing**. Somebody who set it watched their choice be stored and ignored, which is worse than the preference not existing.
+* **`can()`** - exposed by `useSession` since it was written, called by **6 of 44 pages**.
+
+### The colour count, and a correction
+
+A hand-run grep reported **178** hardcoded Tailwind colour utilities under
+`src/pages`. That number was wrong and I quoted it several times before the
+test caught it: the grep matched only `text-*` against nine hues and missed
+every `bg-`, `border-` and `ring-`.
+
+The real figure is **325, across 29 files, of which only 48 carry a `dark:`
+counterpart** - so 277 are light-mode-only. Dark mode had only recently been
+made to work at all (log 267), so nothing about the product's semantic colour
+had ever been looked at on a dark ground. Worst offenders: `NurseWorkspace`
+(77), `SelfService` (48), `Notifications` (24), `Icu` (18), `Wards` (18).
+
+Nobody was careless. There was no token for "an expiring batch", so
+`text-amber-600` was the only thing on offer - and no screen anywhere on which
+all of it could be seen at once.
+
+### Three tiers, because one was the problem
+
+`index.css` declared twenty semantic variables directly, so "warm the brand up
+half a step" was twenty edits and a guess.
+
+```
+tokens/primitive.css   ramps only - no component may name these
+tokens/semantic.css    the shadcn contract, defined in terms of primitives
+tokens/component.css   the knobs: --header-height, --row-padding-y
+```
+
+The shadcn names are kept letter for letter, so **44 screens and every existing
+utility class kept working and only the values moved**. That was the point of
+doing it in that order.
+
+Neutrals went from shadcn's blue-tinted slate to a warm ramp at hue 40-60. Two
+reasons and the aesthetic one is the smaller: a cool grey is the default of
+every component library, so a product built on one announces which library it
+was built on; and a cool accent on cool neutrals is a single temperature and
+reads as an accident rather than a choice.
+
+**Dark mode moved off pure black**, which reverses part of log 267 and the
+reversal is deliberate. That entry argued for `0 0% 0%` on OLED grounds, and
+for a phone at a bedside at three in the morning it is right. It is wrong for
+the console, which is used on an LCD at a nurses' station under strip lights,
+where pure black behind light text haloes on every border. `#0A0A0A` is
+indistinguishable as a colour and does not bloom. The patient application keeps
+true black, scoped by `[data-surface="patient"]`, because there the original
+argument still holds.
+
+### Colour that means something clinically
+
+The highest-leverage change in the whole pass, and the one that makes the
+product look like it was built by people who have been in a hospital.
+
+`--acuity-1..5`, `--good/-warning/-serious/-critical/-info` each as ink + tint +
+ink-on-tint, plus recessive chart chrome. `StatusBadge` maps every status
+string this product emits - `pending_approval`, `PENDING APPROVAL`,
+`pending-approval` - to a tone in one table, and **an unknown status resolves to
+neutral, never to a guess**. Rendering grey for a status the table has not been
+taught is honest; rendering green because the word contains "ok" is the kind of
+cleverness that eventually paints a failed crossmatch as fine.
+
+**Triage acuity is a deliberate exception to the one-hue rule for ordered
+scales.** A five-step ordinal scale should be a single hue stepped light to
+dark. Triage is not, anywhere: red-orange-yellow-green-blue is Manchester and
+ESI and every wall chart in every emergency department, and staff are trained on
+it years before they meet this software. Overriding that for a general design
+rule would be correct in a textbook and wrong in a resuscitation bay. The
+mitigation is that `AcuityBadge` always renders the number, so the colour
+confirms rather than carries.
+
+### The charts, and the palette that was computed rather than chosen
+
+Eight categorical hues, anchored on the brand teal at slot 1, run through the
+data-visualisation validator against both surfaces:
+
+```
+light  worst adjacent CVD dE 10.1 - normal-vision dE 21.8 - all >= 3:1
+dark   worst adjacent CVD dE 11.2 - normal-vision dE 19.2 - all >= 3:1
+```
+
+Targets are 8 and 15. Gold sits at slot 4 rather than beside red because
+red-gold measured **6.0** under deuteranopia - inside the floor band - while
+red-blue at the same position clears comfortably. **Colours are assigned in
+that order and never cycled**; a ninth series folds into "Other", because a
+generated ninth hue is indistinguishable from an existing one under
+colour-vision deficiency and silently breaks every figure above.
+
+Scatter, bubble and choropleth put every pair on screen at once rather than
+only neighbours, and only the first three slots clear the gates on that
+pairlist. `ScatterChart` caps itself at three rather than documenting it.
+
+Twenty-two forms, and the ones that matter most in a hospital are not charts:
+`OccupancyGrid` (the ward, drawn as beds - the most-requested view in any
+hospital system and the one this product did not have), `Gantt` (the theatre
+day: the gap where a case fits and the list that is overrunning, both invisible
+in a table sorted by start time), `Heatmap` (arrivals by day and hour - when to
+roster, which no line chart can answer), `Waterfall`, `Dumbbell`, `Pyramid`,
+and `LeveyJennings`, which section 34 has asked for since the beginning.
+
+**Every chart has four states and they are the point.** A chart component that
+only knows how to draw data renders an empty grid when its endpoint 500s, and
+an empty grid reads as *zero*. A bed-occupancy chart saying 0% because the
+service failed and one saying 0% because the ward is empty must not look the
+same. `ChartFrame` makes them different, and the dashboard's `PanelProblem`
+says "not read - this is not a zero" in as many words.
+
+### The shell
+
+The rail is its own surface now (`--shell`), so the application has a frame;
+previously header, rail and content were all `--background` and the links
+appeared to float on the page. Groups collapse and remember. Any screen can be
+pinned above the groups. Approvals and unread counts appear on the rail, and a
+**folded** group still reports what is waiting inside it, because folding a
+group must not hide an approval queue.
+
+The customer's name and mark sit at the top left, where every other SaaS puts
+the vendor's. `Organization.primary_color` has been on the model and in the
+frontend's `Organization` type all along, unread by anything.
+
+**The command palette** is the highest ratio of "this is a serious tool" to
+effort in the whole pass. Everything it does was already possible; what changes
+is that a receptionist who knows the patient's name never has to know which
+screen they are on. It reuses the omnibox's sequence-number guard - type "ram",
+then "ramesh", and the slower request must not land last and replace the right
+answer with the wrong one. That is the oldest bug in search boxes and it is
+invisible until somebody opens the wrong patient.
+
+### Where "/" goes
+
+`resolveHome` consults the `landing` preference, then the person's role, then a
+permission ladder. The ladder exists because `/auth/me/` returns
+`authorization.permissions` and **not** the roles somebody holds - and asking
+the permissions is in any case the more honest test, since a customer who has
+renamed `nurse` to `sister` still lands somewhere useful.
+
+### What is not built, stated rather than hidden
+
+* **Editing a role** needs `POST/PATCH /admin/roles/`, which does not exist. The model supports it; the endpoint has not been written. `/access` says so on the screen rather than offering a control that 405s.
+* **The permission catalogue** has no endpoint, so `/access` groups permissions by parsing the code's prefix. That is a stand-in and is labelled as one in the source.
+* **The other 42 screens** still render raw tables and raw colours. `DataView`, `Tabs`, `StatusBadge` and `Can` exist and are used by the new screens; migrating the rest is the long pass.
+
+### The guard
+
+`tests/test_design_tokens.py`, in the standing-guards tradition:
+
+1. **A ratchet on the colour count.** 325 may fall and may not rise. Deliberately not pass/fail-on-zero: blocking every unrelated commit behind a week of migration means the rule gets deleted rather than the colours. It also fails when the count drops far *below* budget, because a budget far above the real number is headroom rather than a guard.
+2. **The token layer is wired**, and imported primitive to semantic to component before `@tailwind base`. Cheap check, expensive failure: if `index.css` stops importing the primitives, every semantic token resolves to nothing and the whole console renders in browser defaults - obvious in a browser, invisible in a diff.
+3. **No component names a primitive token directly**, because one that does pins itself to a value and will not follow a customer's re-theme.
+
+`test_nav.py` needed updating rather than fixing: the navigation moved out of
+`App.tsx` into `components/shell/nav.ts` because three things consume it now,
+and the test failed loudly on the move - which is exactly what its
+`len(items) > 20` assertion is for. A parser that has stopped matching must not
+look like a product with no screens.
+
+### A profile that existed and could not be reached
+
+The brief said there is no profile of anybody. That was not quite right, and
+the correction is worth writing down: `People.tsx` **does** hold an employee
+profile — record, credentials, history, pay, and whether the person may
+practise — and it is a good screen.
+
+It was `useState<string | null>(null)`. So it could not be linked to, could
+not be bookmarked, could not be opened in a second tab, and the back button
+left the whole screen rather than closing the profile, because as far as the
+router was concerned nothing had happened. A screen nobody can point at is
+close enough to a screen that does not exist.
+
+Now `?employee=CODE`. A search parameter rather than a `/people/:code`
+route, deliberately: the profile needs the directory's facility filter and tab
+state around it to return to, and a separate route would have to rebuild that
+context or drop somebody somewhere generic on the way back. Closing uses
+`replace`, so opening and closing four profiles does not leave eight entries
+for the back button to walk out of.
+
+### The guard earned its keep on the first run
+
+`test_nav.py` failed immediately: **`/access` was shown to an operations
+manager and refused by the API.** I had given the nav entry `user.read`,
+reasoning from what the screen *shows* — it lists people — rather than from the
+endpoint it *calls*. `RoleListView` asks for `role.read`.
+
+That is the exact class of mistake the guard was written for (log 219), and the
+comment in `nav.ts` says in as many words that the permission must be derived
+and not guessed. Reading it and then doing the other thing is worth recording:
+the guard is doing work the comment cannot.
+
+`test_invariants.py::test_every_console_route_has_a_way_to_reach_it` also
+failed, for a duller reason — it read both the routes and the nav links out of
+`App.tsx`, and the nav had moved. Its `len(linked) > 10` assertion is what
+turned "zero navigation entries parsed" into a failure rather than a pass.
+
+### What I got wrong
+
+The 178. I reported it in the plan document and in four source comments before
+the guard I wrote to enforce it counted properly and returned 325. A figure
+arrived at by a grep I ran once, and quoted as though it were measured.
+
+
+And a class of defect I nearly shipped three times, all three found by reading
+the **built stylesheet** rather than trusting the source. Tailwind finds class
+names as literal strings, so three things that read perfectly do nothing:
+
+* `border-current/25` on the spinner track. Tailwind cannot apply an alpha to
+  `currentColor`, so the class was never emitted at all; the track fell
+  through to the global border colour and looked *almost* right, which is the
+  worst kind of wrong. `grep border-current dist/assets/*.css` returned zero,
+  which is how it was found. The spinner is an SVG with `strokeOpacity` now.
+* `text-${tone}` on the stat tile and `shadow-${level}` on the design page.
+  Both were correctly coloured **by luck** — those classes existed only because
+  other files spelled them out — and both would have lost their colour the day
+  one of those files changed. Lookup tables now.
+
+A design system is not verified by reading the JSX.
+
+283 tests pass, 9 skipped. `vite build` is clean; the largest chunk is the
+chart vendor at 463 kB, fetched on the first chart and by nothing that has none.
+
+## 274 - "The colour combination itself is boring and dim"
+
+The second verdict on the console, and blunter than the first: the theme reads
+as generated, the nurse workspace and the ward look it, everything starts from
+the sidebar, roles are not configurable, the login is dull, and *the system
+itself is confused whom to show what*.
+
+Every one of those is fair. What follows is what each actually was.
+
+### The colours, and why guessing again was not an option
+
+I had chosen the palette. Choosing a second one would have been the same
+mistake in a different hue, so **the palette became a choice** — five complete
+identities, switchable from Settings, each computed rather than eyeballed.
+
+The old one was dim for three reasons, none of which is "the teal was wrong":
+
+* **The accent sat at 45% luminance.** `#007865`. Deep, and used as the only
+  colour in the interface.
+* **The chrome was pure grey.** A grey rail beside a white page is the default
+  of every scaffold.
+* **There was no second colour.** One accent on grey is not a scheme, it is a
+  monochrome with a highlight.
+
+The generator solves rather than picks:
+
+1. **The button fill is found by bisection** until it clears 4.6:1 against its
+   ink. The first attempt walked a fixed HSL lightness ladder and failed
+   *eleven* contrast checks, because HSL lightness is not perceived luminance —
+   a cyan at "43% light" is far brighter than an indigo at the same number, so
+   one theme's 600 was ink and another's was a pastel.
+2. **The dark step aims at 6.5:1, not the 4.5 floor.** Solving for the floor
+   returns the *brightest* passing colour, which for a cyan is `#00FFDB`. It
+   passes everything and looks like a highlighter.
+3. **A hard lightness cap was the wrong fix and is worth recording.** It
+   punished indigo and violet — dark at full chroma, needing every point of
+   lightness to clear contrast on a near-black card — while barely touching the
+   cyan that was the actual problem. Three themes failed. Tapering *chroma* with
+   lightness targets the real cause: below 55% nothing changes, a 72%-light cyan
+   loses a sixth of its saturation, a 62%-light indigo loses three per cent.
+4. **Chroma is capped at 84%.** The anchors were picked at full saturation and
+   it showed. Nothing considered ships at 100%: Tailwind's teal-500 is 76%,
+   Radix's teal-9 is 80%, Linear's accent is near 55%. Full chroma is the
+   clearest tell of a palette nobody tuned.
+5. **A fill carries dark ink where it can.** This is the single change that
+   answers "dim". Insisting every button carry white text forces the fill dark
+   enough to do so, which for teal, green and cyan throws away the part of the
+   hue worth having. The teal went `#007865` → `#10B7A0`.
+
+65 contrast assertions across the five, both modes, all passing.
+
+**Neutrals are now tinted** — 5-13% saturation on the brand hue. Below the
+point where anybody would name the colour; above the point where the interface
+looks like a wireframe.
+
+### The 325, cleared by codemod
+
+The raw Tailwind colour utilities went to **zero**, and by a script rather than
+by hand: 29 files, several over 2,000 lines, is how you introduce a different
+defect in each.
+
+The mapping is stated rather than clever. Hue family to domain state, with the
+**step** deciding whether a colour is ink on a tint or ink on a page — because
+collapsing `text-red-200` and `text-red-700` to one token makes one of them
+invisible. Two decorative gradients it refused to guess at were done by hand,
+which is the behaviour I wanted from it.
+
+**The 48 `dark:` variants were deleted rather than translated.** That is the
+whole point of the token layer: `text-warning` is already right in both modes,
+and keeping `dark:text-amber-400` beside it re-introduces the split.
+
+The self-service banner was the interesting one. `from-blue-700 via-indigo-700
+to-slate-800` with hardcoded white ink: three literal hues that ignored the
+palette, had no dark form, and forced every label on top to be hardcoded too —
+so the codemod's own mapping turned those labels into dark ink on a dark
+banner. A deep brand surface is a real recurring need (this banner, the patient
+portal, the sign-in panel), so it got real tokens: `--hero`, `--hero-2`,
+`--hero-foreground`, `--hero-muted`.
+
+### Everything started from the sidebar
+
+The rail carried forty entries because *everything* lived in it, including six
+things somebody opens twice a year — Configuration, Change requests, Import
+records, Plan and usage, Staff access, Roles — at the same weight as the queue
+somebody opens forty times a day.
+
+Every mature product of this shape splits the two the same way: the rail is
+**the work**, the identity control is **the system**. Gmail, Stripe, Linear,
+Slack, GitHub, Notion — account and workspace administration all live behind
+the avatar, because the two are used on completely different rhythms.
+
+The rail went 36 → 30. The six moved to the avatar menu and to a new
+`/settings` hub.
+
+**They are still in the model, not deleted from it.** `SYSTEM_ITEMS` sits
+beside `NAV_GROUPS`; the rail renders one, the command palette renders both.
+Deleting them would have made "Configuration" a screen you can only reach by
+remembering it is under an avatar — worse than the forty-item rail.
+
+### Roles are configurable now, which they were not
+
+`role.manage` — "Create and edit roles" — has been in the permission catalogue
+and granted to seeded roles since the beginning, with **nothing to spend it
+on**. Every role in every Nirova database came from a seed. "Roles should be
+configurable" was true of us and of nobody else.
+
+`POST`/`PATCH`/`DELETE /admin/roles/` and `GET /admin/permissions/` now exist.
+The last of those is another built-and-never-served finding:
+`grouped_permissions()` has carried the docstring *"for rendering the role
+editor"* since the catalogue was written, and had no route — so the console
+grouped permissions by parsing the code's prefix, which gets
+`patient.clinical.read` into "Patients" by luck and would get a new module
+wrong.
+
+Four refusals, each exercised by a test as the role that should be refused:
+
+* **An unknown code fails closed.** A `JSONField` stores `patient.raed`
+  happily, it resolves to nothing at check time, and the role looks powerful in
+  the editor and does nothing on the ward. The 400 names the typo.
+* **Segregation of duties.** `check_segregation_of_duties` has been correct
+  since it was written and had never once been called from an API, because no
+  API ever saved a role. The editor also names a conflicting pair *as it is
+  ticked*, since a refusal after two minutes of work is a form people fight.
+* **You cannot create authority you do not hold.** Without this `role.manage`
+  is a privilege-escalation primitive: write yourself a role carrying
+  `payroll.approve` and have it assigned. Tested as a user holding only
+  `role.read`, `role.manage` and `patient.read` — not as the owner, who
+  bypasses every check and would pass for the wrong reason.
+* **A system role cannot be retired, and neither can a held one.** The message
+  says how many hold it: "revoke it from four people first" is actionable and
+  "could not delete" is not. Deactivated rather than deleted — a role is
+  referenced by past assignments.
+
+`PATCH` merges the stored values before validating, rather than
+`partial=True`. The obvious version lets `{"name": "x"}` through with
+`permissions` defaulting to `[]`, silently stripping every permission from the
+role.
+
+### "The system itself is confused whom to show what"
+
+The sharpest line in the brief, and the one I had half-fixed and called done.
+
+There *was* a dashboard by then. It was **one screen with permission-gated
+panels**, so a pharmacist and a medical director still saw the same product and
+the only difference was which panels disappeared. That is not personalisation,
+it is subtraction.
+
+So the home now resolves a **persona** and hands off to a board composed for
+that job: a ward is beds in deterioration order, a clinic is a list of people
+with waiting times, a cash position is money moving. Forcing all three into a
+grid of stat tiles is what made the product read as a database browser with a
+hospital theme.
+
+**A persona is inferred from capability, not from role code.** Roles are
+customer-editable — a hospital can rename `nurse` to `sister` or invent one
+nobody anticipated — so keying the interface to role codes would break the
+moment somebody used the role editor that was just built. Somebody who can
+chart observations and administer medication *is* working as a nurse, whatever
+their role is called.
+
+Distinct, but not five products: the frame, palette, status colours and rail
+are constant, and a persona shifts the hero, the accent (a validated series
+slot, not a new hue) and the composition. A nurse covering the front desk
+should find the furniture where she left it.
+
+The inference is a default and not a law — it can be overridden, and the choice
+is remembered per browser, because which board somebody wants this week is
+closer to a rail fold than to a theme.
+
+### The login, twice wrong
+
+The first version was a 384px card on grey. The second split it two-up with a
+marketing panel — better, still flat: a solid block of brand colour and three
+bullet points, which is what a template does.
+
+What a decision-maker is weighing in the ten seconds this screen is on their
+monitor is whether the product looks like it was built by people who have seen
+a hospital. So the right panel is not a value proposition. **It is the product
+working** — a ward board, a theatre day and a triage board, cycling. Drawn from
+the same tokens the real screens use, so it cannot drift into being a prettier
+lie than the product.
+
+It pauses on hover and stops entirely under `prefers-reduced-motion`: a panel
+that changes while somebody is reading it is worse than one that never moves.
+
+### Two guards improved by their own failures
+
+**The primitive-token rule gained an allowlist.** The palette picker reads
+`--brand-500` and friends directly, and must: a swatch drawn from semantic
+tokens shows the *active* theme five times over, which is a picker that lies
+about what it is offering. Listed by name with the reason, the same shape as
+`PROBE` in `test_nav.py` — plus the reverse assertion, so an exemption that
+stops being needed is reported rather than left as a permanent hole.
+
+**The colour ratchet was counting comments.** The burn-down reached zero and
+the test still reported three, all of them inside a note reading *"the banner
+was `from-blue-700 via-indigo-700 …`"*. A guard that punishes documenting the
+defect it exists to prevent teaches people to stop documenting. It strips
+comments now.
+
+### What I got wrong
+
+The first palette generator. I wrote a fixed lightness ladder, ran the
+validator, and got eleven failures — then reached for a lightness cap, which
+fixed the cyan and broke indigo, violet and green. Two wrong instincts in a row
+about the same thing, both caught by a script rather than by my eye, which is
+the argument for having the script.
