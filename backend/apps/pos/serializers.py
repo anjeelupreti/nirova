@@ -72,6 +72,13 @@ class SaleSerializer(serializers.ModelSerializer):
     session_reference = serializers.CharField(
         source="session.reference", read_only=True
     )
+    #: What a receipt must carry and the sale did not: who issued it — a
+    #: Nepali tax receipt names the seller's PAN and address — and how it was
+    #: paid. The tenders live on the sale's invoice, so the receipt screen
+    #: could show a total and not that Rs 500 came by eSewa and the rest in
+    #: cash, which is the line a customer checks against their phone.
+    issuer = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
 
     class Meta:
         model = Sale
@@ -83,8 +90,40 @@ class SaleSerializer(serializers.ModelSerializer):
             "sold_at", "sold_by_name",
             "subtotal", "discount_total", "tax_total", "rounding_adjustment",
             "total", "invoice_number", "void_reason", "notes", "lines",
+            "issuer", "payments",
         )
         read_only_fields = fields
+
+    def get_issuer(self, sale) -> dict:
+        facility = sale.facility
+        address = ", ".join(
+            part for part in (
+                facility.street_address, facility.municipality,
+                f"Ward {facility.ward}" if facility.ward else "", facility.district,
+            ) if part
+        )
+        return {
+            "name": facility.name,
+            "address": address,
+            "phone": facility.phone,
+            "pan": facility.pan_number,
+            "licence": facility.license_number,
+        }
+
+    def get_payments(self, sale) -> list:
+        from apps.billing.models import Payment
+
+        if not sale.invoice_uuid or not self.context.get("with_payments", True):
+            return []
+        return [
+            {
+                "method": row.method,
+                "method_label": row.get_method_display(),
+                "amount": row.amount,
+                "reference": row.reference,
+            }
+            for row in Payment.objects.filter(invoice__uuid=sale.invoice_uuid).order_by("created_at")
+        ]
 
 
 class SaleReturnLineSerializer(serializers.ModelSerializer):

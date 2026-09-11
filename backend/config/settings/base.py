@@ -209,7 +209,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # simplejwt's, plus the temporary-password lock. See the module.
+        "apps.identity.authentication.NirovaJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.DefaultPagination",
@@ -259,6 +260,27 @@ CORS_ALLOW_HEADERS = (
 
 CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+#: The key two-step sign-in secrets are encrypted with (a Fernet key: 32
+#: url-safe base64 bytes). **Set it in any real deployment.** Unset, it is
+#: derived from SECRET_KEY — which works, but ties the two together: rotating
+#: SECRET_KEY would make every stored second factor unreadable, and every
+#: enrolled person would need an administrator's reset. See
+#: `apps/identity/mfa.py`.
+MFA_ENCRYPTION_KEY = env("MFA_ENCRYPTION_KEY", default="")
+
+#: The demonstration tenant whose day `demo.advance_day` keeps current. Empty —
+#: and the task unscheduled — everywhere except a demonstration stack; see
+#: `apps/tenancy/tasks.py` for why the default must be nothing.
+NIROVA_DEMO_DAY_SLUG = env("NIROVA_DEMO_DAY_SLUG", default="")
+CELERY_BEAT_SCHEDULE = {}
+if NIROVA_DEMO_DAY_SLUG:
+    CELERY_BEAT_SCHEDULE["demo-advance-day"] = {
+        "task": "demo.advance_day",
+        # Half-hourly: often enough that each four-hourly nursing round lands
+        # within half an hour of when it falls due, rarely enough to be free.
+        "schedule": 30 * 60,
+    }
 
 LOGGING = {
     "version": 1,

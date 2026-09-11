@@ -58,6 +58,10 @@ x-backend-env: &backend-env
   # TLS -- so the stack would answer every URL with a redirect to a port that
   # is not listening. See config/settings/prod.py; the default there is True.
   DJANGO_BEHIND_TLS: "False"
+  # This stack is the demonstration: keep the demo tenant's day current (a
+  # half-hourly Celery beat task; see apps/tenancy/tasks.py). A production
+  # deployment leaves this unset and the task is never scheduled.
+  NIROVA_DEMO_DAY_SLUG: ${NIROVA_DEMO_DAY_SLUG:-manakamana}
   CONTROL_DATABASE_URL: postgres://nirova:nirova@postgres:5432/nirova_control
   # Tenant databases are provisioned on the same server. `postgres`, not
   # `localhost`, because localhost inside a container is the container.
@@ -116,6 +120,11 @@ services:
       - shared_buffers=256MB
       - -c
       - max_connections=200
+    # Every application service restarts unless stopped, and these two did
+    # not — so when Docker or the machine restarted, the API, worker and
+    # scheduler came back and restart-looped against a database that stayed
+    # down. Found when Docker Desktop restarted mid-session.
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -127,6 +136,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   # -----------------------------------------------------------------------
   # Application

@@ -195,6 +195,14 @@ class SaleViewSet(viewsets.ReadOnlyModelViewSet):
             "sale.read",
         )
 
+    def get_serializer_context(self):
+        # The tenders are one query per sale; the list does not need them and
+        # a day of forty sales should not cost forty-one queries. Detail and
+        # the new-sale response — the receipt — do.
+        context = super().get_serializer_context()
+        context["with_payments"] = self.action != "list"
+        return context
+
     def create(self, request, *args, **kwargs):
         authorization = get_authorization(request)
         authorization.require("sale.create", Scope.FACILITY)

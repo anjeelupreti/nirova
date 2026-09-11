@@ -128,6 +128,16 @@ class PortalSessionAuthentication(authentication.BaseAuthentication):
                 "Malformed portal credentials."
             )
 
+        # A portal session lives in the tenant's database, so without an
+        # organization there is nowhere to look it up. This used to query
+        # anyway and answer 500 — a patient whose token survived and whose
+        # saved hospital did not (cleared site data, a shared phone) saw a
+        # server error instead of the sign-in page. Refused as what it is.
+        if getattr(request, "tenant", None) is None:
+            raise exceptions.AuthenticationFailed(
+                "Which hospital is this for? Please sign in again."
+            )
+
         token = header[1].decode()
         session = session_for(token)
         if session is None:

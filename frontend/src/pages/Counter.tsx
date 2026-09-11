@@ -28,7 +28,6 @@ import {
   CornerDownLeft,
   CreditCard,
   Loader2,
-  LockKeyhole,
   Minus,
   Plus,
   Printer,
@@ -48,13 +47,11 @@ import { cn } from "@/lib/utils";
 import type {
   CounterProduct,
   CounterSession,
-  Facility,
   Paginated,
   Sale,
   SaleQuote,
   SalesSummary,
   SessionTakings,
-  StockLocation,
 } from "@/types";
 import {
   Alert,
@@ -86,6 +83,11 @@ import {
   useRecordPanel,
 } from "@/components/RecordPanel";
 import { ReturnsPanel } from "@/pages/pos/Returns";
+// Opening lives in its own file: it grew a note count and a view of the
+// other tills, and the selling screen should not scroll past either.
+import { OpenTill } from "@/pages/pos/OpenTill";
+import { CounterReceipt } from "@/components/documents/CounterReceipt";
+import { printElement } from "@/lib/export";
 
 /** One line in the basket, before it is anything the server knows about. */
 interface BasketItem {
@@ -183,160 +185,6 @@ export default function CounterPage() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Opening                                                                     */
-/* -------------------------------------------------------------------------- */
-
-function OpenTill({
-  onOpened,
-  error,
-}: {
-  onOpened: (session: CounterSession) => void;
-  error: string | null;
-}) {
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [locations, setLocations] = useState<StockLocation[]>([]);
-  const [facility, setFacility] = useState("");
-  const [location, setLocation] = useState("");
-  const [counter, setCounter] = useState("COUNTER-1");
-  const [float, setFloat] = useState("2000.00");
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const result = await api.get<Paginated<Facility>>("/org/facilities/");
-      const pharmacies = result.results.filter((row) =>
-        ["pharmacy", "clinic", "hospital"].includes(row.facility_type),
-      );
-      setFacilities(pharmacies);
-      if (pharmacies[0]) setFacility(pharmacies[0].uuid);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!facility) return;
-    void (async () => {
-      const result = await api.get<Paginated<StockLocation>>(
-        `/pharmacy/locations/?facility=${facility}`,
-      );
-      const dispensable = result.results.filter((row) => row.is_dispensable);
-      setLocations(dispensable);
-      setLocation(dispensable[0]?.uuid ?? "");
-    })();
-  }, [facility]);
-
-  const open = async () => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      const created = await api.post<CounterSession>("/pos/sessions/open/", {
-        facility,
-        location,
-        counter,
-        opening_float: float,
-      });
-      onOpened(created);
-    } catch (err) {
-      setProblem(
-        err instanceof ApiError ? err.message : "Could not open the till.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mx-auto max-w-lg space-y-4 py-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <LockKeyhole className="h-5 w-5" />
-            Open the till
-          </CardTitle>
-          <CardDescription>
-            Count the drawer before you start. The float you enter is what the
-            end-of-shift variance is measured against — carrying yesterday's
-            figure forward would make an unexplained shortage disappear.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {(problem || error) && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Not opened</AlertTitle>
-              <AlertDescription>{problem ?? error}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="till-facility">Facility</Label>
-            <Select
-              id="till-facility"
-              value={facility}
-              onChange={(event) => setFacility(event.target.value)}
-            >
-              {facilities.map((row) => (
-                <option key={row.uuid} value={row.uuid}>
-                  {row.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="till-location">Sells from</Label>
-            <Select
-              id="till-location"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-            >
-              {locations.map((row) => (
-                <option key={row.uuid} value={row.uuid}>
-                  {row.code} — {row.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="till-counter">Till</Label>
-              <Input
-                id="till-counter"
-                value={counter}
-                onChange={(event) => setCounter(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="till-float">Counted float</Label>
-              <Input
-                id="till-float"
-                inputMode="decimal"
-                value={float}
-                onChange={(event) => setFloat(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <Button
-            className="w-full"
-            onClick={() => void open()}
-            disabled={busy || !facility || !location}
-          >
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <LockKeyhole className="h-4 w-4" />
-            )}
-            Open till
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
 /* The bar across the top                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -353,8 +201,8 @@ function TillBar({
     <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-background px-4 py-3">
       <div className="flex items-center gap-2">
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-good opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-good" />
         </span>
         <span className="font-medium">{session.counter}</span>
         <Badge variant="secondary">{session.reference}</Badge>
@@ -796,7 +644,7 @@ function SellView({ session }: { session: CounterSession }) {
               <Row
                 label="Discount"
                 value={`−${quote?.discount_total}`}
-                tone="text-emerald-600"
+                tone="text-good"
               />
             )}
             {Number(quote?.tax_total ?? 0) > 0 && (
@@ -1090,7 +938,7 @@ function PaymentDialog({
                 <span className="tabular-nums">{rupees(shortfall)}</span>
               </div>
             ) : (
-              <div className="flex justify-between text-lg font-semibold text-emerald-600">
+              <div className="flex justify-between text-lg font-semibold text-good">
                 <span>Change</span>
                 <span className="tabular-nums">{rupees(change)}</span>
               </div>
@@ -1143,66 +991,16 @@ function ReceiptPanel({ sale, onNext }: { sale: Sale; onNext: () => void }) {
         </AlertDescription>
       </Alert>
 
-      <Card className="font-mono text-xs">
-        <CardContent className="space-y-2 pt-6">
-          <div className="text-center">
-            <p className="text-sm font-semibold">{sale.invoice_number}</p>
-            <p className="text-muted-foreground">
-              {new Date(sale.sold_at).toLocaleString()}
-            </p>
-            <p className="text-muted-foreground">
-              {sale.sold_by_name} · {sale.session_reference}
-            </p>
-          </div>
-          <div className="border-t border-dashed pt-2">
-            {sale.lines.map((line) => (
-              <div key={line.uuid} className="flex justify-between gap-2 py-0.5">
-                <span className="min-w-0 flex-1 truncate">
-                  {line.product_name}
-                  <span className="block text-[10px] text-muted-foreground">
-                    {line.quantity} × {line.unit_price} · {line.batch_number}
-                  </span>
-                </span>
-                <span className="tabular-nums">{line.total}</span>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-0.5 border-t border-dashed pt-2">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span className="tabular-nums">{sale.subtotal}</span>
-            </div>
-            {Number(sale.discount_total) > 0 && (
-              <div className="flex justify-between">
-                <span>Discount</span>
-                <span className="tabular-nums">−{sale.discount_total}</span>
-              </div>
-            )}
-            {Number(sale.tax_total) > 0 && (
-              <div className="flex justify-between">
-                <span>VAT</span>
-                <span className="tabular-nums">{sale.tax_total}</span>
-              </div>
-            )}
-            {Number(sale.rounding_adjustment) !== 0 && (
-              <div className="flex justify-between">
-                <span>Rounding</span>
-                <span className="tabular-nums">{sale.rounding_adjustment}</span>
-              </div>
-            )}
-            <div className="flex justify-between border-t pt-1 text-sm font-semibold">
-              <span>Total</span>
-              <span className="tabular-nums">{sale.total}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+        <CounterReceipt sale={sale} />
+      </div>
 
       <div className="flex gap-2">
         <Button
           variant="outline"
           className="flex-1"
-          onClick={() => window.print()}
+          // The receipt alone, at the roll's width — not the whole screen.
+          onClick={() => printElement(`receipt-${sale.uuid}`)}
         >
           <Printer className="h-4 w-4" />
           Print
@@ -1769,7 +1567,7 @@ function CloseTill({
               className={cn(
                 "tabular-nums",
                 variance === 0
-                  ? "text-emerald-600"
+                  ? "text-good"
                   : "text-destructive",
               )}
             >

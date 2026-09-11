@@ -11874,3 +11874,114 @@ that two assignments at two facilities are not rendered as the same place.
   one to start *at* its target, with jitter on top. The dashboard then showed a
   department breaching 72%. The waits now sit inside each target; only the
   deliberate slow patients breach.
+
+
+## 276 - The temporary password was a lock on the front door only
+
+*12 September 2026. Continuing from 275's open items.*
+
+### The API served a locked session everything
+
+Log 275 left one thing recorded as open: `must_change_password` was enforced
+by the console, which showed nothing but the choose-a-password screen, and not
+by the API. Measured: a session signed in with a temporary password got 200
+from `/api/clinical/patients/`. Anyone holding that token — the administrator
+who typed the password, a colleague who watched — could work as the person it
+was issued to until the token expired.
+
+The lock is now in the authenticator (`apps/identity/authentication.py`),
+because nearly every view names its own `permission_classes`, replacing the
+default, while authentication classes are left at the default everywhere but
+the deliberately anonymous endpoints. A locked session reaches five exact
+paths — who am I, my preferences, change password, the session, sign out —
+and gets `403 password_change_required` on everything else. The test was
+proved by restoring the plain authenticator: 200 where it asserts 403.
+
+The first version raised a `DomainError` and would not import: DRF loads the
+authentication class while `apps.common.exceptions` is still importing DRF. It
+raises a DRF `PermissionDenied` with its own code instead, which the handler
+renders in the same envelope.
+
+### The slips
+
+The three §136 had left open, each on the shared frame and each offered only
+when the document is true:
+
+- **The prescription**, from the moment it is signed. In Nepal it is very
+  often filled at an outside pharmacy, and signing had ended with "RX-…
+  signed" on the doctor's screen and nothing in the patient's hand. It carries
+  the NMC registration, generic names first, the quantity to supply, whether
+  substitution is allowed line by line, how long it is valid — and any safety
+  warning the prescriber overrode, with the reason, which is the one thing the
+  pharmacist at the counter must not miss.
+- **The counter receipt.** Print had called `window.print()` and sent the
+  whole screen — banner, buttons, till bar — to an 80 mm roll. It now prints
+  the receipt alone at the roll's width, with the seller's PAN and licence,
+  each line's batch and expiry (a recall reaches a customer through the
+  receipt they kept), every tender with its wallet reference, the change, and
+  the return terms. The sale payload gained `issuer` and `payments` for it;
+  the tenders are left off the sales list, where they would cost a query a
+  row.
+- **The discharge summary**, after discharge only: diagnosis on admission and
+  final, the course and the wards it passed through, the investigations
+  released during the stay, the medicines to continue, advice, follow-up and
+  signatures. Investigations and medicines are fetched with the printer's own
+  permissions; if refused, the sheet says "not included — printed without
+  clinical access" instead of looking complete.
+
+The sample receipt on the design page first had a subtotal of 353 and a total
+of 360 under lines that come to 346.50. Caught by adding them up before
+publishing it as the reference.
+
+### The patient's app, and what it had been showing patients
+
+"The patients portal needs to be distinct." Before redesigning it, a
+screenshot, and before the screenshot, a probe of what it was serving. Four
+defects, three of them in what a patient was told:
+
+- **Every released result reached the patient blank.** The portal read
+  `value` and `reference_range` from a result model that stores
+  `numeric_value`, `text_value` and `reference_text`, through `getattr` with a
+  default — so nothing failed, the home screen said "4 results ready", and
+  each one opened to an analyte name and nothing beside it. The staff side
+  has always read `display_value`.
+- **The patient's downloadable copy printed "Normal" as the range for every
+  analyte**, abnormal ones included — the fallback for the field that did not
+  exist.
+- **Amended results appeared twice**, the wrong value beside its correction;
+  and the hold that makes a clinician ring before a critical result is shown
+  counted superseded rows too.
+- **A portal token without a hospital answered 500.** The session lives in the
+  tenant database; with no organization the authenticator queried it anyway.
+  It is now asked to sign in again. (In the test harness the old code answers
+  200 rather than 500, because the fixture leaves a tenant on the thread; the
+  test asserts the right answer, 401.)
+
+Each has a test, each proved by putting the old line back. The rest of the
+portal's `getattr` reads were audited against their models; the one other miss
+is a harmless fallback.
+
+Then the redesign. The home was eight identical tiles on a white page — a
+menu. It now opens on the person: a health card with what the desk asks for
+(hospital number, blood group, age), what is next, what is waiting — the
+latest result by name, and "some values are outside the usual range" said
+gently where it applies — what they are taking, and an emergency card whose
+button dials the hospital rather than advising. The directory sits beside it
+on a laptop; on a phone a tab bar sits under the thumb. Its own palette —
+a warm paper ground, one deep teal, larger forms, a warm tint kept for the few
+things that ask for attention — measured at 14.9:1 for ink and 5.7:1 for
+muted text.
+
+Medicines said "1 capsule TDS". `Frequency` has carried plain labels all
+along, with a docstring saying they exist for this app; they are now used:
+"1 capsule, three times daily", "1 tablet, as required for fever or pain".
+A written report — an X-ray — had been set in the value column in bold red; it
+is a paragraph now, with "your doctor will go through this with you" where it
+is abnormal, and flagged numbers say Low or High in a warm tone rather than an
+alarm red, because this screen is read at home, alone.
+
+### Postgres did not come back
+
+Docker Desktop restarted mid-session. The API, worker and scheduler came back
+— they restart unless stopped — and restart-looped, because Postgres and Redis
+had no restart policy and stayed down. Both now restart unless stopped.

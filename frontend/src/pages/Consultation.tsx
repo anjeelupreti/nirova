@@ -16,12 +16,18 @@ import {
   ClipboardList,
   FlaskConical,
   Pill,
+  Printer,
   ShieldAlert,
   Stethoscope,
   Trash2,
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { useSession } from "@/hooks/useSession";
+import {
+  PrescriptionPreview,
+  type PrintablePrescription,
+} from "@/components/documents/PrescriptionDocument";
 import { cn } from "@/lib/utils";
 import type {
   ClinicalSummary,
@@ -53,7 +59,7 @@ import { PageHeader } from "@/components/ui/layout";
 const SEVERITY_STYLE: Record<string, string> = {
   critical: "border-destructive/50 bg-destructive/10 text-destructive",
   high: "border-destructive/40 bg-destructive/5 text-destructive",
-  moderate: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  moderate: "border-warning/40 bg-warning/10 text-warning",
   info: "border-primary/30 bg-primary/5",
 };
 
@@ -388,6 +394,11 @@ function PrescribePanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The signed prescription, kept so it can be printed for the patient —
+  // who, in Nepal, very often fills it at a pharmacy outside the hospital.
+  const [signed, setSigned] = useState<PrintablePrescription | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const { session } = useSession();
 
   const namedLines = lines.filter((line) => line.generic_name.trim());
 
@@ -424,7 +435,7 @@ function PrescribePanel({
     setNotice(null);
     setBusy(true);
     try {
-      const created = await api.post<{ reference: string }>(
+      const created = await api.post<PrintablePrescription>(
         "/clinical/prescriptions/",
         {
           patient_uuid: encounter.patient,
@@ -435,6 +446,7 @@ function PrescribePanel({
         },
       );
       setNotice(`${created.reference} signed`);
+      setSigned(created);
       setLines([{ ...EMPTY_LINE }]);
       setOverrideReason("");
       setSafety(null);
@@ -624,6 +636,26 @@ function PrescribePanel({
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
+        )}
+        {signed && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <span>
+              <span className="font-medium">{signed.reference}</span> signed —
+              {" "}{signed.lines.length} medicine{signed.lines.length === 1 ? "" : "s"}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => setPrinting(true)}>
+              <Printer className="h-4 w-4" />
+              Print for the patient
+            </Button>
+          </div>
+        )}
+        {printing && signed && (
+          <PrescriptionPreview
+            prescription={signed}
+            organization={session?.organization?.display_name ?? "Nirova"}
+            printedBy={session?.user.display_name}
+            onClose={() => setPrinting(false)}
+          />
         )}
         {notice && (
           <Alert variant="info">

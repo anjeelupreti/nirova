@@ -37,15 +37,17 @@ import {
   Hospital,
   Loader2,
   LogOut,
+  Printer,
   ShieldAlert,
   Siren,
-  Sparkles,
   Stethoscope,
   UserPlus,
-  Wrench,
 } from "lucide-react";
 
 import WardSetup from "@/pages/wards/Setup";
+import { DischargeSummaryPreview } from "@/components/documents/DischargeSummaryDocument";
+import { useSession } from "@/hooks/useSession";
+import { WardBoard } from "@/pages/wards/Board";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -104,22 +106,6 @@ const rupees = (value: string | number) =>
   })}`;
 
 const humanise = (value: string) => value.replace(/_/g, " ");
-
-/** Colour a bed by what it can do, not by what it looks like. */
-const BED_TONE: Record<string, string> = {
-  available: "border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/30",
-  occupied: "border-sky-500/40 bg-sky-50 dark:bg-sky-950/30",
-  reserved: "border-amber-500/40 bg-amber-50 dark:bg-amber-950/30",
-  cleaning: "border-amber-500/40 bg-amber-50/60 dark:bg-amber-950/20",
-  maintenance: "border-destructive/40 bg-destructive/5",
-  blocked: "border-destructive/40 bg-destructive/5",
-};
-
-const BED_ICON: Record<string, typeof BedDouble> = {
-  cleaning: Sparkles,
-  maintenance: Wrench,
-  blocked: Wrench,
-};
 
 export default function WardsPage() {
   const [tab, setTab] = useState<Tab>("board");
@@ -224,173 +210,40 @@ function BedBoard({
   facility: string;
   onOpen: (reference: string) => void;
 }) {
+  // undefined: closed. null: open with no ward chosen. A uuid: opened from
+  // that ward, so the dialog starts there instead of making the nurse pick it
+  // again.
+  const [admitting, setAdmitting] = useState<string | null | undefined>(undefined);
   const [wards, setWards] = useState<Ward[]>([]);
-  const [beds, setBeds] = useState<Record<string, Bed[]>>({});
-  const [admitting, setAdmitting] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!facility) return;
-    setLoading(true);
-    try {
-      const page = await api.get<Paginated<Ward>>(
-        `/ipd/wards/?facility=${facility}&is_active=true`,
-      );
-      setWards(page.results);
-      const boards = await Promise.all(
-        page.results.map((ward) =>
-          api
-            .get<Bed[]>(`/ipd/wards/${ward.uuid}/beds/`)
-            .then((rows) => [ward.uuid, rows] as const),
-        ),
-      );
-      setBeds(Object.fromEntries(boards));
-    } finally {
-      setLoading(false);
-    }
-  }, [facility]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (loading) {
-    return (
-      <p className="py-10 text-center text-sm text-muted-foreground">
-        <Loader2 className="inline h-4 w-4 animate-spin" />
-      </p>
-    );
-  }
-
-  if (wards.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-16 text-center text-sm text-muted-foreground">
-          <BedDouble className="mx-auto mb-2 h-8 w-8 opacity-40" />
-          No wards at this facility.
-        </CardContent>
-      </Card>
-    );
-  }
+    if (admitting === undefined || !facility) return;
+    void api
+      .get<Paginated<Ward>>(`/ipd/wards/?facility=${facility}&is_active=true`)
+      .then((page) => setWards(page.results))
+      .catch(() => setWards([]));
+  }, [admitting, facility]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setAdmitting(true)}>
-          <UserPlus className="h-4 w-4" />
-          Admit
-        </Button>
-      </div>
-
-      {wards.map((ward) => {
-        const rows = beds[ward.uuid] ?? [];
-        const occupied = rows.filter((bed) => bed.is_occupied).length;
-        const unusable = rows.filter(
-          (bed) => !bed.is_assignable && !bed.is_occupied,
-        ).length;
-        return (
-          <Card key={ward.uuid}>
-            <CardHeader className="flex-row items-start justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  {ward.name}
-                  {ward.is_critical_care && (
-                    <Badge variant="destructive">critical care</Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {occupied} of {rows.length} occupied
-                  {unusable > 0 && ` · ${unusable} unusable`} · 1 nurse to{" "}
-                  {ward.nurse_to_patient_ratio} patients
-                </CardDescription>
-              </div>
-              <Badge variant="outline">{humanise(ward.ward_type)}</Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                {rows.map((bed) => {
-                  const Icon = BED_ICON[bed.status];
-                  return (
-                    <button
-                      key={bed.uuid}
-                      type="button"
-                      disabled={!bed.occupant_admission}
-                      onClick={() =>
-                        bed.occupant_admission &&
-                        onOpen(bed.occupant_admission)
-                      }
-                      className={cn(
-                        "rounded-md border p-3 text-left transition-colors",
-                        BED_TONE[bed.status] ?? "border-muted",
-                        bed.occupant_admission
-                          ? "cursor-pointer hover:brightness-95"
-                          : "cursor-default",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-sm font-medium">{bed.code}</span>
-                        {Icon ? (
-                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <BedDouble className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <p className="truncate text-xs">
-                        {bed.occupant_name || (
-                          <span className="text-muted-foreground">
-                            {humanise(bed.status)}
-                          </span>
-                        )}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {bed.gender_restriction !== "any" && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {bed.gender_restriction}
-                          </Badge>
-                        )}
-                        {bed.has_ventilator && (
-                          <Badge variant="outline" className="text-[10px]">
-                            vent
-                          </Badge>
-                        )}
-                        {bed.is_isolation && (
-                          <Badge variant="outline" className="text-[10px]">
-                            isolation
-                          </Badge>
-                        )}
-                      </div>
-                      {bed.status_reason && (
-                        <p className="mt-1 text-[10px] text-destructive">
-                          {bed.status_reason}
-                        </p>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-
-      <p className="text-xs text-muted-foreground">
-        A bed being cleaned and a bed with a broken rail are both empty and
-        neither can take a patient — which is why they have their own state
-        rather than showing as available.
-      </p>
-
-      {admitting && (
+    <>
+      <WardBoard
+        facility={facility}
+        onOpen={onOpen}
+        onAdmit={(ward) => setAdmitting(ward ?? null)}
+      />
+      {admitting !== undefined && wards.length > 0 && (
         <AdmitDialog
           facility={facility}
           wards={wards}
-          onClose={() => setAdmitting(false)}
+          initialWard={admitting ?? undefined}
+          onClose={() => setAdmitting(undefined)}
           onAdmitted={(reference) => {
-            setAdmitting(false);
+            setAdmitting(undefined);
             onOpen(reference);
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -401,11 +254,13 @@ function BedBoard({
 function AdmitDialog({
   facility,
   wards,
+  initialWard,
   onClose,
   onAdmitted,
 }: {
   facility: string;
   wards: Ward[];
+  initialWard?: string;
   onClose: () => void;
   onAdmitted: (reference: string) => void;
 }) {
@@ -415,7 +270,7 @@ function AdmitDialog({
   >([]);
   const [form, setForm] = useState({
     patient: "",
-    ward: wards[0]?.uuid ?? "",
+    ward: initialWard ?? wards[0]?.uuid ?? "",
     source: "opd",
     admitting_diagnosis: "",
     expected_discharge: "",
@@ -747,7 +602,7 @@ function Patients({
                   </TableCell>
                   <TableCell>
                     {row.bed_code || (
-                      <span className="text-amber-600">waiting for a bed</span>
+                      <span className="text-warning">waiting for a bed</span>
                     )}
                     {row.ward_name && (
                       <span className="block text-xs text-muted-foreground">
@@ -830,6 +685,8 @@ function AdmissionDetail({
   const [problem, setProblem] = useState<string | null>(null);
   const [discharging, setDischarging] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const { session } = useSession();
 
   const load = useCallback(async () => {
     const [detail, cost, accrualRows, block, roundRows, fluid] =
@@ -913,8 +770,24 @@ function AdmissionDetail({
               Discharge
             </Button>
           )}
+          {/* A summary exists once the stay has ended — see the document. */}
+          {admission.discharged_at && (
+            <Button size="sm" variant="outline" onClick={() => setPrinting(true)}>
+              <Printer className="h-4 w-4" />
+              Discharge summary
+            </Button>
+          )}
         </div>
       </div>
+
+      {printing && (
+        <DischargeSummaryPreview
+          admission={admission}
+          organization={session?.organization?.display_name ?? "Nirova"}
+          printedBy={session?.user.display_name}
+          onClose={() => setPrinting(false)}
+        />
+      )}
 
       {problem && (
         <Alert variant="destructive">
@@ -956,7 +829,7 @@ function AdmissionDetail({
           label="Not yet invoiced"
           value={rupees(charges.uninvoiced)}
           tone={
-            Number(charges.uninvoiced) > 0 ? "text-amber-600" : undefined
+            Number(charges.uninvoiced) > 0 ? "text-warning" : undefined
           }
         />
         <Stat
@@ -1046,7 +919,7 @@ function AdmissionDetail({
                       </TableCell>
                       <TableCell>
                         {row.charge_uuid ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <CheckCircle2 className="h-4 w-4 text-good" />
                         ) : (
                           <Badge variant="destructive">unbilled</Badge>
                         )}
@@ -1156,7 +1029,7 @@ function AdmissionDetail({
                   className="flex items-start gap-2 text-sm"
                 >
                   {row.is_cleared ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" />
                   ) : (
                     <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                   )}
@@ -1665,7 +1538,7 @@ function CensusView({
         <Stat
           label="Waiting for a bed"
           value={String(data.awaiting_a_bed)}
-          tone={data.awaiting_a_bed > 0 ? "text-amber-600" : undefined}
+          tone={data.awaiting_a_bed > 0 ? "text-warning" : undefined}
         />
         <Stat
           label="Today"
@@ -1742,7 +1615,7 @@ function CensusView({
                   <TableCell
                     className={cn(
                       "text-right tabular-nums",
-                      row.unusable > 0 && "text-amber-600",
+                      row.unusable > 0 && "text-warning",
                     )}
                   >
                     {row.unusable}

@@ -7,28 +7,41 @@
    * shadcn/ui token palette. Colours are declared as HSL channel triples so
    * Tailwind can apply opacity modifiers (bg-primary/10) to them.
    */
+  /*
+   * **The portal is not the staff console.** It used the stock palette —
+   * cool slate greys on white — which is the look of an operations tool.
+   * Patients open this at home, often worried, often on an old phone in
+   * daylight: a warm paper ground, one deep teal that carries the brand,
+   * larger rounded forms, and a warm tint (`--warm`) reserved for the few
+   * things that ask for attention. Measured: ink 14.9:1 on the ground, muted
+   * text 5.7:1 even on the muted fill, white on the teal 6.5:1.
+   */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 40 33% 97%;
+    --foreground: 200 28% 13%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 175 84% 24%;
+    --card-foreground: 200 28% 13%;
+    --primary: 174 72% 24%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
+    --secondary: 40 24% 92%;
+    --secondary-foreground: 200 28% 13%;
+    --muted: 40 22% 93%;
+    --muted-foreground: 200 10% 36%;
+    --accent: 40 24% 92%;
+    --accent-foreground: 200 28% 13%;
+    --destructive: 0 70% 44%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 175 84% 24%;
-    --radius: 0.6rem;
+    --warm: 32 92% 93%;
+    --warm-foreground: 24 78% 28%;
+    --border: 40 18% 87%;
+    --input: 40 18% 84%;
+    --ring: 174 72% 24%;
+    --radius: 1rem;
   }
 
   .dark {
+    --warm: 30 40% 18%;
+    --warm-foreground: 34 90% 78%;
     --background: 222 47% 8%;
     --foreground: 210 40% 96%;
     --card: 222 45% 11%;
