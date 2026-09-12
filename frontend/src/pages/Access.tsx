@@ -262,7 +262,7 @@ export default function AccessPage() {
     <Page>
       <PageHeader
         title="Access"
-        description="Roles, what each one carries, and who holds them. Every permission here is enforced by the API — this screen shows what it will decide, it does not decide it."
+        description="Roles, permissions and who holds them."
         breadcrumbs={[{ label: "Organization" }, { label: "Access" }]}
         actions={
           <Button variant="outline" size="sm" onClick={() => void load()}>

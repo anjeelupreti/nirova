@@ -214,7 +214,7 @@ export default function StaffPage() {
     <div className="space-y-6">
       <PageHeader
         title="Staff"
-        description="Who can sign in to this organization, and what each of them may do."
+        description="Who can sign in, and their roles."
         actions={
           <>
             {mayInvite && (

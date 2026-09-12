@@ -226,7 +226,7 @@ export default function AppointmentsPage() {
     <Shell>
       <PageHeader
         title="Appointments"
-        description="Who is booked today, and where there is still room."
+        description="Today's bookings and open slots."
         actions={
           <>
             {facilities.length > 1 && (

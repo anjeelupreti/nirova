@@ -172,7 +172,7 @@ function CriticalAlerts({
                   onClick={() => void notify(alert)}
                 >
                   <PhoneCall className="h-4 w-4" />
-                  Record the call
+                  Record call
                 </Button>
               </div>
             ) : (
@@ -515,7 +515,7 @@ function OrderDetail({
             {order.status === "collected" && (
               <>
                 <Button size="sm" disabled={busy} onClick={() => void act("receive")}>
-                  Receive in laboratory
+                  Receive
                 </Button>
                 <Button
                   size="sm"

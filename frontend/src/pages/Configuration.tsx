@@ -378,7 +378,7 @@ export default function ConfigurationPage() {
     <div className="space-y-4">
       <PageHeader
         title="Configuration"
-        description="The lists the daily screens depend on. Set up once, edited when something changes."
+        description="Lists used across the system."
       />
 
       <div className="flex flex-wrap gap-1.5">

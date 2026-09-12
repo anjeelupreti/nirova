@@ -1666,7 +1666,7 @@ function CloseTill({
           ) : (
             <Banknote className="h-4 w-4" />
           )}
-          Close the till
+          Close till
         </Button>
       </CardContent>
     </Card>

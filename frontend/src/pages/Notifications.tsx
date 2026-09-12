@@ -207,7 +207,7 @@ export default function Notifications() {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <PageHeader
           title="Notifications"
-          description="Everything from every module that wants something from you."
+          description="Alerts and approvals for you."
         />
         {summary && (
           <div className="flex items-center gap-2">

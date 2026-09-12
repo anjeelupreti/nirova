@@ -146,7 +146,7 @@ export default function BloodPage() {
     <div className="space-y-4">
       <PageHeader
         title="Blood bank"
-        description="What is on the shelf, what is not safe yet, and who it went to."
+        description="Stock, cross-matching and issues."
         actions={
           <>
             <Select
@@ -517,7 +517,7 @@ function UnitDialog({
                 disabled={busy}
                 onClick={() => void act("return", { reason: "Not needed" })}
               >
-                Return to the bank
+                Return to bank
               </Button>
             </div>
           )}

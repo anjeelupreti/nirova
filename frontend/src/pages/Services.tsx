@@ -171,8 +171,8 @@ export default function ServicesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Services and prices"
-        description="Everything a patient can be charged for. Nothing can be billed that is not on this list."
+        title="Price list"
+        description="Billable services and their prices."
         actions={
           <>
             {mayEdit ? (

@@ -221,7 +221,7 @@ export default function IcuPage() {
     <div className="space-y-4">
       <PageHeader
         title="Intensive care"
-        description="The board, the chart, and what the score could not see."
+        description="Beds, charts and severity scores."
         actions={
           <>
             <div className="flex flex-wrap gap-2">

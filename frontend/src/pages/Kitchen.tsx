@@ -195,7 +195,7 @@ export default function KitchenPage() {
     <Page>
       <PageHeader
         title="Design system"
-        description="Every token, state and chart form on one scroll. Switch the theme in the header and check this page — that is the review."
+        description="Tokens, components and charts."
         breadcrumbs={[{ label: "Nirova" }, { label: "Design system" }]}
       />
 
@@ -731,7 +731,7 @@ function States() {
               <EmptyState
                 title="No patients waiting"
                 description="Nobody is in the queue. When somebody arrives at the front desk they will appear here."
-                action={<Button size="sm">Register an arrival</Button>}
+                action={<Button size="sm">Register arrival</Button>}
               />
             </CardContent>
           </Card>

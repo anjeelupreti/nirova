@@ -149,7 +149,7 @@ const LADDER: {
 const GENERAL: Persona = {
   id: "general",
   label: "Today",
-  blurb: "What needs you",
+  blurb: "Your day, and what is waiting",
   icon: "workspace",
   accent: 1,
 };

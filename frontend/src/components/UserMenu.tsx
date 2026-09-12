@@ -62,7 +62,7 @@ const SYSTEM_LINKS: {
   },
   {
     to: "/access",
-    label: "Roles & permissions",
+    label: "Roles",
     icon: "role",
     needs: "role.read",
     scope: "own",
@@ -76,7 +76,7 @@ const SYSTEM_LINKS: {
   },
   {
     to: "/capacity",
-    label: "Plan & usage",
+    label: "Subscription",
     icon: "capacity",
     needs: "subscription.read",
     scope: "organization",

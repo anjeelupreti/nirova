@@ -154,7 +154,7 @@ export default function FinancePage() {
     <div className="space-y-4">
       <PageHeader
         title="Finance"
-        description="The ledger, and the two questions it must be able to answer."
+        description="Ledger, accounts and statements."
       />
 
       {/* The headline. Not a tab, not a footnote. */}
@@ -707,7 +707,7 @@ function Journals({ onPosted }: { onPosted: () => void }) {
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setPosting(true)}>
           <BookOpen className="h-4 w-4" />
-          Post a journal
+          Post journal
         </Button>
       </div>
 
@@ -932,7 +932,7 @@ function PostDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
       <Card className="my-8 w-full max-w-3xl">
         <CardHeader>
-          <CardTitle>Post a journal</CardTitle>
+          <CardTitle>Post journal</CardTitle>
           <CardDescription>
             The difference must reach zero before this can be posted — the same
             rule the database enforces, shown while you type rather than after

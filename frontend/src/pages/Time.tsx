@@ -151,7 +151,7 @@ export default function TimePage() {
     <div className="space-y-4">
       <PageHeader
         title="Time"
-        description="Your day, the roster, and who is away."
+        description="Attendance, rosters and leave."
         actions={
           <>
             {tab !== "mine" && facilities.length > 0 && (

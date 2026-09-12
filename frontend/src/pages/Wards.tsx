@@ -151,7 +151,7 @@ export default function WardsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Wards"
-        description="Who is in which bed, and what is stopping them going home."
+        description="Beds, patients and discharges."
         actions={
           <>
             <Select

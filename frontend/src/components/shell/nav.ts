@@ -29,6 +29,13 @@ export interface NavItem {
   /** The scope those endpoints ask for. */
   scope?: string;
   /**
+   * A second permission the screen also requires, at the same scope. For a
+   * screen that sits where two jobs meet: the sales report needs both sight of
+   * the counter and the right to read reports, so a doctor (reports, no
+   * counter) and a cashier (counter, no reports) are both not offered it.
+   */
+  alsoNeeds?: string;
+  /**
    * Words somebody might type looking for this screen that are not in its
    * label. The command palette searches these too — "roster" finds Attendance,
    * "MRN" finds Patients — because the label is what we call it and the
@@ -48,6 +55,16 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/** Whether this person may open the screen an item points at. */
+export function mayOpen(
+  item: Pick<NavItem, "needs" | "alsoNeeds" | "scope">,
+  can: (permission: string, scope?: string) => boolean,
+): boolean {
+  if (item.needs && !can(item.needs, item.scope)) return false;
+  if (item.alsoNeeds && !can(item.alsoNeeds, item.scope)) return false;
+  return true;
+}
+
 /**
  * Grouped by the job, not by the module.
  *
@@ -63,7 +80,7 @@ export interface NavGroup {
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Mine",
+    label: "Workspace",
     icon: "home",
     items: [
       {
@@ -74,18 +91,13 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/workspace",
-        label: "What needs you",
+        label: "My workspace",
         icon: "workspace",
         badge: "workspace",
-        keywords: ["approvals", "inbox", "pending", "tasks"],
+        keywords: ["approvals", "inbox", "pending", "tasks", "what needs you", "for you"],
       },
-      {
-        to: "/notifications",
-        label: "Notifications",
-        icon: "notification",
-        badge: "notifications",
-        keywords: ["alerts", "messages"],
-      },
+      // Notifications are the bell in the top bar, as in every product people
+      // already use; the full page is reached from its "View all".
       // Moved out of People, which is where somebody looks for *other* people.
       {
         to: "/self-service",
@@ -198,11 +210,11 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         to: "/diagnostics",
-        label: "Laboratory & imaging",
+        label: "Laboratory",
         icon: "laboratory",
         needs: "encounter.read",
         scope: "own",
-        keywords: ["lab", "lis", "radiology", "results", "specimen", "x-ray"],
+        keywords: ["lab", "lis", "radiology", "results", "specimen", "x-ray", "imaging", "radiology", "lab"],
       },
       {
         to: "/blood",
@@ -223,7 +235,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Pharmacy & supply",
+    label: "Supply",
     icon: "pharmacy",
     items: [
       {
@@ -232,7 +244,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: "pharmacy",
         needs: "stock.read",
         scope: "facility",
-        keywords: ["dispense", "stock", "batch", "expiry", "fefo"],
+        keywords: ["dispense", "stock", "batch", "expiry", "fefo", "pharmacy", "stock"],
       },
       {
         to: "/counter",
@@ -265,12 +277,21 @@ export const NAV_GROUPS: NavGroup[] = [
         keywords: ["invoice", "charge", "receipt", "payment"],
       },
       {
+        to: "/sales",
+        label: "Sales",
+        icon: "trendUp",
+        needs: "sale.read",
+        alsoNeeds: "report.read",
+        scope: "facility",
+        keywords: ["revenue", "takings", "margin", "counter report", "top products", "esewa", "khalti"],
+      },
+      {
         to: "/claims",
-        label: "Insurance claims",
+        label: "Claims",
         icon: "claim",
         needs: "invoice.read",
         scope: "facility",
-        keywords: ["tpa", "payer", "denial", "pre-authorisation"],
+        keywords: ["tpa", "payer", "denial", "pre-authorisation", "insurance"],
       },
       // `finance.read`, not `report.read`: every doctor holds the latter for
       // laboratory turnaround and theatre utilisation, and it used to put the
@@ -288,11 +309,11 @@ export const NAV_GROUPS: NavGroup[] = [
       // changing them is a different permission the screen checks itself.
       {
         to: "/services",
-        label: "Services & prices",
+        label: "Price list",
         icon: "price",
         needs: "invoice.read",
         scope: "facility",
-        keywords: ["tariff", "price list", "charge master"],
+        keywords: ["tariff", "price list", "charge master", "services", "prices", "tariff"],
       },
     ],
   },
@@ -316,9 +337,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // all three had to request leave through somebody else.
       {
         to: "/time",
-        label: "Attendance & leave",
+        label: "Attendance",
         icon: "attendance",
-        keywords: ["roster", "shift", "holiday", "clock in", "absence"],
+        keywords: ["roster", "shift", "holiday", "clock in", "absence", "leave", "roster"],
       },
       {
         to: "/payroll",
@@ -429,11 +450,11 @@ export const SYSTEM_ITEMS: NavItem[] = [
   // knowing which facilities exist.
   {
     to: "/capacity",
-    label: "Plan & usage",
+    label: "Subscription",
     icon: "capacity",
     needs: "subscription.read",
     scope: "organization",
-    keywords: ["plan", "limit", "usage", "entitlement", "subscription", "billing"],
+    keywords: ["plan", "limit", "usage", "entitlement", "subscription", "billing", "plan", "usage", "billing plan"],
   },
   // `user.read` at `own`, because seeing your colleagues is not an
   // administrative act; inviting one is, and that is checked on POST.
@@ -451,13 +472,13 @@ export const SYSTEM_ITEMS: NavItem[] = [
   // on the first run.
   {
     to: "/access",
-    label: "Roles & permissions",
+    label: "Roles",
     icon: "role",
     needs: "role.read",
     scope: "own",
     keywords: [
       "rbac", "permission", "matrix", "scope", "authority", "who can",
-      "security", "segregation", "audit access",
+      "security", "segregation", "audit access", "permissions", "access control",
     ],
   },
   // Six rarely-visited lists behind one entry rather than six. Reading needs
@@ -483,11 +504,11 @@ export const SYSTEM_ITEMS: NavItem[] = [
   // not, and the mistake is a different size.
   {
     to: "/import",
-    label: "Import records",
+    label: "Data import",
     icon: "dataImport",
     needs: "data.import",
     scope: "organization",
-    keywords: ["migration", "csv", "upload", "bulk", "spreadsheet"],
+    keywords: ["migration", "csv", "upload", "bulk", "spreadsheet", "import", "migrate", "upload"],
   },
 ];
 
@@ -514,7 +535,7 @@ export function visibleGroups(
   )
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.needs || can(item.needs, item.scope)),
+      items: group.items.filter((item) => mayOpen(item, can)),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -525,7 +546,7 @@ export function visibleGroups(
   // existing group so the palette can label them "System" and a reader can see
   // that these are not rail destinations.
   const system = SYSTEM_ITEMS.filter(
-    (item) => !item.needs || can(item.needs, item.scope),
+    (item) => mayOpen(item, can),
   );
   return system.length > 0
     ? [...groups, { label: "System", icon: "settings" as const, items: system }]
@@ -599,13 +620,13 @@ export function resolveHome({
     // A preference pointing at a screen this person can no longer open — their
     // role changed since they set it — falls through to the role default
     // rather than landing them on a permission error every morning.
-    if (item && (!item.needs || can(item.needs, item.scope))) return landing;
+    if (item && mayOpen(item, can)) return landing;
   }
 
   for (const [role, path] of ROLE_HOME) {
     if (!roles.includes(role)) continue;
     const item = ALL_NAV_ITEMS.find((entry) => entry.to === path);
-    if (!item || !item.needs || can(item.needs, item.scope)) return path;
+    if (!item || mayOpen(item, can)) return path;
   }
 
   /*

@@ -155,7 +155,7 @@ export default function EmergencyPage() {
     <div className="space-y-4">
       <PageHeader
         title="Emergency"
-        description="Sickest first, then longest waiting."
+        description="Patients in the department, by priority."
         actions={
           <>
             <Select
@@ -262,7 +262,7 @@ function Board({
           onClick={() => setRegistering(true)}
         >
           <UserPlus className="h-4 w-4" />
-          Register an arrival
+          Register arrival
         </Button>
       </div>
 
@@ -474,7 +474,7 @@ function RegisterDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
       <Card className="my-8 w-full max-w-lg">
         <CardHeader>
-          <CardTitle>Register an arrival</CardTitle>
+          <CardTitle>Register arrival</CardTitle>
           <CardDescription>
             Nothing here requires knowing who they are.
           </CardDescription>

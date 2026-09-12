@@ -137,7 +137,7 @@ export default function ProcurementPage() {
     <div className="space-y-4">
       <PageHeader
         title="Procurement"
-        description="Requisition through to stock on the shelf."
+        description="Requisitions, orders and receipts."
         actions={
           <>
             <Select

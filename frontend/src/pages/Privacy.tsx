@@ -167,7 +167,7 @@ export default function Privacy() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Emergency access"
-        description="Records opened by somebody who was not treating that patient. Every one is reviewed by hand."
+        description="Emergency record access and its review."
       />
 
       {error && (

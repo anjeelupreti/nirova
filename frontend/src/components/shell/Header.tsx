@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { StatusBadge } from "@/components/ui/status";
 import UserMenu from "@/components/UserMenu";
+import { NotificationBell } from "@/components/shell/NotificationBell";
 import { usePreferences } from "@/hooks/usePreferences";
 import type { Membership, Organization } from "@/types";
 
@@ -58,9 +59,7 @@ export function Header({
           )}
         >
           <Icon name="search" size="md" />
-          <span className="hidden flex-1 text-left sm:block">
-            Search or jump to…
-          </span>
+          <span className="hidden flex-1 text-left sm:block">Search…</span>
           <kbd className="hidden rounded border bg-background px-1.5 py-0.5 text-[0.625rem] font-medium sm:block">
             ⌘K
           </kbd>
@@ -92,6 +91,10 @@ export function Header({
         ) : null}
 
         <ThemeToggle />
+
+        {/* Notifications: a bell with a count and a panel, as in every product
+            people already use. Platform staff have no tenant inbox. */}
+        {isPlatformOnly ? null : <NotificationBell />}
 
         <UserMenu
           name={user.name}

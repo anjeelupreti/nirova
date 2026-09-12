@@ -163,7 +163,7 @@ export default function ReferralsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Referrals"
-        description="The handoff, and whether anybody ever closed the loop."
+        description="Referrals sent and received."
         actions={
           <>
             <Select

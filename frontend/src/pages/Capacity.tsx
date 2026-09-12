@@ -155,7 +155,7 @@ export default function CapacityPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Facility capacity"
+        title="Capacity"
         description={
           <>
             What the <span className="font-medium">{data.plan}</span> plan allows,

@@ -154,7 +154,7 @@ export default function ClaimsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Claims"
-        description="What was asked for, what was allowed, and the difference."
+        description="Insurance claims and settlements."
       />
 
       {/* Predictable a week ahead, so it is said a week ahead. */}
@@ -474,14 +474,14 @@ function ClaimDetail({
           {["submitted", "queried"].includes(claim.status) && (
             <>
               <Button size="sm" onClick={() => setDialog("response")}>
-                Record the answer
+                Record answer
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setDialog("query")}
               >
-                Log a query
+                Log query
               </Button>
             </>
           )}
@@ -494,7 +494,7 @@ function ClaimDetail({
           {["approved", "partially_approved"].includes(claim.status) &&
             Number(claim.outstanding) > 0 && (
               <Button size="sm" onClick={() => setDialog("settle")}>
-                Record a settlement
+                Record settlement
               </Button>
             )}
           {claim.status !== "written_off" && claim.status !== "settled" && (

@@ -76,7 +76,7 @@ export default function FacilitiesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Facilities"
-        description="Every business unit in this organization."
+        description="Sites in your organization."
         actions={
           <>
             <Button asChild>
@@ -166,7 +166,7 @@ export default function FacilitiesPage() {
         footer={
           <Button asChild variant="outline" className="w-full">
             <Link to="/facility-requests">
-              Request a change to this facility
+              Request change
             </Link>
           </Button>
         }

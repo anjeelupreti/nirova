@@ -106,7 +106,7 @@ export default function PlatformPage() {
     <div className="space-y-4">
       <PageHeader
         title="Platform"
-        description="Every customer, every subscription, without opening a tenant database."
+        description="Customers and subscriptions."
       />
 
       <div className="flex gap-1 border-b">

@@ -645,7 +645,7 @@ function PrescribePanel({
             </span>
             <Button size="sm" variant="outline" onClick={() => setPrinting(true)}>
               <Printer className="h-4 w-4" />
-              Print for the patient
+              Print
             </Button>
           </div>
         )}

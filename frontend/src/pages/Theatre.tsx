@@ -184,7 +184,7 @@ export default function TheatrePage() {
     <div className="space-y-4">
       <PageHeader
         title="Theatre"
-        description="The lists, the checklist, and the time nobody can use."
+        description="Lists, checklists and utilisation."
         actions={
           <>
             <Select

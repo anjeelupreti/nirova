@@ -229,6 +229,17 @@ export function formatValue(
 }
 
 /** The axis formatter for a format — always the compact sibling. */
+/**
+ * How much room the value axis needs, in pixels.
+ *
+ * Fixed at 52 everywhere until a money axis clipped its own currency —
+ * "NPR 4.5K" rendered as "PR 4.5K", which reads as a different unit rather
+ * than as a truncation. A currency code plus a compact number needs more.
+ */
+export function axisWidth(format: ValueFormat | undefined): number {
+  return format === "money" || format === "money-compact" ? 68 : 52;
+}
+
 export function axisFormatter(format: ValueFormat, currency?: string) {
   const compact: Partial<Record<ValueFormat, ValueFormat>> = {
     number: "compact",

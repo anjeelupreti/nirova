@@ -163,7 +163,7 @@ export default function PeoplePage() {
     <div className="space-y-4">
       <PageHeader
         title="People"
-        description="The workforce, the jobs, and who may practise."
+        description="Employees, positions and licences."
         actions={
           <>
             <Select

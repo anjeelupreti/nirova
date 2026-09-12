@@ -225,7 +225,7 @@ export default function FacilityRequestsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Facility changes"
-        description="Opening or closing a facility is reviewed before it takes effect, so the estate stays deliberate and every change has a reason attached."
+        description="Requests to open or close a facility."
       />
 
       <div className="grid gap-6 lg:grid-cols-5">

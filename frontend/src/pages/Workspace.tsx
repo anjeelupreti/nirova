@@ -94,7 +94,7 @@ export default function WorkspacePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="What needs you"
+        title="My workspace"
         description={
           <>
             {data?.today.has_employee_record

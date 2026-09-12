@@ -123,7 +123,7 @@ export default function PayrollPage() {
     <div className="space-y-4">
       <PageHeader
         title="Payroll"
-        description="What people earn, what is deducted, and what they are paid."
+        description="Salaries, deductions and payslips."
       />
 
       <div className="flex gap-1 border-b">

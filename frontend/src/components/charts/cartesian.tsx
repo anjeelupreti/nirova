@@ -44,6 +44,7 @@ import {
   SERIES_CAP,
   SIGNAL,
   axisFormatter,
+  axisWidth,
   formatValue,
   type ValueFormat,
 } from "./theme";
@@ -159,7 +160,7 @@ export function LineChart(props: CartesianProps & { curve?: "linear" | "smooth" 
           <XAxis dataKey={props.categoryKey} {...AXIS_PROPS} />
           <YAxis
             {...AXIS_PROPS}
-            width={52}
+            width={axisWidth(props.format)}
             tickFormatter={axisFormatter(props.format ?? "number", props.currency)}
           />
           <Tooltip
@@ -226,7 +227,7 @@ export function AreaChart(props: CartesianProps & { stacked?: boolean }) {
           <XAxis dataKey={props.categoryKey} {...AXIS_PROPS} />
           <YAxis
             {...AXIS_PROPS}
-            width={52}
+            width={axisWidth(props.format)}
             tickFormatter={axisFormatter(props.format ?? "number", props.currency)}
           />
           <Tooltip
@@ -316,7 +317,7 @@ export function BarChart(
               <XAxis dataKey={props.categoryKey} {...AXIS_PROPS} />
               <YAxis
                 {...AXIS_PROPS}
-                width={52}
+                width={axisWidth(props.format)}
                 tickFormatter={axisFormatter(props.format ?? "number", props.currency)}
               />
             </>
@@ -539,7 +540,7 @@ export function ComboChart(
           <XAxis dataKey={props.categoryKey} {...AXIS_PROPS} />
           <YAxis
             {...AXIS_PROPS}
-            width={52}
+            width={axisWidth(props.format)}
             tickFormatter={axisFormatter(props.format ?? "number", props.currency)}
           />
           <Tooltip
@@ -635,7 +636,7 @@ export function ScatterChart({
             type="number"
             dataKey={yKey}
             name={yLabel}
-            width={52}
+            width={axisWidth(yFormat)}
             {...AXIS_PROPS}
             tickFormatter={axisFormatter(yFormat, currency)}
           />
@@ -708,7 +709,7 @@ export function LeveyJennings({
           <XAxis dataKey={runKey} {...AXIS_PROPS} />
           <YAxis
             {...AXIS_PROPS}
-            width={52}
+            width={axisWidth("number")}
             domain={[mean - sd * 4, mean + sd * 4]}
             tickFormatter={(value: number) => formatValue(value, "number")}
           />

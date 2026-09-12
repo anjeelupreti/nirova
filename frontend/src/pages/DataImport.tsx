@@ -303,7 +303,7 @@ export default function DataImportPage() {
   return (
     <Page>
       <PageHeader
-        title="Import existing records"
+        title="Data import"
         description={
           "Bring a practice's patients, medicines and other records in from a " +
           "spreadsheet. Nothing is created until you have seen what will happen."
@@ -492,7 +492,7 @@ function UploadStep({
             onClick={() => file && onUpload(kind, file)}
           >
             <Upload className="mr-2 h-4 w-4" />
-            Upload and match columns
+            Upload file
           </Button>
         </div>
       </Section>
@@ -900,7 +900,7 @@ function ReviewStep({
             <Button variant="outline" size="sm" asChild>
               <a href={`/api/import/batches/${batch.reference}/errors/`}>
                 <Download className="mr-2 h-4 w-4" />
-                Download the error report
+                Download errors
               </a>
             </Button>
           }
@@ -1008,7 +1008,7 @@ function DoneStep({ batch, onReset }: { batch: Batch; onReset: () => void }) {
             <Button variant="outline" asChild>
               <a href={`/api/import/batches/${batch.reference}/errors/`}>
                 <Download className="mr-2 h-4 w-4" />
-                Download the error report
+                Download errors
               </a>
             </Button>
           )}

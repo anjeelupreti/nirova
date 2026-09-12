@@ -198,7 +198,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Reports"
-        description="Each of these was written beside the module that understands it. There is no query builder, deliberately — a number assembled by hand is a number nobody can reproduce and everybody quotes."
+        description="Operational and financial reports."
       />
 
       {error ? (
