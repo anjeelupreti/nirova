@@ -632,6 +632,76 @@ class Payment(BaseModel):
         return self.refunds_id is not None
 
 
+class OnlineProvider(models.TextChoices):
+    ESEWA = "esewa", "eSewa"
+    KHALTI = "khalti", "Khalti"
+
+
+class OnlinePaymentStatus(models.TextChoices):
+    #: Sent to the provider; the payer has not finished.
+    INITIATED = "initiated", "Started"
+    #: The provider says it is in progress. Checked again later.
+    PENDING = "pending", "Pending"
+    COMPLETED = "completed", "Paid"
+    CANCELLED = "cancelled", "Cancelled"
+    EXPIRED = "expired", "Expired"
+    FAILED = "failed", "Failed"
+    REFUNDED = "refunded", "Refunded"
+
+
+class OnlinePayment(BaseModel):
+    """One attempt to pay an invoice through eSewa or Khalti.
+
+    Separate from `Payment` because an attempt is not money. Most are
+    finished within a minute; some are abandoned at the wallet's login page;
+    a few are paid and the payer closes the tab before coming back. Only a
+    provider's own answer to a server-to-server check turns an attempt into a
+    `Payment` — never the parameters on the redirect back, which the payer's
+    browser carries and could have written.
+    """
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="online_payments")
+    provider = models.CharField(max_length=12, choices=OnlineProvider.choices)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    status = models.CharField(
+        max_length=12, choices=OnlinePaymentStatus.choices,
+        default=OnlinePaymentStatus.INITIATED, db_index=True,
+    )
+    #: What the provider knows this attempt by: Khalti's `pidx`, or the
+    #: `transaction_uuid` sent to eSewa.
+    reference = models.CharField(max_length=64, db_index=True)
+    #: The provider's transaction id once paid — what its statement shows.
+    provider_transaction = models.CharField(max_length=64, blank=True)
+    #: Where the payer goes to pay (Khalti). eSewa is a form post instead.
+    payment_url = models.URLField(max_length=512, blank=True)
+    #: "portal" (the patient paid from the app) or "counter" (staff opened it).
+    channel = models.CharField(max_length=12, default="portal")
+    started_by_name = models.CharField(max_length=255, blank=True)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    #: The receipt this attempt became, once paid and recorded.
+    payment = models.OneToOneField(
+        Payment, null=True, blank=True, on_delete=models.PROTECT, related_name="online_payment",
+    )
+    #: Set when the provider took the money but it could not be applied — the
+    #: invoice was settled at the counter in the meantime. Somebody must
+    #: refund it from the provider's dashboard.
+    needs_attention = models.CharField(max_length=255, blank=True)
+    #: The provider's last answer, as returned, for reconciliation.
+    last_response = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "online_payment"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["provider", "reference"]),
+            models.Index(fields=["status", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_provider_display()} {self.amount} for {self.invoice.number} ({self.status})"
+
+
 class NumberSequence(BaseModel):
     """Gapless sequential numbering, per facility, per year, per document type.
 

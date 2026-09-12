@@ -52,7 +52,7 @@ interface SystemSetting {
   key: string;
   label: string;
   description: string;
-  kind: "boolean" | "choice" | "decimal" | "string";
+  kind: "boolean" | "choice" | "decimal" | "string" | "secret";
   choices: Choice[];
   default: unknown;
   value: unknown;
@@ -231,13 +231,13 @@ function Control({
   busy: boolean;
   onSave: (value: unknown) => void;
 }) {
-  const [draft, setDraft] = useState(String(setting.value ?? ""));
+  const [draft, setDraft] = useState(setting.kind === "secret" ? "" : String(setting.value ?? ""));
 
   // Re-synced when the server's value changes, so a save the server rejected
   // does not leave the box showing a value that was never stored.
   useEffect(() => {
-    setDraft(String(setting.value ?? ""));
-  }, [setting.value]);
+    setDraft(setting.kind === "secret" ? "" : String(setting.value ?? ""));
+  }, [setting.kind, setting.value]);
 
   if (setting.kind === "boolean") {
     // Saved on the click. A toggle with a separate save button invites the
@@ -274,6 +274,48 @@ function Control({
           ))}
         </Select>
         {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+      </div>
+    );
+  }
+
+  if (setting.kind === "secret") {
+    // The stored key never comes back from the server — only "••••" and its
+    // last four characters — so the box starts empty and a blank save is not
+    // a change. Typing a new one replaces it; there is nothing to edit.
+    return (
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <Label htmlFor={setting.code} className="sr-only">
+              {setting.label}
+            </Label>
+            <Input
+              id={setting.code}
+              type="password"
+              autoComplete="off"
+              value={draft}
+              disabled={disabled}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={setting.is_set ? "Replace the stored key" : "Paste the key"}
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={disabled || draft.trim().length < 8}
+            onClick={() => {
+              onSave(draft.trim());
+              setDraft("");
+            }}
+          >
+            {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Save
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {setting.is_set
+            ? `Stored, ending ${String(setting.value ?? "").replace(/[^\w]/g, "").slice(-4)}. It is never shown again.`
+            : "Not set."}
+        </p>
       </div>
     );
   }

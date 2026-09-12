@@ -37,6 +37,7 @@ import {
   ShieldCheck,
   Smartphone,
   UserCog,
+  Wallet,
   X,
 } from "lucide-react";
 
@@ -62,6 +63,9 @@ import type {
   Invoices,
   MessageRow,
   PatientProfile,
+  PayOption,
+  PaymentStart,
+  PaymentState,
   Prescription,
   ReferralRow,
   ResultRow,
@@ -128,6 +132,10 @@ export default function App() {
   const [signedIn, setSignedIn] = useState(Boolean(session.token));
   const [screen, setScreen] = useState<Screen>("home");
   const [record, setRecord] = useState<string>("");
+  // `?attempt=` is appended by the portal when it sends a payer to a wallet.
+  const [returning, setReturning] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("attempt"),
+  );
 
   useEffect(() => {
     whenSignedOut(() => {
@@ -138,6 +146,25 @@ export default function App() {
 
   if (!signedIn) {
     return <SignedOut onSignedIn={() => setSignedIn(true)} />;
+  }
+
+  // Back from eSewa or Khalti. Whatever the wallet says in the address bar,
+  // the hospital is asked what really happened before anything is shown.
+  if (returning) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto w-full max-w-md px-4 pb-16 pt-10 sm:max-w-2xl sm:px-6">
+          <PaymentReturn
+            attempt={returning}
+            onDone={() => {
+              window.history.replaceState({}, "", window.location.pathname);
+              setReturning(null);
+              setScreen("invoices");
+            }}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1031,7 +1058,7 @@ function Section({
         <Appointments rows={data as Appointment[]} record={record} onChanged={load} />
       )}
       {data !== null && screen === "invoices" && (
-        <Bills data={data as Invoices} onPrint={handlePrint} />
+        <Bills data={data as Invoices} record={record} onPrint={handlePrint} />
       )}
       {data !== null && screen === "prescriptions" && (
         <Medicines rows={data as Prescription[]} onPrint={handlePrint} />
@@ -1338,23 +1365,168 @@ function AppointmentCard({
   );
 }
 
+/**
+ * What happened at the wallet.
+ *
+ * The address bar carries the wallet's own verdict, and it is ignored: the
+ * app asks the hospital, which asks the provider server to server. Until that
+ * answer arrives the screen says it is checking — never "paid".
+ */
+function PaymentReturn({ attempt, onDone }: { attempt: string; onDone: () => void }) {
+  const [state, setState] = useState<PaymentState | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    let record = "";
+    try {
+      record = sessionStorage.getItem("nirova.portal.payrecord") ?? "";
+      sessionStorage.removeItem("nirova.portal.payrecord");
+    } catch {
+      /* private browsing */
+    }
+    api
+      .post<PaymentState>("/me/", {
+        action: "confirm_payment",
+        attempt,
+        record,
+        // eSewa appends its own signed summary; it is recorded, never trusted.
+        callback: params.get("data") ? { data: params.get("data") } : undefined,
+      })
+      .then((answer) => !cancelled && setState(answer))
+      .catch((err) =>
+        !cancelled && setProblem(err instanceof ApiError ? err.message : "Could not check that payment."),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  const paid = state?.status === "completed" && !state.needs_attention;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">{tr("section.invoices")}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!state && !problem && (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {tr("bills.checking")}
+          </p>
+        )}
+        {problem && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{problem}</AlertDescription>
+          </Alert>
+        )}
+        {state && (
+          <div className="space-y-2">
+            <p className="text-2xl font-semibold tabular-nums">{rupees(state.amount)}</p>
+            <p className="text-sm text-muted-foreground">
+              {state.provider_label} · {state.invoice}
+            </p>
+            <p className={cn("text-sm", paid ? "font-medium text-primary" : "text-muted-foreground")}>
+              {paid
+                ? tr("bills.paid", { receipt: state.receipt || "—" })
+                : state.status === "completed"
+                  ? tr("bills.attention")
+                  : state.status === "pending" || state.status === "initiated"
+                    ? tr("bills.pending")
+                    : tr("bills.notPaid")}
+            </p>
+          </div>
+        )}
+        <Button className="w-full" onClick={onDone} disabled={!state && !problem}>
+          {tr("bills.done")}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Paying a bill, from the phone it is read on.
+ *
+ * The wallet takes over the whole tab rather than opening a popup: eSewa and
+ * Khalti both sign the payer in, and a popup on a phone is a window somebody
+ * loses. `sessionStorage` — where the portal keeps its token — survives the
+ * round trip in the same tab, so the patient comes back signed in, and the
+ * app confirms the payment with the hospital before saying anything about it.
+ */
+function payAt(start: PaymentStart): void {
+  if (start.redirect_url) {
+    window.location.href = start.redirect_url;
+    return;
+  }
+  if (!start.form) return;
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = start.form.action;
+  for (const [name, value] of Object.entries(start.form.fields)) {
+    const field = document.createElement("input");
+    field.type = "hidden";
+    field.name = name;
+    field.value = value;
+    form.append(field);
+  }
+  document.body.append(form);
+  form.submit();
+}
+
 function Bills({
   data,
+  record,
   onPrint,
 }: {
   data: Invoices;
+  record: string;
   onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
 }) {
+  const [paying, setPaying] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const wallets = data.pay_with ?? [];
+
+  async function pay(number: string, option: PayOption) {
+    setProblem(null);
+    setPaying(`${number}:${option.provider}`);
+    try {
+      const start = await api.post<PaymentStart>("/me/", {
+        action: "pay", invoice: number, provider: option.provider, record,
+      });
+      // Which record this was for, so the confirmation after the wallet sends
+      // the patient back asks about the right one.
+      try {
+        sessionStorage.setItem("nirova.portal.payrecord", record);
+      } catch {
+        /* private browsing: the first record is assumed on return */
+      }
+      payAt(start);
+    } catch (err) {
+      setProblem(err instanceof ApiError ? err.message : "Could not start the payment.");
+      setPaying(null);
+    }
+  }
+
   return (
     <div className="space-y-3">
       <Card>
         <CardHeader className="pb-2">
-          <CardDescription>Outstanding</CardDescription>
+          <CardDescription>{tr("bills.outstanding")}</CardDescription>
           <CardTitle className="text-2xl">
             {rupees(data.outstanding)}
           </CardTitle>
         </CardHeader>
       </Card>
+
+      {problem && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{problem}</AlertDescription>
+        </Alert>
+      )}
 
       {data.invoices.map((row) => (
         <Card key={row.number}>
@@ -1365,9 +1537,9 @@ function Bills({
               </p>
               <p className="text-sm">{date(row.issued_on)}</p>
               {row.is_credit_note && (
-                <Badge variant="secondary">refund</Badge>
+                <Badge variant="secondary">{tr("bills.refund")}</Badge>
               )}
-              <div className="pt-2">
+              <div className="flex flex-wrap gap-2 pt-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1375,9 +1547,29 @@ function Bills({
                   onClick={() => onPrint("invoice", row.number)}
                 >
                   <Printer className="h-3.5 w-3.5" />
-                  Tax Receipt
+                  {tr("bills.receipt")}
                 </Button>
+                {Number(row.balance) > 0 && !row.is_credit_note &&
+                  wallets.map((option) => (
+                    <Button
+                      key={option.provider}
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      disabled={paying !== null}
+                      onClick={() => void pay(row.number, option)}
+                    >
+                      {paying === `${row.number}:${option.provider}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Wallet className="h-3.5 w-3.5" />
+                      )}
+                      {tr("bills.payWith", { wallet: option.label })}
+                    </Button>
+                  ))}
               </div>
+              {wallets.some((option) => option.test_mode) && Number(row.balance) > 0 && (
+                <p className="pt-1 text-[11px] text-muted-foreground">{tr("bills.testMode")}</p>
+              )}
             </div>
             <div className="text-right">
               <p className="font-medium tabular-nums">{rupees(row.total)}</p>
@@ -1390,7 +1582,7 @@ function Bills({
           </CardContent>
         </Card>
       ))}
-      {data.invoices.length === 0 && <Empty>No bills.</Empty>}
+      {data.invoices.length === 0 && <Empty>{tr("bills.none")}</Empty>}
     </div>
   );
 }

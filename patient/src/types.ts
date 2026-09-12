@@ -90,6 +90,37 @@ export interface InvoiceRow {
 export interface Invoices {
   outstanding: string;
   invoices: InvoiceRow[];
+  /** Wallets this hospital accepts. Empty when none is set up. */
+  pay_with?: PayOption[];
+}
+
+export interface PayOption {
+  provider: "esewa" | "khalti";
+  label: string;
+  /** The provider's sandbox: no real money moves. */
+  test_mode: boolean;
+}
+
+/** What the portal returns when a payment is started, and when it is checked. */
+export interface PaymentStart {
+  uuid: string;
+  provider: string;
+  amount: string;
+  test_mode: boolean;
+  redirect_url?: string;
+  form?: { action: string; fields: Record<string, string> };
+}
+
+export interface PaymentState {
+  uuid: string;
+  invoice: string;
+  provider_label: string;
+  amount: string;
+  status: string;
+  status_label: string;
+  receipt: string;
+  needs_attention: string;
+  balance_due: string;
 }
 
 export interface PrescriptionLine {

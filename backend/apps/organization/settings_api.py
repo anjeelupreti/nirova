@@ -44,6 +44,14 @@ def _facility(uuid):
     return facility
 
 
+def _shown(setting, value):
+    if setting.kind != "secret":
+        return value
+    from apps.common.sealing import hint
+
+    return hint(value)
+
+
 def _describe(setting, facility=None) -> dict:
     """One setting, its current value, and whether that value is its own.
 
@@ -76,7 +84,8 @@ def _describe(setting, facility=None) -> dict:
             {"value": value, "label": label} for value, label in setting.choices
         ],
         "default": setting.default,
-        "value": current,
+        # A secret is never sent back, only that it is set and its tail.
+        "value": _shown(setting, current),
         "per_facility": setting.per_facility,
         "caution": setting.caution,
         "is_set": bool(at_organization or at_facility),
@@ -166,7 +175,12 @@ class SettingsView(APIView):
             entity_type="organization.ConfigSetting",
             entity_id=setting.code,
             entity_label=setting.label,
-            changes={setting.code: {"from": before, "to": value}},
+            # Never the secret itself, sealed or not: only that it changed.
+            changes=(
+                {setting.code: {"from": "set" if before else "", "to": "set"}}
+                if setting.kind == "secret"
+                else {setting.code: {"from": before, "to": value}}
+            ),
             metadata={"facility": str(facility.uuid) if facility else ""},
         )
         return Response(_describe(setting, facility=facility))

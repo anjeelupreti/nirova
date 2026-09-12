@@ -24,6 +24,9 @@ import type {
   Charge,
   Facility,
   Invoice,
+  OnlineAttempt,
+  OnlineProviderOption,
+  OnlineStart,
   Paginated,
   PatientAccount,
   Patient,
@@ -249,7 +252,7 @@ export default function BillingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Billing"
-        description="Charge, invoice and take payment at the counter."
+        description="Charges, invoices and payments."
         actions={
           <>
             <Select
@@ -266,6 +269,8 @@ export default function BillingPage() {
           </>
         }
       />
+
+      <OnlineNeedingAttention />
 
       {!patient ? (
         <Card>
@@ -505,6 +510,8 @@ export default function BillingPage() {
                         void takePayment({ uuid: invoiceUuid } as Invoice)
                       }
                     />
+
+                    <CollectOnline account={account} onPaid={() => void reload()} />
                   </>
                 )}
 
@@ -728,9 +735,218 @@ function PayButtons({
           onClick={() => onPay(invoice.uuid)}
         >
           <Banknote className="h-4 w-4" />
-          Take payment for {invoice.number}
+          Take payment
+          {/* The number only when there is a choice to make: one unpaid
+              invoice needs no disambiguation, and a button carrying
+              "INV-MKC-KTM-2083/84-000010" reads as a reference, not an act. */}
+          {invoices.length > 1 ? (
+            <span className="font-mono text-xs opacity-80">{invoice.number}</span>
+          ) : null}
         </Button>
       ))}
     </div>
+  );
+}
+
+
+/**
+ * Collect by eSewa or Khalti at the counter.
+ *
+ * The wallet opens in its own tab so the till keeps its place, and the
+ * patient pays on the screen or on their own phone. This side then asks the
+ * provider — through our own API — every few seconds until it has an answer,
+ * because a payer who closes the wallet's tab tells us nothing.
+ *
+ * Nothing here records a payment: the receipt appears because the provider
+ * confirmed it (`apps/billing/online.py`).
+ */
+function CollectOnline({
+  account,
+  onPaid,
+}: {
+  account: PatientAccount | null;
+  onPaid: () => void;
+}) {
+  const [providers, setProviders] = useState<OnlineProviderOption[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [attempt, setAttempt] = useState<OnlineAttempt | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .get<{ providers: OnlineProviderOption[] }>("/billing/online/")
+      .then((body) => setProviders(body.providers))
+      .catch(() => setProviders([]));
+  }, []);
+
+  useEffect(() => {
+    if (!account) return;
+    api
+      .get<Paginated<Invoice>>(`/billing/invoices/?patient=${account.patient_uuid}&unpaid=true`)
+      .then((page) => setInvoices(page.results))
+      .catch(() => setInvoices([]));
+  }, [account]);
+
+  // Ask until the provider knows. Stops on any settled answer, and after
+  // three minutes -- the reconciler picks up anything later.
+  useEffect(() => {
+    if (!attempt || !["initiated", "pending"].includes(attempt.status)) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      if (tries > 36) {
+        window.clearInterval(timer);
+        return;
+      }
+      void api
+        .post<OnlineAttempt>("/billing/online/", { action: "check", attempt: attempt.uuid })
+        .then((answer) => {
+          setAttempt(answer);
+          if (answer.status === "completed") onPaid();
+        })
+        .catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [attempt, onPaid]);
+
+  if (providers.length === 0 || invoices.length === 0) return null;
+
+  async function collect(invoice: Invoice, provider: OnlineProviderOption) {
+    setProblem(null);
+    setBusy(true);
+    const tab = window.open("", "_blank");
+    try {
+      const start = await api.post<OnlineStart>(
+        `/billing/invoices/${invoice.uuid}/pay-online/`,
+        { provider: provider.provider },
+      );
+      if (start.redirect_url && tab) tab.location.href = start.redirect_url;
+      else if (start.form && tab) tab.document.write(autoPostForm(start.form));
+      setAttempt({
+        uuid: start.uuid, status: "initiated", status_label: "Started",
+        amount: start.amount, provider_label: provider.label, invoice: invoice.number ?? "",
+        receipt: "", needs_attention: "",
+      });
+    } catch (err) {
+      tab?.close();
+      setProblem(err instanceof ApiError ? err.message : "That wallet could not be opened.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <p className="text-xs font-medium text-muted-foreground">
+        Collect online{providers[0]?.test_mode ? " · test mode" : ""}
+      </p>
+      {invoices.map((invoice) => (
+        <div key={invoice.uuid} className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs text-muted-foreground">{invoice.number}</span>
+          {providers.map((provider) => (
+            <Button
+              key={provider.provider}
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void collect(invoice, provider)}
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              {provider.label}
+            </Button>
+          ))}
+        </div>
+      ))}
+
+      {problem && (
+        <Alert variant="destructive">
+          <AlertDescription>{problem}</AlertDescription>
+        </Alert>
+      )}
+
+      {attempt && (
+        <div className="rounded-md border px-3 py-2 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span>
+              {attempt.provider_label} · {npr(attempt.amount)}
+            </span>
+            <Badge
+              variant={
+                attempt.status === "completed"
+                  ? "success"
+                  : attempt.status === "pending" || attempt.status === "initiated"
+                    ? "warning"
+                    : "secondary"
+              }
+            >
+              {attempt.status_label}
+            </Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {attempt.needs_attention
+              ? attempt.needs_attention
+              : attempt.status === "completed"
+                ? `Receipt ${attempt.receipt || "—"}`
+                : "Waiting for the wallet. This updates itself."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A page that posts eSewa's signed fields the moment it opens. */
+function autoPostForm(form: { action: string; fields: Record<string, string> }): string {
+  const escape = (value: string) =>
+    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const fields = Object.entries(form.fields)
+    .map(([name, value]) => `<input type="hidden" name="${escape(name)}" value="${escape(value)}">`)
+    .join("");
+  return (
+    `<!doctype html><title>Opening eSewa…</title>` +
+    `<body style="font:14px system-ui;padding:2rem">Opening eSewa…` +
+    `<form id="f" method="POST" action="${escape(form.action)}">${fields}</form>` +
+    `<script>document.getElementById("f").submit()</script></body>`
+  );
+}
+
+
+/**
+ * Online payments that took money and could not be applied.
+ *
+ * Almost always one invoice settled at the counter while the payer was in
+ * their wallet. The money is with the provider and somebody has to refund it,
+ * so it is shown where billing is done rather than left in a log — silence
+ * here is the failure mode that costs a patient their money.
+ */
+function OnlineNeedingAttention() {
+  const [rows, setRows] = useState<OnlineAttempt[]>([]);
+
+  useEffect(() => {
+    api
+      .get<{ results: OnlineAttempt[] }>("/billing/online/?attention=1")
+      .then((body) => setRows(body.results))
+      .catch(() => setRows([]));
+  }, []);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Alert variant="destructive">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertDescription>
+        <p className="font-medium">
+          {rows.length} online payment{rows.length > 1 ? "s" : ""} need attention
+        </p>
+        <ul className="mt-1 space-y-0.5 text-sm">
+          {rows.slice(0, 5).map((row) => (
+            <li key={row.uuid}>
+              {row.provider_label} {npr(row.amount)} · {row.invoice} — {row.needs_attention}
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
   );
 }

@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -304,6 +305,28 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["post"], url_path="pay-online")
+    def pay_online(self, request, uuid=None):
+        """Open an eSewa or Khalti payment for this invoice, at the counter.
+
+        Returns the provider's page (Khalti) or a signed form (eSewa) for the
+        payer to complete on this screen or their phone. Nothing is recorded
+        as paid until the provider confirms it (`apps.billing.online`).
+        """
+        from apps.billing.online import console_return_url, start
+
+        authorization = get_authorization(request)
+        authorization.require("payment.record", Scope.FACILITY)
+        result = start(
+            self.get_object(),
+            str(request.data.get("provider", "")),
+            return_to=console_return_url(),
+            channel="counter",
+            started_by=request.user.full_name or request.user.email,
+            amount=request.data.get("amount") or None,
+        )
+        return Response(result, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], url_path="credit")
     def credit(self, request, uuid=None):
         """Reverse this invoice with a credit note."""
@@ -381,3 +404,46 @@ class DailyCollectionView(APIView):
             else timezone.localdate()
         )
         return Response(daily_collection(facility, target))
+
+
+class OnlinePaymentsView(APIView):
+    """`GET` -- online payment attempts, newest first, and what may be offered.
+    `POST {action: "check", attempt}` -- ask the provider again;
+    `POST {action: "reconcile"}` -- check every attempt still open.
+
+    `?invoice=<uuid>` narrows to one invoice; `?attention=1` to the ones a
+    person must deal with (paid but not applied).
+    """
+
+    permission_classes = [
+        IsAuthenticated, HasPermission.of("invoice.read", write="payment.record"),
+    ]
+
+    def get(self, request):
+        from apps.billing.models import OnlinePayment
+        from apps.billing.online import available_providers, describe
+
+        rows = OnlinePayment.objects.select_related("invoice", "payment")
+        if request.query_params.get("invoice"):
+            rows = rows.filter(invoice__uuid=request.query_params["invoice"])
+        if request.query_params.get("attention"):
+            rows = rows.exclude(needs_attention="")
+        allowed = get_authorization(request).accessible_facility_ids("invoice.read")
+        if allowed is not None:
+            rows = rows.filter(invoice__facility_id__in=allowed)
+        return Response({
+            "providers": available_providers(),
+            "results": [describe(row) for row in rows[:100]],
+        })
+
+    def post(self, request):
+        from apps.billing.models import OnlinePayment
+        from apps.billing.online import confirm, describe, reconcile
+
+        if request.data.get("action") == "reconcile":
+            return Response(reconcile())
+        attempt = get_object_or_404(OnlinePayment, uuid=request.data.get("attempt"))
+        allowed = get_authorization(request).accessible_facility_ids("payment.record")
+        if allowed is not None and attempt.invoice.facility_id not in allowed:
+            raise PermissionDenied("That payment is at a facility your access does not cover.")
+        return Response(describe(confirm(attempt, callback=request.data.get("callback") or None)))

@@ -5,6 +5,7 @@ from apps.billing.views import (
     ChargeViewSet,
     DailyCollectionView,
     InvoiceViewSet,
+    OnlinePaymentsView,
     PatientAccountView,
     PriceListViewSet,
     RefundPaymentView,
@@ -29,5 +30,7 @@ urlpatterns = [
         name="refund-payment",
     ),
     path("collection/", DailyCollectionView.as_view(), name="daily-collection"),
+    # eSewa and Khalti attempts (apps/billing/online.py).
+    path("online/", OnlinePaymentsView.as_view(), name="online-payments"),
     path("", include(router.urls)),
 ]

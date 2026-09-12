@@ -47,8 +47,9 @@ class Setting:
     #: the control, because a setting whose effect you have to guess is one
     #: people leave alone.
     description: str
-    #: "boolean" | "choice" | "decimal" | "string". Drives the control the
-    #: screen renders and the validation the API applies.
+    #: "boolean" | "choice" | "decimal" | "string" | "secret". Drives the
+    #: control the screen renders and the validation the API applies. A
+    #: secret is stored sealed and never returned (apps/common/sealing.py).
     kind: str
     default: object
     #: For `kind="choice"`: (value, label) pairs.
@@ -172,6 +173,50 @@ SETTINGS = [
             "administrator is on hand to reset it for anyone who loses theirs."
         ),
     ),
+    # -- Online payments (apps/billing/gateways.py) -------------------------
+    Setting(
+        namespace="payments",
+        key="gateway_mode",
+        label="Online payments mode",
+        description=(
+            "Test sends payers to the eSewa and Khalti sandboxes, where no real "
+            "money moves. Switch to live once your merchant keys are entered."
+        ),
+        kind="choice",
+        default="sandbox",
+        choices=[("sandbox", "Test (sandbox)"), ("live", "Live")],
+        caution="In live mode, payers are charged real money.",
+    ),
+    Setting(
+        namespace="payments",
+        key="khalti_secret_key",
+        label="Khalti secret key",
+        description=(
+            "From your Khalti merchant dashboard, under Keys. Khalti is offered "
+            "to patients only once this is set."
+        ),
+        kind="secret",
+        default="",
+    ),
+    Setting(
+        namespace="payments",
+        key="esewa_merchant_code",
+        label="eSewa merchant code",
+        description=(
+            "The product code eSewa issued you. In test mode, eSewa's public "
+            "test merchant is used when this is blank."
+        ),
+        kind="string",
+        default="",
+    ),
+    Setting(
+        namespace="payments",
+        key="esewa_secret_key",
+        label="eSewa secret key",
+        description="The signing key eSewa issued with your merchant code.",
+        kind="secret",
+        default="",
+    ),
 ]
 
 BY_CODE = {setting.code: setting for setting in SETTINGS}
@@ -217,6 +262,13 @@ def coerce(setting: Setting, raw):
     text = str(raw).strip()
     if not text:
         raise ValueError(f"{setting.label} cannot be blank.")
+
+    if setting.kind == "secret":
+        from apps.common.sealing import seal
+
+        if len(text) < 8 or len(text) > 256:
+            raise ValueError(f"{setting.label} does not look like a key.")
+        return seal(text)
 
     if setting.key == TIMEZONE_KEY:
         # Checked here rather than left to fail silently in middleware, where

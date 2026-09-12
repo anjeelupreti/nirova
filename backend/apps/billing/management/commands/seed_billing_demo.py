@@ -112,6 +112,7 @@ class Command(BaseCommand):
             self._credit_and_refund(
                 organization, facility, services, cashier, supervisor
             )
+            self._bill_left_to_pay(organization, facility, services, cashier)
             self._cash_up(facility)
 
     # -- catalogue -------------------------------------------------------
@@ -242,6 +243,51 @@ class Command(BaseCommand):
         record_payment(invoice, invoice.total, "credit", actor=cashier,
                        notes="On the corporate account")
         self.stdout.write("   settled on account")
+
+    # -- 3b. a bill nobody has paid yet ----------------------------------
+
+    def _bill_left_to_pay(self, organization, facility, services, cashier):
+        """One outpatient bill left outstanding, on the portal patient.
+
+        Every demo invoice used to be paid the moment it was raised, so the
+        hospital had no receivables, nothing to chase, and — once bills could
+        be paid by eSewa or Khalti from the patient app — nothing to pay. A
+        hospital always has money owed to it; the demonstration should look
+        like one.
+        """
+        from apps.billing.models import Invoice, InvoiceStatus
+
+        patient = (
+            Patient.objects.filter(merged_into__isnull=True)
+            .exclude(first_name__startswith="Unknown")
+            .order_by("id")
+            .first()
+        )
+        if patient is None:
+            return
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f"\n3b. Still to pay - {patient.full_name} ({patient.mrn})"))
+
+        # Idempotent: the seed runs on every start, and a second copy of this
+        # bill every time would be the demo growing a debt.
+        existing = Invoice.objects.filter(
+            patient=patient, notes__startswith="To be paid by the patient",
+        ).exclude(status__in=[InvoiceStatus.CANCELLED, InvoiceStatus.CREDITED]).first()
+        if existing is not None:
+            self.stdout.write(
+                f"   {existing.number} already outstanding: {existing.balance_due}"
+            )
+            return
+
+        for code in ("CON-001", "LAB-001"):
+            capture_charge(organization, patient, facility, services[code], actor=cashier)
+        invoice = create_invoice(
+            organization, patient, facility, actor=cashier, issue=True,
+            notes="To be paid by the patient — offered eSewa and Khalti in the app",
+        )
+        self.stdout.write(self.style.SUCCESS(
+            f"   {invoice.number} issued for {invoice.total} and left unpaid — "
+            "this is what the patient app offers to settle"))
 
     # -- 3. credit note, and a refund that duties block ------------------
 

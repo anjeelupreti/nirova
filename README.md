@@ -103,10 +103,17 @@ machine with no images and no volumes, and seconds on every start after that.
 | staff console | http://localhost:5173 |
 | patient application | http://localhost:5174 |
 | API, admin and OpenAPI | http://localhost:8000 |
+| demo inbox (Mailpit) | http://localhost:8025 |
 
 Sign in as `owner@manakamana.test` with the password `NirovaDemo!2026`. Other
 demo accounts (`doctor@`, `counter@`, `manager@`, `pharmacy@`) share it, and
 each sees a different application — which is the point.
+
+Mail — a password-reset link, for instance — is caught by Mailpit and delivered
+nowhere: a demonstration must never email a real person. Online payments run
+against the eSewa and Khalti sandboxes, where no money moves; eSewa's test
+merchant works out of the box, and Khalti appears once a merchant key is
+entered under Settings.
 
 `docker compose -f infra/docker-compose.yml down -v` removes the data and the
 next `up` rebuilds the demo from nothing.

@@ -10,6 +10,7 @@
 #   staff console        http://localhost:5173
 #   patient application  http://localhost:5174
 #   API and admin        http://localhost:8000
+#   demo inbox (Mailpit) http://localhost:8025   -- password-reset emails land here
 #
 # Sign in with the credentials `manage.py seed_demo` prints; the demo password
 # is in apps/tenancy/management/commands/seed_demo.py.
@@ -85,6 +86,13 @@ x-backend-env: &backend-env
   # is unused in this stack. Listed for the case where a developer runs
   # `npm run dev` on the host against this backend.
   CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:5174
+  # Outgoing mail goes to Mailpit, which catches everything and delivers
+  # nothing: a demonstration must never email a real address. Point these at
+  # a real SMTP relay in production.
+  EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+  EMAIL_HOST: mailpit
+  EMAIL_PORT: "1025"
+  CONSOLE_URL: ${CONSOLE_URL:-http://localhost:5173}
 
 services:
   # -----------------------------------------------------------------------
@@ -136,6 +144,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+
+  # A catch-all mail server with a web inbox, for the demo. Password-reset and
+  # other emails are readable at http://localhost:8025 and go nowhere else.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: nirova-mailpit
+    ports:
+      - "8025:8025"
+      # SMTP, for a backend run on the host against this stack.
+      - "1025:1025"
     restart: unless-stopped
 
   # -----------------------------------------------------------------------

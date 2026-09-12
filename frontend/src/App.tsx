@@ -13,7 +13,7 @@
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { Header } from "@/components/shell/Header";
 import { NarrowNav, Sidebar, useRailState } from "@/components/shell/Sidebar";
@@ -54,6 +54,8 @@ const ClaimsPage = lazy(() => import("@/pages/Claims"));
 const ConfigurationPage = lazy(() => import("@/pages/Configuration"));
 const ConsultationPage = lazy(() => import("@/pages/Consultation"));
 const CounterPage = lazy(() => import("@/pages/Counter"));
+const SalesPage = lazy(() => import("@/pages/Sales"));
+const OnlineReturnPage = lazy(() => import("@/pages/billing/OnlineReturn"));
 const DashboardPage = lazy(() => import("@/pages/Dashboard"));
 const DataImportPage = lazy(() => import("@/pages/DataImport"));
 const DiagnosticsPage = lazy(() => import("@/pages/Diagnostics"));
@@ -87,6 +89,7 @@ const WorkspacePage = lazy(() => import("@/pages/Workspace"));
 
 import LoginPage from "@/pages/Login";
 import SignupPage from "@/pages/auth/Signup";
+import { ForgotPasswordPage, ResetPasswordPage } from "@/pages/auth/PasswordReset";
 import { ChoosePassword } from "@/pages/auth/ChoosePassword";
 import { EnrolSecondFactor } from "@/pages/auth/EnrolSecondFactor";
 
@@ -97,6 +100,7 @@ export default function App() {
   const [counts, setCounts] = useState<{ notifications?: number; workspace?: number }>({});
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   usePaletteShortcut(openPalette);
@@ -156,6 +160,10 @@ export default function App() {
   });
   const railState = useRailState(groups);
 
+  // A reset link opened in a browser that is already signed in is still a
+  // reset link: somebody may be setting a password for an account other than
+  // the one on screen, or recovering this one on a shared ward computer.
+  if (location.pathname === "/reset-password") return <ResetPasswordPage />;
   if (session.loading) return <ShellSkeleton />;
   // Signed out, the only other place anyone can be is the registration form.
   // Every other path — a bookmarked ward, a link from a notification — lands
@@ -164,6 +172,8 @@ export default function App() {
     return (
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="*" element={<LoginPage session={session} />} />
       </Routes>
     );
@@ -303,6 +313,8 @@ export default function App() {
               <Route path="/icu" element={<IcuPage />} />
               <Route path="/pharmacy" element={<PharmacyPage />} />
               <Route path="/counter" element={<CounterPage />} />
+              <Route path="/sales" element={<SalesPage />} />
+              <Route path="/billing/online-return" element={<OnlineReturnPage />} />
               <Route path="/procurement" element={<ProcurementPage />} />
               <Route path="/self-service" element={<SelfServicePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />

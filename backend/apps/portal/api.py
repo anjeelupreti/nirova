@@ -381,7 +381,9 @@ class MeView(APIView):
                     code="not_permitted",
                 )
             note_access(account, patient, "invoices", ip=ip)
-            return Response(invoices_for(patient))
+            from apps.billing.online import available_providers
+
+            return Response({**invoices_for(patient), "pay_with": available_providers()})
 
         if section == "prescriptions":
             if not row["can_see_results"]:
@@ -465,6 +467,40 @@ class MeView(APIView):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    def _online_payment(self, request, what):
+        """Pay a bill by eSewa or Khalti, or confirm how that went.
+
+        The invoice is named by its number and looked up among *this record's*
+        invoices only, and an attempt is confirmed only if it belongs to one
+        of them -- the same rule as every other portal read: what you may
+        touch comes from the session, never from the request.
+        """
+        from apps.billing.models import Invoice, InvoiceStatus, OnlinePayment
+        from apps.billing.online import confirm, describe, portal_return_url, start
+
+        row = self._target(request)
+        if not row["can_see_invoices"]:
+            raise PortalError("This account may not pay bills for that record.", code="not_permitted")
+        invoices = Invoice.objects.filter(patient=row["patient"]).exclude(status=InvoiceStatus.DRAFT)
+
+        if what == "pay":
+            invoice = invoices.filter(number=str(request.data.get("invoice", ""))).first()
+            if invoice is None:
+                raise PortalError("That bill is not on this record.", code="not_found")
+            result = start(
+                invoice, str(request.data.get("provider", "")),
+                return_to=portal_return_url(), channel="portal",
+                started_by=f"{request.user.account.patient.full_name} (patient app)",
+            )
+            return Response(result, status=status.HTTP_201_CREATED)
+
+        attempt = OnlinePayment.objects.filter(
+            uuid=request.data.get("attempt") or None, invoice__in=invoices,
+        ).first()
+        if attempt is None:
+            raise PortalError("That payment is not on this record.", code="not_found")
+        return Response(describe(confirm(attempt, callback=request.data.get("callback") or None)))
+
     def post(self, request):
         """Send a message, sign out, or submit a demographic correction."""
         account = request.user.account
@@ -502,6 +538,9 @@ class MeView(APIView):
                 reason=request.data.get("reason", ""),
             )
             return Response({"reference": cancelled.reference, "status": cancelled.status})
+
+        if what in ("pay", "confirm_payment"):
+            return self._online_payment(request, what)
 
         if what == "request_correction":
             row = self._target(request)

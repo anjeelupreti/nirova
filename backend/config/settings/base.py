@@ -187,6 +187,31 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
 ]
 
+# A reset link lives 30 minutes. Long enough to find the email, short enough
+# that one left in an inbox is not a standing key (OWASP Forgot Password
+# guidance). It is also single-use: the token is keyed to the password hash,
+# so setting a password spends it.
+PASSWORD_RESET_TIMEOUT = env.int("PASSWORD_RESET_TIMEOUT", default=30 * 60)
+
+# ---------------------------------------------------------------------------
+# Email
+# ---------------------------------------------------------------------------
+
+# Console by default, so development never mails a real person by accident.
+# The Docker stack points this at Mailpit, whose inbox is at localhost:8025.
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Nirova <no-reply@nirova.health>")
+#: Where links in email point: the staff console.
+CONSOLE_URL = env("CONSOLE_URL", default="http://localhost:5173").rstrip("/")
+
 # ---------------------------------------------------------------------------
 # Localisation
 # ---------------------------------------------------------------------------
@@ -268,12 +293,23 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 #: enrolled person would need an administrator's reset. See
 #: `apps/identity/mfa.py`.
 MFA_ENCRYPTION_KEY = env("MFA_ENCRYPTION_KEY", default="")
+# Seals tenant secrets such as payment-gateway merchant keys
+# (apps/common/sealing.py). Derived from SECRET_KEY when unset.
+SETTINGS_ENCRYPTION_KEY = env("SETTINGS_ENCRYPTION_KEY", default="")
+# Where the patient application is served; gateways send payers back here.
+PORTAL_URL = env("PORTAL_URL", default="http://localhost:5174").rstrip("/")
 
 #: The demonstration tenant whose day `demo.advance_day` keeps current. Empty —
 #: and the task unscheduled — everywhere except a demonstration stack; see
 #: `apps/tenancy/tasks.py` for why the default must be nothing.
 NIROVA_DEMO_DAY_SLUG = env("NIROVA_DEMO_DAY_SLUG", default="")
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    # eSewa and Khalti attempts whose payer never came back (apps/billing/tasks.py).
+    "billing-reconcile-online-payments": {
+        "task": "billing.reconcile_online_payments",
+        "schedule": 10 * 60,
+    },
+}
 if NIROVA_DEMO_DAY_SLUG:
     CELERY_BEAT_SCHEDULE["demo-advance-day"] = {
         "task": "demo.advance_day",
