@@ -224,6 +224,8 @@ class LoginOutcome(models.TextChoices):
     LOCKED = "locked", "Account locked"
     INACTIVE = "inactive", "Account inactive"
     NO_ORGANIZATION = "no_organization", "No organization"
+    RESET_REQUESTED = "reset_requested", "Password reset requested"
+    PASSWORD_RESET = "password_reset", "Password reset by email"
 
 
 class LoginAttempt(UUIDModel, TimeStampedModel):

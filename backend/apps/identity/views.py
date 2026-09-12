@@ -6,10 +6,13 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record
+from apps.common.exceptions import DomainError
 from apps.common.http import client_ip
 from apps.entitlements.resolver import resolve_entitlements
 from apps.identity.models import (
@@ -17,6 +20,7 @@ from apps.identity.models import (
     LoginOutcome,
     Membership,
     MembershipStatus,
+    User,
 )
 from apps.identity.serializers import (
     LoginSerializer,
@@ -413,3 +417,79 @@ class LogoutView(APIView):
                 entity_label=request.user.email,
             )
         return Response({"status": "signed_out"})
+
+
+class RefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        from apps.identity.authentication import SessionEnded, issued_before_password_change
+
+        token = RefreshToken(attrs["refresh"])
+        user = User.objects.filter(id=token.payload.get("user_id")).first()
+        if user is not None and issued_before_password_change(user, token):
+            raise SessionEnded()
+        return super().validate(attrs)
+
+
+class RefreshView(TokenRefreshView):
+    """Exchange a refresh token for a new access token -- unless the password
+    has changed since the session began.
+
+    Without this the access-token check in `NirovaJWTAuthentication` would be
+    a thirty-minute inconvenience: the old session would simply refresh and
+    carry on for the refresh token's seven days.
+    """
+
+    serializer_class = RefreshSerializer
+
+
+class ForgotPasswordView(APIView):
+    """`POST {email}` -- send a reset link. The same answer for every address."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from apps.identity.password_reset import GENERIC_ANSWER, request_reset
+
+        request_reset(
+            str(request.data.get("email", ""))[:254],
+            ip=client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+        )
+        return Response({"detail": GENERIC_ANSWER}, status=status.HTTP_202_ACCEPTED)
+
+
+class ResetPasswordView(APIView):
+    """`GET ?uid&token` -- is this link still good; `POST {uid, token,
+    new_password}` -- choose the new password.
+
+    The GET lets the screen say "this link has expired" before somebody types
+    a new password twice, rather than after.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        from apps.identity.password_reset import ResetRefused, check_link
+
+        try:
+            user = check_link(request.query_params.get("uid", ""), request.query_params.get("token", ""))
+        except ResetRefused as refused:
+            raise DomainError(refused.message, code=refused.code) from refused
+        return Response({"valid": True, "email": user.email})
+
+    def post(self, request):
+        from apps.identity.password_reset import ResetRefused, complete_reset
+
+        try:
+            user = complete_reset(
+                str(request.data.get("uid", "")),
+                str(request.data.get("token", "")),
+                str(request.data.get("new_password", "")),
+                ip=client_ip(request),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            )
+        except ResetRefused as refused:
+            raise DomainError(refused.message, code=refused.code) from refused
+        return Response({"status": "changed", "email": user.email, "mfa_enabled": user.mfa_enabled})

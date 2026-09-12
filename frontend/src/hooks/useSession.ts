@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import api, { ApiError, organizationStore, tokenStore } from "@/lib/api";
+import api, { ApiError, SIGNED_OUT_EVENT, organizationStore, tokenStore } from "@/lib/api";
 import type { Session } from "@/types";
 
 interface LoginResponse {
@@ -104,6 +104,15 @@ export function useSession(): UseSession {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The API client could not renew the session (idle too long, or the
+  // password changed elsewhere): go back to sign-in rather than leave every
+  // screen failing one request at a time.
+  useEffect(() => {
+    const signedOut = () => setSession(null);
+    window.addEventListener(SIGNED_OUT_EVENT, signedOut);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, signedOut);
+  }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {

@@ -6,9 +6,10 @@
  * button. Complete, because every question somebody has on this screen should
  * have its answer on this screen:
  *
- *  - **"I've forgotten my password."** Answered in place, honestly: accounts
- *    in a clinical system are reset by the organization's administrator, not
- *    by an email link anybody with the inbox could click.
+ *  - **"I've forgotten my password."** A link by email (see
+ *    `auth/PasswordReset.tsx`): single-use, thirty minutes, every session
+ *    signed out, and a second factor still asked for where one is on. The
+ *    administrator's temporary password remains for anybody without mail.
  *  - **"Is it me, or is it down?"** The footer says whether the service is up.
  *  - **"We don't have an account — how do we start?"** Top right, and again
  *    under the form: register the hospital.
@@ -20,9 +21,9 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Eye, EyeOff, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Info, Lock, Mail, ShieldCheck } from "lucide-react";
 
-import { ApiError } from "@/lib/api";
+import { ApiError, SIGN_IN_NOTICE_KEY } from "@/lib/api";
 import type { UseSession } from "@/hooks/useSession";
 import { Spinner } from "@/components/ui/loader";
 import { Alert, AlertDescription, Button, Input, Label } from "@/components/ui/primitives";
@@ -34,7 +35,17 @@ export default function LoginPage({ session }: { session: UseSession }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [forgot, setForgot] = useState(false);
+  // Why they are here, when it was not by choice: the session expired, the
+  // password changed, or they have just reset it. Shown once.
+  const [notice] = useState<string | null>(() => {
+    try {
+      const value = sessionStorage.getItem(SIGN_IN_NOTICE_KEY);
+      sessionStorage.removeItem(SIGN_IN_NOTICE_KEY);
+      return value;
+    } catch {
+      return null;
+    }
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // Set when the password was right and two-step sign-in is on.
@@ -85,6 +96,13 @@ export default function LoginPage({ session }: { session: UseSession }) {
         </h1>
         <p className="mt-1.5 text-muted-foreground">Sign in to your hospital's workspace.</p>
 
+        {notice ? (
+          <Alert className="mt-6">
+            <Info className="h-4 w-4" />
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate={false}>
           <div className="space-y-1.5">
             <Label htmlFor="email">Work email</Label>
@@ -107,15 +125,9 @@ export default function LoginPage({ session }: { session: UseSession }) {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <button
-                type="button"
-                onClick={() => setForgot((open) => !open)}
-                className="text-sm font-medium text-primary hover:underline"
-                aria-expanded={forgot}
-                aria-controls="forgot-help"
-              >
+              <Link to="/forgot-password" className="text-sm font-medium text-primary hover:underline">
                 Forgot password?
-              </button>
+              </Link>
             </div>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -144,20 +156,6 @@ export default function LoginPage({ session }: { session: UseSession }) {
             </div>
           </div>
 
-          {forgot && (
-            <div id="forgot-help" className="rounded-lg border bg-muted/40 p-3 text-sm">
-              <p className="flex items-center gap-1.5 font-medium">
-                <KeyRound className="h-4 w-4 text-primary" />
-                Your administrator resets it
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Clinical accounts are not reset by an email link that anyone with
-                your inbox could follow. Ask your organization's administrator —
-                they can issue a new password from People, and you will choose
-                your own the first time you sign in.
-              </p>
-            </div>
-          )}
 
           {error && (
             <Alert variant="destructive">

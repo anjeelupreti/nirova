@@ -219,9 +219,12 @@ def test_a_password_can_be_changed_with_the_current_one(me):
     assert user.password_changed_at <= timezone.now()
     assert user.must_change_password is False
 
-    # And the response says what it does *not* do, which matters to somebody
-    # changing their password because they think they are compromised.
-    assert "stay active" in _body(response)["note"]
+    # Every other device is signed out -- what somebody changing their password
+    # because they think they are compromised needs -- and this one is handed
+    # a fresh pair of tokens so it is not.
+    body = _body(response)
+    assert "signed out" in body["note"]
+    assert body["access"] and body["refresh"]
 
 
 def test_a_weak_password_is_refused_by_django_s_own_validators(me):

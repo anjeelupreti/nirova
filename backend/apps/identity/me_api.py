@@ -200,18 +200,20 @@ class ChangePasswordView(APIView):
             ]
         )
 
+        # Every token issued before this moment is now refused (see
+        # `authentication.issued_before_password_change`), this device's
+        # included, so it is handed a fresh pair and stays signed in. Anybody
+        # else holding the account -- often the reason for the change -- is
+        # signed out on their next request.
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        refresh = RefreshToken.for_user(user)
         return Response(
             {
                 "changed_at": user.password_changed_at,
-                # Said plainly rather than implied. Access tokens already
-                # issued stay valid until they expire -- they are signed, not
-                # looked up -- so "change your password" is not "sign everyone
-                # else out", and somebody changing it because they fear their
-                # account is compromised deserves to know that.
-                "note": (
-                    "Sessions already signed in elsewhere stay active until "
-                    "their token expires."
-                ),
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "note": "Every other device has been signed out.",
             },
             status=status.HTTP_200_OK,
         )

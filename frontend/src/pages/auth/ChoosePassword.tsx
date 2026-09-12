@@ -16,7 +16,7 @@
 import { useState } from "react";
 import { Check, KeyRound, LogOut } from "lucide-react";
 
-import api, { ApiError } from "@/lib/api";
+import api, { ApiError, tokenStore } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { UseSession } from "@/hooks/useSession";
 import { Alert, AlertDescription, Button, Input, Label } from "@/components/ui/primitives";
@@ -43,7 +43,11 @@ export function ChoosePassword({ session, name }: { session: UseSession; name: s
     setBusy(true);
     setProblem(null);
     try {
-      await api.post("/auth/me/password/", { current_password: current, new_password: next });
+      const body = await api.post<{ access: string; refresh: string }>("/auth/me/password/", {
+        current_password: current,
+        new_password: next,
+      });
+      tokenStore.set(body.access, body.refresh);
       await session.refresh();
     } catch (err) {
       setProblem(err instanceof ApiError ? err.message : "Your password was not changed.");

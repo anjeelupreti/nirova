@@ -35,7 +35,7 @@ import { Avatar } from "@/components/ui/data";
 import { CardSkeleton } from "@/components/ui/feedback";
 import { Page, PageHeader, Section } from "@/components/ui/layout";
 import { usePreferences, type Preferences } from "@/hooks/usePreferences";
-import api, { ApiError } from "@/lib/api";
+import api, { ApiError, tokenStore } from "@/lib/api";
 
 interface PreferenceChoice {
   value: string;
@@ -125,7 +125,7 @@ export default function AccountPage() {
     <Page>
       <PageHeader
         title="My account"
-        description="Your details, your password, and how this system behaves for you."
+        description="Profile, password and preferences."
         actions={
           me.is_platform_staff ? (
             <Badge variant="secondary">Platform operator</Badge>
@@ -302,10 +302,13 @@ function Password({ me, onChanged }: { me: Me; onChanged: () => void }) {
     setProblem(null);
     setNote(null);
     try {
-      const body = await api.post<{ note: string }>("/auth/me/password/", {
+      const body = await api.post<{ note: string; access: string; refresh: string }>("/auth/me/password/", {
         current_password: current,
         new_password: next,
       });
+      // The change ends every session that predates it, this one included;
+      // the fresh pair keeps this device signed in.
+      tokenStore.set(body.access, body.refresh);
       setCurrent("");
       setNext("");
       setConfirm("");

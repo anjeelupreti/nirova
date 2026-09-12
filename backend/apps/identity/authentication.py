@@ -26,11 +26,17 @@ the API did not would be the temporary-password hole again: turn the setting
 on, and anybody with a password could still script the API with a single
 factor. Unenrolled, they reach who they are, the enrolment endpoint, and the
 way out.
+
+**A password change ends every session that came before it.** Tokens are
+signed, not looked up, so until this a stolen token outlived the password
+change its owner made precisely because it was stolen. A token issued before
+`password_changed_at` is refused here, and a refresh token likewise at the
+refresh endpoint; the device that made the change is handed fresh tokens.
 """
 
 import time
 
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
@@ -45,6 +51,24 @@ class PasswordChangeRequired(PermissionDenied):
         "You signed in with a temporary password. Choose your own password "
         "before doing anything else."
     )
+
+
+class SessionEnded(AuthenticationFailed):
+    default_code = "session_ended"
+    default_detail = "Your password was changed, so this session has ended. Sign in again."
+
+
+def issued_before_password_change(user, token) -> bool:
+    """Whether `token` predates the holder's latest password.
+
+    Whole seconds on both sides: `iat` is an integer, and a token issued in
+    the same second as the change is the one the change itself handed out.
+    """
+    changed = getattr(user, "password_changed_at", None)
+    issued = token.get("iat") if token is not None else None
+    if changed is None or issued is None:
+        return False
+    return int(issued) < int(changed.timestamp())
 
 
 class SecondFactorRequired(PermissionDenied):
@@ -110,6 +134,8 @@ class NirovaJWTAuthentication(JWTAuthentication):
         if result is None:
             return None
         user, token = result
+        if issued_before_password_change(user, token):
+            raise SessionEnded()
         if getattr(user, "must_change_password", False):
             allowed = ALLOWED_WHILE_LOCKED.get(request.path, set())
             if request.method not in allowed and request.method != "OPTIONS":

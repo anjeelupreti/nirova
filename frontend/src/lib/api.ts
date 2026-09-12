@@ -73,7 +73,52 @@ interface RequestOptions {
   withoutOrganization?: boolean;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+/** Fired when the session cannot be renewed; the shell returns to sign-in. */
+export const SIGNED_OUT_EVENT = "nirova:signed-out";
+/** A one-line reason the sign-in screen shows once, then forgets. */
+export const SIGN_IN_NOTICE_KEY = "nirova.signin-notice";
+
+let renewing: Promise<boolean> | null = null;
+
+/**
+ * Trade the refresh token for a new access token, once, however many requests
+ * are waiting on it.
+ *
+ * Access tokens live thirty minutes. Until this existed nothing renewed them,
+ * so half an hour into a shift every screen began failing with "not
+ * authenticated" until somebody reloaded the page — mid-prescription, if that
+ * is where they were. Now an expired token is renewed silently and the
+ * request repeated; only when the refresh is refused too (seven days idle, or
+ * the password changed since) is the person sent back to sign in.
+ *
+ * Single-flight: a dashboard that fires eight requests at once gets one
+ * refresh, not eight — which matters because refresh tokens rotate, and the
+ * second of two concurrent refreshes would present a token the first had
+ * already replaced.
+ */
+function renewSession(): Promise<boolean> {
+  if (renewing) return renewing;
+  const refresh = tokenStore.getRefresh();
+  if (!refresh) return Promise.resolve(false);
+  renewing = fetch("/api/auth/refresh/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh }),
+  })
+    .then(async (response) => {
+      if (!response.ok) return false;
+      const tokens = (await response.json()) as { access: string; refresh?: string };
+      tokenStore.set(tokens.access, tokens.refresh ?? refresh);
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => {
+      renewing = null;
+    });
+  return renewing;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
   const { method = "GET", body, withoutOrganization = false } = options;
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -93,6 +138,25 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // 204 and empty bodies are normal for logout and some deletes.
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
+
+  // An expired access token: renew and repeat, once. Not for the sign-in
+  // endpoints themselves, where a 401 is the answer rather than a symptom.
+  if (response.status === 401 && !retried && token && !path.startsWith("/auth/login")) {
+    if (await renewSession()) return request<T>(path, options, true);
+    tokenStore.clear();
+    const code = (payload?.error as ApiErrorBody | undefined)?.code;
+    try {
+      sessionStorage.setItem(
+        SIGN_IN_NOTICE_KEY,
+        code === "session_ended"
+          ? "Your password was changed, so you were signed out. Sign in with the new one."
+          : "Your session expired. Sign in again to carry on.",
+      );
+    } catch {
+      /* storage blocked: the sign-in screen simply shows no notice */
+    }
+    window.dispatchEvent(new CustomEvent(SIGNED_OUT_EVENT, { detail: code }));
+  }
 
   if (!response.ok) {
     const envelope = payload?.error as ApiErrorBody | undefined;
@@ -122,14 +186,23 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
  * reference by the time the click returns, and not revoking leaks the whole
  * file into memory for the life of the tab.
  */
-export async function download(path: string, filename: string): Promise<void> {
-  const headers: Record<string, string> = {};
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const organization = organizationStore.get();
-  if (organization) headers["X-Organization"] = organization;
+/** A GET with the two headers, renewing an expired session once. */
+async function authorisedFetch(path: string): Promise<Response> {
+  const attempt = () => {
+    const headers: Record<string, string> = {};
+    const token = tokenStore.get();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const organization = organizationStore.get();
+    if (organization) headers["X-Organization"] = organization;
+    return fetch(`/api${path}`, { headers });
+  };
+  const response = await attempt();
+  if (response.status === 401 && (await renewSession())) return attempt();
+  return response;
+}
 
-  const response = await fetch(`/api${path}`, { headers });
+export async function download(path: string, filename: string): Promise<void> {
+  const response = await authorisedFetch(path);
   if (!response.ok) {
     // The failure path still speaks JSON: an export refused for a missing
     // permission is the ordinary error envelope, and swallowing it here would
@@ -178,14 +251,9 @@ export async function download(path: string, filename: string): Promise<void> {
  */
 export async function openPrintable(path: string): Promise<void> {
   const tab = window.open("", "_blank");
-  const headers: Record<string, string> = {};
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const organization = organizationStore.get();
-  if (organization) headers["X-Organization"] = organization;
 
   try {
-    const response = await fetch(`/api${path}`, { headers });
+    const response = await authorisedFetch(path);
     if (!response.ok) {
       tab?.close();
       const text = await response.text();

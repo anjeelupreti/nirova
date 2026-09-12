@@ -1,5 +1,4 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.identity.me_api import (
     ChangePasswordView,
@@ -8,8 +7,11 @@ from apps.identity.me_api import (
     MySecondFactorView,
 )
 from apps.identity.views import (
+    ForgotPasswordView,
     LoginView,
     LogoutView,
+    RefreshView,
+    ResetPasswordView,
     SecondFactorView,
     SessionView,
     SwitchOrganizationView,
@@ -21,7 +23,10 @@ urlpatterns = [
     # The second step, when two-step sign-in is on: challenge + code -> tokens.
     path("login/verify/", SecondFactorView.as_view(), name="login-verify"),
     path("register/", RegisterView.as_view(), name="register"),
-    path("refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("refresh/", RefreshView.as_view(), name="token-refresh"),
+    # Forgotten passwords: a link by email (apps/identity/password_reset.py).
+    path("password/forgot/", ForgotPasswordView.as_view(), name="password-forgot"),
+    path("password/reset/", ResetPasswordView.as_view(), name="password-reset"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("session/", SessionView.as_view(), name="session"),
     # A person's own account. Authenticated only -- no permission code, because
