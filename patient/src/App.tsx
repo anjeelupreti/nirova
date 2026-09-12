@@ -1575,7 +1575,7 @@ function Bills({
               <p className="font-medium tabular-nums">{rupees(row.total)}</p>
               {Number(row.balance) > 0 && (
                 <p className="text-sm tabular-nums text-destructive">
-                  {rupees(row.balance)} to pay
+                  {tr("bills.toPay", { amount: rupees(row.balance) })}
                 </p>
               )}
             </div>
