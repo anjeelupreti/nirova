@@ -12216,3 +12216,144 @@ are on the checklist.
 
 Nepali on the bills, referrals, messages, sessions, profile-correction and
 access-log screens; BS dates in the staff console.
+
+
+## 280 - Trace a batch, read the month, pay the bill, get back in
+
+*12 September 2026.*
+
+Six pieces of work, each answering a question the product could not answer.
+
+### A batch traced to every person it reached
+
+The recall list counted dispensing only. A batch sold over the counter reached
+people the recall could not see — which is the one thing a recall exists to do.
+`apps/pharmacy/trace.py` follows a batch from the supplier's receipt to the
+shelf to the people: patients it was dispensed to and counter customers net of
+what they brought back, with the ledger reconciled against what is still held,
+and a discrepancy stated rather than smoothed over. `recall_exposure` is now
+built from it, so the two cannot disagree. Names and phone numbers appear only
+for somebody who may read patients; a storekeeper sees the same flow with the
+identities withheld and a sentence saying so. The regression test fails against
+the old code.
+
+### Sales over a period, and the facilities you may see
+
+The counter's daily summary answered "how did today go" for one till. An owner
+asks about a month: up on last month, which products carry the margin, how much
+comes by eSewa, when the counter is busiest, which till is short.
+`apps/pos/reports.py` answers all of those from the same rules as the daily
+summary, so a one-day report and the till's own close agree to the paisa —
+which is what the first test asserts.
+
+Two defects the tests caught before anybody saw the screen: `select_related`
+beside `.only()` (Django refuses), and an annotation named `quantity` over a
+field named `quantity`, which made the cost sum an aggregate of an aggregate.
+
+The report takes **both** `sale.read` and `report.read`. Every doctor holds
+`report.read` for laboratory turnaround; costs and margins are not theirs. And
+"all facilities" means all of *yours*: the facility filter is intersected with
+what the caller's grants reach, so a branch manager's organization-wide view is
+their branch.
+
+### Real Excel, not a CSV with a BOM
+
+`downloadWorkbook` writes `.xlsx`: a title and the period, who generated it and
+when, a bold frozen header, numbers as numbers in accountants' formats, columns
+sized to content, a totals row, and as many sheets as the report has parts. The
+sales export is six sheets; the batch trace is four. The library loads only when
+somebody exports.
+
+### Paying with eSewa and Khalti
+
+The two wallets most of Nepal pays with, in the patient app and at the counter.
+
+**Nothing is trusted that arrives through the payer's browser.** The redirect
+back carries the wallet's own verdict and it is ignored: an attempt is settled
+only by a server-to-server check with the identifiers we stored — Khalti's
+`pidx`, our eSewa `transaction_uuid` — and only a confirmed "completed" for the
+exact amount becomes a `Payment` with a receipt number.
+
+The eSewa signature was verified against eSewa's own sandbox before it was
+trusted: the signed form is accepted — 302 to their checkout, which renders the
+right merchant and `NPR 1,400.00` — and a tampered copy is refused with `ES104
+Invalid payload signature`. The status endpoint was called for real too. What
+has *not* been done here is a completed sandbox payment: that needs eSewa's
+test wallet and its one-time code, so the settlement path is covered by tests
+against a stub at the single call seam, not by a round trip. Khalti is
+implemented to its published API and offered only once a merchant key is
+entered; nobody has run a payment through it from this machine.
+
+**A defect the live sandbox found.** eSewa answers `NOT_FOUND` for a
+transaction the payer has not finished — its status endpoint knows nothing
+until money moves — and the first version read that as "expired" and settled
+the attempt seconds after it began. A payer who then paid would have had their
+money taken with the invoice still unpaid and the attempt closed. Age decides
+expiry now, not the provider's silence, and a test holds it there.
+
+Three failure modes have an answer rather than a shrug:
+
+- **The payer closes the tab.** A Celery task asks every ten minutes about
+  attempts still open, so the bill is settled without anybody ringing the
+  hospital. Unfinished after two hours, an attempt is given up.
+- **The bill was settled at the counter meanwhile.** The provider still took
+  the money. The attempt is marked paid with `needs_attention` set, and billing
+  shows it in red for a refund from the provider's dashboard. It is never
+  silently dropped.
+- **A different amount comes back.** Never applied automatically.
+
+Merchant keys are a tenant setting of a new `secret` kind: sealed with Fernet
+(`apps/common/sealing.py`), never returned to a browser — the settings screen
+shows only that one is stored and its last four characters — and never written
+to the audit log, which records that a key changed and not what it changed to.
+In test mode eSewa's public sandbox merchant is used, so the demo works with
+nothing to configure; Khalti is offered only once a key is entered. No patient
+name or phone is sent to either wallet.
+
+### Forgotten passwords, and sessions that actually end
+
+The only way back into a forgotten account was an administrator issuing a
+temporary password and reading it out — no use at 2 a.m., and no use at all to
+the owner, who has nobody to ask. `apps/identity/password_reset.py` follows the
+OWASP guidance point by point: the same answer for a registered and an unknown
+address (and the mail sent off the request path, so the timing does not tell
+either), a signed single-use token that a password change spends, thirty
+minutes, rate limits that are silent, a confirmation email to the owner, and a
+second factor still required afterwards — a reset proves the mailbox, not the
+person.
+
+Which exposed the larger hole. `ChangePasswordView` used to *document* that
+"sessions already signed in elsewhere stay active until their token expires" —
+so somebody changing their password because it was stolen changed nothing for
+the thief for thirty minutes, and the refresh token carried them on for seven
+days. A token issued before `password_changed_at` is now refused, at the
+authenticator and at the refresh endpoint; the device that made the change is
+handed a fresh pair and stays signed in.
+
+And a second one, found while wiring it: the console never refreshed its access
+token at all. Half an hour into a shift every screen began failing until
+somebody reloaded the page. The API client now renews once, single-flight, and
+repeats the request; only when the refresh is refused too does it return to
+sign-in, saying which of the two happened.
+
+Mail goes to a Mailpit container in the Docker stack — a demonstration must
+never email a real person — with its inbox at `http://localhost:8025`.
+
+### Words, and where things live
+
+The console's own language, against the conventions the audience already knows
+(Material, Apple's HIG, Microsoft's style guide, Nielsen's heuristics):
+
+- **No sidebar label longer than two words.** "What needs you" became "My
+  workspace"; "Data import", "Price list", "Subscription", "Roles",
+  "Attendance", "Laboratory", "Supply", "Claims" replaced longer labels, with
+  the old wording kept as search keywords so nobody loses the screen they knew.
+- **Notifications are an icon in the navbar**, with a count, a popover of the
+  latest, mark-all-read, and "View all" to the full page — where they belong,
+  rather than as a rail item competing with the work.
+- Page descriptions rewritten to say what the screen is for in one line.
+
+### Not yet
+
+Nepali on the remaining portal screens; BS dates in the staff console; a
+gateway for IME Pay and Fonepay; a dunning reminder for unpaid invoices.

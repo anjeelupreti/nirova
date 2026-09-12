@@ -78,6 +78,11 @@ OPEN_BY_DESIGN = {
     "SwitchOrganizationView": "the membership list is the authority",
     "PortalAuthView": "the patient portal's own sign-in",
     "ChangePasswordView": "your own password; the old one is the authority",
+    "ForgotPasswordView": (
+        "a forgotten password cannot require signing in; it only sends a link "
+        "to the address on the account, and answers the same for any address"
+    ),
+    "ResetPasswordView": "the emailed, single-use, 30-minute link is the authority",
     "MySecondFactorView": (
         "your own two-step sign-in; turning it off needs your password and a code"
     ),

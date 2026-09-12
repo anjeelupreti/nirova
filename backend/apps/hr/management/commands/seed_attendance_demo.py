@@ -477,11 +477,22 @@ class Command(BaseCommand):
             decide_leave(request, actor=manager, approve=True,
                          notes="Certificate seen.")
 
-        blank.refresh_from_db()
+        # Re-read by query, not `refresh_from_db`: approving leave *creates*
+        # the attendance record when the day had none, and the old code
+        # refreshed a `None` it had already printed as "—" -- so this seed
+        # crashed on any day the chosen employee had not been marked, which
+        # for the most recent working day is most Saturdays.
+        blank = Attendance.objects.filter(employee=employee, date=today).first()
         self.stdout.write(
-            f"   {request.reference} approved -> today is now {blank.status}"
+            f"   {request.reference} approved -> today is now "
+            f"{blank.status if blank else 'unmarked'}"
         )
-        if blank.status != "on_leave":
+        if blank is None:
+            self.stdout.write(self.style.ERROR(
+                "   approved leave left no attendance record for the day — "
+                "the ledger and the day sheet disagree"
+            ))
+        elif blank.status != "on_leave":
             self.stdout.write(self.style.ERROR(
                 "   the attendance record still contradicts the approved leave "
                 "— which is exactly what deriving the status is meant to stop"

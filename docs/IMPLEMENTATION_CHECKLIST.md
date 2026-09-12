@@ -1108,7 +1108,90 @@ results.*
       profile corrections, the access log
 - [ ] Bikram Sambat dates in the staff console (the login page now claims only
       what is true: BS fiscal years and payroll months)
-- [ ] Paying a bill in the app (eSewa / Khalti checkout)
+- [x] **Paying a bill in the app** (log 280): eSewa and Khalti, with the
+      confirmation asked of the provider server to server rather than read off
+      the redirect back
+
+## §141 Stock traced, sales read, bills paid, passwords recovered `[~]`
+
+*New on 12 September 2026 (log 280). "Work on stock tracing, excels, sales,
+self service etc… we will go with Khalti and eSewa", and: the words, the
+headings and the navigation were not up to an international standard.*
+
+### Tracing a batch
+- [x] A batch traced from the supplier's receipt to every person who received
+      it — **dispensed patients and counter customers**, net of returns and
+      voids. The recall list counted dispensing only, so a recalled batch sold
+      over the counter reached people the recall could not see
+- [x] The trace reconciles: received = to people + returned + written off +
+      held, with any discrepancy stated rather than smoothed over
+- [x] Names and phone numbers only for somebody who may read patients; the
+      same flow otherwise, with a sentence saying what is withheld
+- [x] `recall_exposure` is built from the trace, so the two cannot disagree
+- [x] A printable recall list, and a four-sheet workbook
+
+### Sales over a period
+- [x] A one-day report equals the till's own daily summary to the paisa —
+      asserted by a test, because two numbers for one day means neither is
+      trusted
+- [x] Revenue, margin, returns and average sale against the previous period of
+      the same length; by day, by hour, by product, by tender, by cashier
+- [x] **Both `sale.read` and `report.read`** — every doctor holds the latter
+      for laboratory turnaround, and costs and margins are not theirs
+- [x] "All facilities" means all of *yours*: the filter is intersected with
+      what the caller's grants reach
+- [ ] A dunning reminder for invoices that fall overdue
+
+### Excel that arrives usable
+- [x] Real `.xlsx`, not a CSV with a byte-order mark: title and period, who
+      generated it and when, a bold frozen header, numbers as numbers in the
+      formats an accountant expects, columns sized to content, a totals row,
+      and one sheet per part of the report
+- [x] The writer is loaded only when somebody exports
+
+### eSewa and Khalti
+- [x] **Nothing that arrives through the payer's browser is trusted.** An
+      attempt is settled only by a server-to-server check against the
+      identifiers we stored, and only a confirmed "completed" for the exact
+      amount becomes a `Payment`
+- [x] The eSewa signature verified against eSewa's own sandbox before it was
+      trusted — accepted signed, refused tampered (`ES104`)
+- [x] Confirming twice records one receipt; the attempt is locked while it is
+      confirmed
+- [x] A payer who closes the tab is reconciled by a scheduled task; an
+      attempt unfinished after two hours is given up
+- [x] Money taken for a bill settled meanwhile is **flagged for refund**, in
+      red on the billing screen — never silently dropped
+- [x] Merchant keys sealed at rest, never returned to a browser, never written
+      to the audit log; test mode uses eSewa's public sandbox merchant so the
+      demonstration needs no configuration
+- [x] No patient name or phone is sent to either wallet
+- [ ] IME Pay and Fonepay
+
+### Getting back in
+- [x] **A reset link by email**, following the OWASP guidance: one answer for
+      registered and unknown addresses, sent off the request path so the
+      timing does not tell either; a signed single-use token a password change
+      spends; thirty minutes; silent rate limits; a confirmation email to the
+      owner; the second factor still required afterwards
+- [x] **A password change ends every session that predates it** — it used to
+      document the opposite, so somebody changing a stolen password changed
+      nothing for the thief. The device that made the change keeps working on
+      fresh tokens
+- [x] The console renews its access token silently, once, single-flight —
+      until now nothing renewed it and every screen began failing half an hour
+      into a shift
+- [x] Mail goes to a Mailpit container in the Docker stack; a demonstration
+      never emails a real person
+
+### The words, and where things live
+- [x] No sidebar label longer than two words, with the old wording kept as
+      search keywords
+- [x] Notifications are an icon in the navbar — a count, a popover of the
+      latest, mark all read, and "View all" for the full page
+- [x] "What needs you" is **My workspace**, in the rail and on the page
+- [x] Page descriptions say what the screen is for in one line
+- [ ] The same pass over badges, buttons and empty states
 
 ## Standing guards
 

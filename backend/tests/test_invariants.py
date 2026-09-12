@@ -2578,6 +2578,8 @@ def test_every_console_route_has_a_way_to_reach_it():
         # Registration: signed-out only, reached from the sign-in screen's
         # "Register your hospital" links. The shell never shows it.
         "/signup",
+        # The header bell's "View all". The sidebar no longer lists it.
+        "/notifications",
         # Opened from the queue with an encounter in hand. A sidebar link to
         # "the consultation" would have to invent which one.
         "/consultation/:uuid",
@@ -2592,6 +2594,14 @@ def test_every_console_route_has_a_way_to_reach_it():
         # consultation is: a sidebar link to "the patient" would have to
         # invent which one.
         "/patients/:uuid",
+        # Signed-out, both of them: the "Forgot password?" link on the sign-in
+        # screen leads to one, and the emailed link to the other. A sidebar
+        # entry for either would be a door for somebody already inside.
+        "/forgot-password",
+        "/reset-password",
+        # Where eSewa and Khalti send a payer back. Opened by the wallet in
+        # the tab the counter opened for it, never navigated to.
+        "/billing/online-return",
         # The design system, rendered: every token, state and chart form on one
         # scroll (log 273). Deliberately not in anybody's sidebar -- it is for
         # whoever is building the product, not for anybody running a hospital,
