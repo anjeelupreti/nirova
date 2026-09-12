@@ -717,41 +717,39 @@ def recall_exposure(batch: Batch) -> dict:
     """Who received stock from a batch, and what is left.
 
     The question a recall actually asks. It is answerable only because the
-    ledger records the patient on every dispensing movement — a
-    product-level stock system cannot answer it at all.
+    ledger records where every unit went.
+
+    **It used to count dispensing only**, so a recalled batch sold over the
+    counter — most of a pharmacy's volume — reached people this list could
+    not see. It is now read from `batch_trace`, which includes counter sales
+    net of returns and names whoever the sale recorded. The shape is kept, so
+    every existing caller keeps working and gets the fuller list.
     """
-    dispensed = StockEntry.objects.filter(
-        batch=batch, movement_type=MovementType.DISPENSE
-    ).select_related("patient")
+    from apps.pharmacy.trace import batch_trace
 
-    remaining = BatchStock.objects.filter(batch=batch, quantity__gt=ZERO)
-
+    trace = batch_trace(batch)
     return {
         "batch_number": batch.batch_number,
         "product": batch.product.display_name,
         "expires_on": batch.expires_on,
         "status": batch.status,
-        "dispensed_count": dispensed.count(),
-        "dispensed_quantity": quantise(
-            dispensed.aggregate(total=models.Sum("quantity"))["total"] or ZERO
-        ),
+        "dispensed_count": len(trace["recipients"]),
+        "dispensed_quantity": quantise(Decimal(trace["totals"]["to_people"]) - Decimal(trace["totals"]["returned"])),
         "patients": [
             {
-                "mrn": entry.patient.mrn,
-                "name": entry.patient.full_name,
-                "phone": entry.patient.phone,
-                "quantity": str(entry.quantity),
-                "dispensed_at": entry.occurred_at,
+                "mrn": row["patient_mrn"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "quantity": row["quantity"],
+                "dispensed_at": row["at"],
+                "how": row["kind"],
+                "reference": row["reference"],
             }
-            for entry in dispensed
-            if entry.patient_id
+            for row in trace["recipients"]
         ],
         "remaining": [
-            {
-                "location": stock.location.code,
-                "quantity": str(stock.quantity),
-            }
-            for stock in remaining
+            {"location": row["location"], "quantity": row["quantity"]}
+            for row in trace["holding"]
         ],
     }
 

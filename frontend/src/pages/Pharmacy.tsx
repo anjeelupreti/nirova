@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Route,
   BookOpen,
   AlertTriangle,
   Boxes,
@@ -70,6 +71,7 @@ import {
   LedgerPanel,
   ReceivePanel,
 } from "@/pages/pharmacy/Stockroom";
+import { TracePanel } from "@/pages/pharmacy/Trace";
 
 type Tab =
   | "dispense"
@@ -79,6 +81,7 @@ type Tab =
   | "ledger"
   | "expiry"
   | "reorder"
+  | "trace"
   | "catalogue";
 
 const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
@@ -94,6 +97,8 @@ const TABS: { id: Tab; label: string; icon: typeof Package }[] = [
   { id: "ledger", label: "Ledger", icon: ScrollText },
   { id: "expiry", label: "Expiry", icon: CalendarClock },
   { id: "reorder", label: "Reorder", icon: TrendingDown },
+  // Where a batch came from and everybody it reached: the recall screen.
+  { id: "trace", label: "Trace", icon: Route },
   // Last, because it is the one you visit least: the catalogue is set up once
   // and then edited when something new arrives. Dispensing is every day.
   { id: "catalogue", label: "Catalogue", icon: BookOpen },
@@ -865,6 +870,7 @@ export default function PharmacyPage() {
       )}
       {tab === "ledger" && <LedgerPanel locationUuid={locationUuid} />}
       {tab === "expiry" && <ExpiryPanel locationUuid={locationUuid} />}
+      {tab === "trace" && <TracePanel />}
       {tab === "reorder" && <ReorderPanel locationUuid={locationUuid} />}
       {/*
         The catalogue is organization-wide rather than per location: a product

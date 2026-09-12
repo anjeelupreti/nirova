@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from apps.pharmacy.views import (
+    BatchSearchView,
     AdjustStockView,
     BatchViewSet,
     DispenseViewSet,
@@ -33,5 +34,6 @@ urlpatterns = [
     path("stock/reorder/", ReorderView.as_view(), name="reorder-suggestions"),
     path("stock/valuation/", ValuationView.as_view(), name="stock-valuation"),
     path("stock/reconcile/", ReconcileView.as_view(), name="reconcile-stock"),
+    path("stock/trace/", BatchSearchView.as_view(), name="batch-search"),
     path("", include(router.urls)),
 ]

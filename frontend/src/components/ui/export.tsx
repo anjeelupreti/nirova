@@ -20,10 +20,11 @@ import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import {
   downloadCsv,
-  downloadExcel,
+  exportFilename,
   printElement,
   type ExportColumn,
 } from "@/lib/export";
+import { downloadListAsWorkbook } from "@/lib/xlsx";
 
 const ITEM = cn(
   "flex cursor-pointer select-none items-start gap-2.5 rounded-md px-2 py-1.5",
@@ -86,14 +87,12 @@ export function ExportMenu<T>({
 
           <DropdownMenu.Item
             className={ITEM}
-            onSelect={() => downloadExcel(rows, columns, name)}
+            onSelect={() => void downloadListAsWorkbook(rows, columns, name, exportFilename(name, "xlsx"))}
           >
             <Icon name="report" size="md" className="mt-0.5 text-good" />
             <span className="min-w-0">
               <span className="block font-medium">Excel</span>
-              <span className="block type-caption">
-                Opens in Excel with Devanagari and the rupee sign intact.
-              </span>
+              <span className="block type-caption">Workbook with a frozen header and numbers as numbers.</span>
             </span>
           </DropdownMenu.Item>
 

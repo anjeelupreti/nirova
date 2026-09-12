@@ -154,6 +154,58 @@ class BatchViewSet(viewsets.ReadOnlyModelViewSet):
         """
         return Response(recall_exposure(self.get_object()))
 
+    @action(detail=True, methods=["get"], url_path="trace")
+    def trace(self, request, uuid=None):
+        """Origin, every movement, every recipient, what is left, and whether
+        it all reconciles. See `apps.pharmacy.trace`."""
+        from apps.pharmacy.trace import batch_trace
+
+        return Response(_redact_recipients(request, batch_trace(self.get_object())))
+
+
+def _redact_recipients(request, trace: dict) -> dict:
+    """Names and phone numbers only for somebody who may read patients.
+
+    The trace answers a stock question, which `stock.read` covers; who the
+    stock reached is identity data, which it does not. A storekeeper sees the
+    flow and the counts; the pharmacist running the recall sees the people.
+    """
+    from apps.common.permissions import get_authorization
+
+    authorization = get_authorization(request)
+    if authorization and authorization.has("patient.read", Scope.OWN):
+        trace["identities"] = "shown"
+        return trace
+    for row in trace["recipients"]:
+        row.update({"name": "", "phone": "", "patient_mrn": ""})
+    for row in trace["ledger"]:
+        row["patient"] = ""
+    trace["identities"] = "restricted"
+    return trace
+
+
+class BatchSearchView(APIView):
+    """`GET stock/trace/?q=` -- batches by number or product, to trace."""
+
+    permission_classes = [IsAuthenticated, HasPermission.of("stock.read")]
+
+    def get(self, request):
+        from apps.pharmacy.trace import find_batches
+
+        return Response([
+            {
+                "uuid": str(batch.uuid),
+                "batch_number": batch.batch_number,
+                "product": batch.product.display_name,
+                "product_code": batch.product.code,
+                "expires_on": batch.expires_on,
+                "status": batch.status,
+                "supplier": batch.supplier_name,
+                "received_on": batch.received_on,
+            }
+            for batch in find_batches(request.query_params.get("q", ""))
+        ])
+
 
 class StockView(APIView):
     """Receive stock into a location."""
