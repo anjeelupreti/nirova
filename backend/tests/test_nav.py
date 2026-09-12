@@ -38,6 +38,7 @@ PROBE = {
     "/counter": "/api/pos/sales/",
     "/procurement": "/api/procurement/suppliers/",
     "/billing": "/api/billing/invoices/",
+    "/sales": "/api/pos/report/",
     "/claims": "/api/insurance/claims/",
     "/finance": "/api/finance/accounts/",
     "/people": "/api/hr/employees/",
@@ -120,11 +121,17 @@ def _nav():
     items = []
     for match in re.finditer(r'\{\s*to:\s*"(/[^"]*)"[^}]*\}', text):
         entry = match.group(0)
-        needs = re.search(r'needs:\s*"([a-z_.]+)"', entry)
+        needs = re.search(r'(?<!also)needs:\s*"([a-z_.]+)"', entry)
+        # A screen at the meeting point of two jobs names a second permission
+        # (`mayOpen` in nav.ts). Parsed here too, or this test would think the
+        # counter assistant sees Sales -- the rail does not -- and would then
+        # report the report endpoint's correct refusal as a defect.
+        also = re.search(r'alsoNeeds:\s*"([a-z_.]+)"', entry)
         scope = re.search(r'scope:\s*"([a-z_]+)"', entry)
         items.append((match.group(1),
                       needs.group(1) if needs else None,
-                      scope.group(1) if scope else "own"))
+                      scope.group(1) if scope else "own",
+                      also.group(1) if also else None))
     return items
 
 
@@ -148,7 +155,7 @@ def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
     # whole test went green without ever opening the new screen. A silent skip
     # in a test whose job is to catch silent breakage is worse than no test.
     unmapped = sorted(
-        route for route, _, _ in items
+        route for route, *_ in items
         if route not in PROBE and not route.startswith("/platform")
     )
     assert not unmapped, (
@@ -173,19 +180,24 @@ def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
         owner = (auth.get("authorization") or {}).get("is_organization_owner")
 
         shown, hidden_but_open, shown_but_shut = [], [], []
-        for route, needs, want in items:
+        ladder = ["own", "own_patients", "unit", "department",
+                  "facility", "multi_facility", "organization"]
+
+        def holds(code, want):
+            if owner:
+                return True
             granted = ((auth.get("authorization") or {})
-                       .get("permissions", {}).get(needs) if needs else None)
-            if owner or not needs:
-                visible = True
-            elif granted is None:
-                visible = False
-            else:
-                ladder = ["own", "own_patients", "unit", "department",
-                          "facility", "multi_facility", "organization"]
-                visible = (ladder.index(granted["scope"])
-                           >= ladder.index(want)) if (
-                    granted["scope"] in ladder and want in ladder) else True
+                       .get("permissions", {}).get(code))
+            if granted is None:
+                return False
+            if granted["scope"] in ladder and want in ladder:
+                return ladder.index(granted["scope"]) >= ladder.index(want)
+            return True
+
+        for route, needs, want, also in items:
+            visible = (not needs or holds(needs, want)) and (
+                not also or holds(also, want)
+            )
             probe = PROBE.get(route)
             if probe is None:
                 continue

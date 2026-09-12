@@ -6,9 +6,13 @@ because a rule enforced only in a view is a rule the seed commands and any
 future background job do not obey.
 """
 
+from datetime import timedelta
+
+from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -463,6 +467,49 @@ class CounterSearchView(APIView):
                 for row in results
             ]
         )
+
+
+class SalesReportView(APIView):
+    """`GET report/?start=&end=[&facility=]` -- sales over a period.
+
+    Without a facility it covers every facility the caller's permissions
+    reach; the organization-wide view is what an owner opens first.
+
+    Both `sale.read` and `report.read`: costs and margins are commercial
+    figures, and neither a doctor (who reads reports for lab turnaround) nor a
+    cashier (who sees the sales they ring up) needs the whole counter's.
+    """
+
+    permission_classes = [
+        IsAuthenticated, HasPermission.of("sale.read"), HasPermission.of("report.read"),
+    ]
+
+    def get(self, request):
+        from django.utils.dateparse import parse_date
+
+        from apps.common.exceptions import DomainError
+        from apps.pos.reports import sales_report
+
+        today = timezone.localdate()
+        end = parse_date(request.query_params.get("end", "") or "") or today
+        start = parse_date(request.query_params.get("start", "") or "") or (end - timedelta(days=29))
+        # A facility-scoped `report.read` reaches its own facilities' figures
+        # and no others: "every facility" means every one *you* may see.
+        authorization = get_authorization(request)
+        allowed = None
+        for code in ("sale.read", "report.read"):
+            reach = authorization.accessible_facility_ids(code)
+            if reach is not None:
+                allowed = reach if allowed is None else allowed & reach
+        facility = None
+        if request.query_params.get("facility"):
+            facility = get_object_or_404(Facility, uuid=request.query_params["facility"])
+            if allowed is not None and facility.id not in allowed:
+                raise PermissionDenied("Your access to reports does not cover this facility.")
+        try:
+            return Response(sales_report(start, end, facility=facility, facility_ids=allowed))
+        except ValueError as problem:
+            raise DomainError(str(problem)) from problem
 
 
 class SalesSummaryView(APIView):

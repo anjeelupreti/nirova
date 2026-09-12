@@ -6,6 +6,7 @@ from apps.pos.views import (
     CounterSessionViewSet,
     SaleReturnViewSet,
     SaleViewSet,
+    SalesReportView,
     SalesSummaryView,
 )
 
@@ -19,5 +20,6 @@ urlpatterns = [
     # session reference by the detail route.
     path("search/", CounterSearchView.as_view(), name="pos-search"),
     path("summary/", SalesSummaryView.as_view(), name="pos-summary"),
+    path("report/", SalesReportView.as_view(), name="pos-report"),
     path("", include(router.urls)),
 ]
