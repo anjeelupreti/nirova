@@ -171,6 +171,7 @@ export function NurseHome({ workspace }: { workspace: ReturnType<typeof useResou
                       </span>
                     </span>
                   }
+                  person={patient.patient_name}
                   title={patient.patient_name}
                   detail={
                     <>
@@ -310,6 +311,7 @@ export function FrontDeskHome({
                       {token.token_number}
                     </span>
                   }
+                  person={token.patient_name}
                   title={token.patient_name}
                   detail={
                     <>
@@ -340,9 +342,26 @@ export function FrontDeskHome({
           ) : !data ? (
             <PanelEmpty message="No queue data." />
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <Figure label="Waiting" value={data.statistics.waiting} />
-              <Figure label="In service" value={data.statistics.in_service} />
+            <div className="space-y-3">
+              {/*
+                A donut because the question is a share: of everybody through
+                the door today, how many are still waiting. The total sits in
+                the hole, and the same numbers are one keystroke away as a
+                table for anybody who needs the figure exactly.
+              */}
+              <Chart.Donut
+                slices={[
+                  { name: "Waiting", value: data.statistics.waiting },
+                  { name: "Being seen", value: data.statistics.in_service },
+                  { name: "Done", value: data.statistics.completed },
+                  { name: "Left or skipped", value: data.statistics.left + data.statistics.skipped },
+                ]}
+                totalLabel="today"
+                height={170}
+                emptyMessage="Nobody through the door yet today."
+                asOf={queue.at}
+              />
+              <div className="grid grid-cols-2 gap-3">
               <Figure
                 label="Median wait"
                 value={`${data.statistics.average_wait_minutes}m`}
@@ -353,6 +372,7 @@ export function FrontDeskHome({
                 value={`${data.statistics.longest_wait_minutes}m`}
                 tone={data.statistics.longest_wait_minutes > 90 ? "critical" : undefined}
               />
+              </div>
             </div>
           )}
         </WorkspacePanel>
@@ -435,6 +455,7 @@ export function DoctorHome({
                       {token.token_number}
                     </span>
                   }
+                  person={token.patient_name}
                   title={token.patient_name}
                   detail={
                     <>
@@ -443,6 +464,7 @@ export function DoctorHome({
                     </>
                   }
                   meta={`${token.waiting_minutes}m`}
+                  trailing={<StatusBadge status={token.status} />}
                   // Straight into the consultation. The single most-repeated
                   // action of a clinic day should not be three clicks.
                   to={`/consultation/${token.patient_uuid}`}
@@ -521,6 +543,7 @@ export function DoctorHome({
               <WorklistRow
                 key={alert.uuid}
                 tone="critical"
+                person={alert.patient_name}
                 title={alert.patient_name}
                 detail={
                   <>
@@ -555,6 +578,7 @@ export function DoctorHome({
             {(mine.data?.results ?? []).slice(0, 6).map((encounter) => (
               <WorklistRow
                 key={encounter.uuid}
+                person={encounter.patient_name}
                 title={encounter.patient_name}
                 detail={
                   <>
@@ -563,6 +587,7 @@ export function DoctorHome({
                   </>
                 }
                 meta={waitedFor(encounter.started_at)}
+                trailing={<StatusBadge status={encounter.status} />}
                 to={`/consultation/${encounter.patient}`}
               />
             ))}
@@ -951,9 +976,16 @@ export function LabHome({ facility }: { facility: string | null }) {
               {orders.slice(0, 8).map((order) => (
                 <WorklistRow
                   key={order.uuid}
+                  person={order.patient_name}
                   title={order.patient_name}
                   detail={`${order.priority === "routine" ? "" : `${order.priority.toUpperCase()} · `}${order.test_name} · ${STAGE[order.status] ?? order.status.replace("_", " ")}`}
                   meta={waitedFor(order.ordered_at)}
+                  trailing={
+                    <StatusBadge
+                      status={order.status}
+                      label={STAGE[order.status] ?? undefined}
+                    />
+                  }
                   tone={
                     order.priority === "stat" || order.is_overdue
                       ? "critical"
@@ -985,6 +1017,7 @@ export function LabHome({ facility }: { facility: string | null }) {
               {(alerts.data?.results ?? []).slice(0, 5).map((alert) => (
                 <WorklistRow
                   key={alert.uuid}
+                  person={alert.patient_name}
                   title={`${alert.analyte} ${alert.value}`}
                   detail={`${alert.patient_name} · ${alert.order_reference}`}
                   meta={waitedFor(alert.raised_at)}
@@ -1138,6 +1171,7 @@ export function AccountsHome({ facility }: { facility: string | null }) {
               return (
                 <WorklistRow
                   key={invoice.uuid}
+                  person={invoice.bill_to_name}
                   title={invoice.bill_to_name}
                   detail={[invoice.number, invoice.patient_mrn].filter(Boolean).join(" · ")}
                   meta={waitedFor(invoice.issued_at)}

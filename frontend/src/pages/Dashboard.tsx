@@ -642,6 +642,33 @@ function LeadershipHome({
         </WorkspacePanel>
       ) : null}
 
+      {mayEd && today.data?.outpatients ? (
+        <WorkspacePanel
+          title="Outpatients"
+          description={scopeLabel ? `${scopeLabel} · today` : "today"}
+          icon="queue"
+          to="/queue"
+        >
+          <Chart.Donut
+            slices={[
+              {
+                name: "Seen",
+                value: Math.max(0, today.data.outpatients.seen - today.data.outpatients.waiting),
+              },
+              { name: "Waiting", value: today.data.outpatients.waiting },
+              { name: "Did not attend", value: today.data.outpatients.no_shows },
+            ]}
+            totalLabel="patients"
+            height={180}
+            emptyMessage="No outpatients yet today."
+            asOf={today.at}
+          />
+          <p className="mt-2 type-caption">
+            {today.data.outpatients.appointments} booked for today.
+          </p>
+        </WorkspacePanel>
+      ) : null}
+
       {mayLab && today.data?.laboratory ? (
         <WorkspacePanel
           title="Laboratory"

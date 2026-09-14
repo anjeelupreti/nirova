@@ -31,6 +31,7 @@ import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { HeroArt } from "@/components/ui/HeroArt";
+import { Avatar } from "@/components/ui/data";
 import { Spinner } from "@/components/ui/loader";
 import { Freshness } from "@/components/ui/status";
 import { personaAccent, type Persona } from "@/components/shell/personas";
@@ -315,6 +316,7 @@ export function PanelEmpty({
  */
 export function WorklistRow({
   leading,
+  person,
   title,
   detail,
   meta,
@@ -323,6 +325,12 @@ export function WorklistRow({
   to,
 }: {
   leading?: React.ReactNode;
+  /**
+   * The person the row is about. Shown as an initials avatar: a list of names
+   * with a face beside each is scanned by the face, the way people read a
+   * waiting room, and the colour is stable per name.
+   */
+  person?: string;
   title: React.ReactNode;
   detail?: React.ReactNode;
   meta?: React.ReactNode;
@@ -346,6 +354,7 @@ export function WorklistRow({
         />
       ) : null}
       {leading}
+      {person ? <Avatar name={person} size="sm" /> : null}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
         {detail ? (

@@ -13069,3 +13069,28 @@ Not yet taken from the references, and next: charts where the data is a share
 (the queue as a donut with the total in the middle), avatars in people lists,
 status pills on rows, and trend deltas against yesterday, which need the
 figures to be kept by day first.
+
+## 295 - Faces, states and shares
+
+The second pass against the three references: the moves that are pure screen
+work.
+
+**A face beside every person.** `WorklistRow` takes a `person`, drawn as an
+initials avatar whose colour is stable per name. Every people list on the
+boards carries one: the ward, the front desk queue, the doctor's list, open
+consultations, critical results, the laboratory worklist and unpaid invoices.
+A list of names with a face beside each is scanned by the face.
+
+**A state where a row had one and did not say it.** The doctor's list and open
+consultations show the encounter's status as a pill; the laboratory worklist
+shows each order's stage (to collect, at the bench, to verify).
+
+**A donut where the question is a share.** The front desk's morning is the
+day's queue as a donut -- waiting, being seen, done, left -- with the total in
+the hole and the waits beneath. The owner's dashboard gained an Outpatients
+donut (seen, waiting, did not attend) with the day's bookings, which also fills
+the empty column the bottom row used to leave. Both keep the chart frame's
+table view, so the exact figure is always available.
+
+Not captured on screen: the front desk donut, because no demo account holds
+the front desk board by default. Checked by type.
