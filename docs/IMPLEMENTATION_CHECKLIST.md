@@ -1319,8 +1319,15 @@ never built.*
 - [x] Declined and unreachable are recorded as different things, and shown on
       the patient record's Messages tab
 - [ ] A bill-outstanding reminder (the kind exists; nothing sends it yet)
-- [ ] A real-time channel: the queue board, the bed board and the bell still
-      poll
+- [x] **Live updates** (log 287): the queue, the bed board and the bell hear a
+      doorbell the moment their data changes, with polling kept as the safety
+      net
+- [x] The socket carries only "this changed" — never data — and screens
+      refetch through the authorised API
+- [x] Authenticated by first message, never the URL; organization checked
+      against live memberships; topics from a fixed list; origin checked
+- [ ] Live updates for the emergency department, ICU and laboratory worklist
+      (they still poll)
 - [ ] Messaging between staff about a patient
 
 ## Standing guards

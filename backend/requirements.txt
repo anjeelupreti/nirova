@@ -13,13 +13,21 @@ python-dateutil==2.9.0.post0
 # Encrypts the second-factor secret at rest (Fernet). The one thing in the
 # identity tables that, read from a backup, would let somebody sign in as the
 # person — so it is not stored as plain text. See apps/identity/mfa.py.
-cryptography==45.0.7
+cryptography==50.0.1
 
 # WSGI server for the container image. `runserver` is a development tool: it
 # is single-threaded per request, reloads on file changes, and Django itself
 # says not to deploy it. Not used outside Docker, which is why it sits apart
 # from the application dependencies above.
 gunicorn==23.0.0
+
+# Live updates (apps/realtime). A separate process, not a replacement for
+# gunicorn: HTTP stays exactly as it is, and `daphne` serves only /ws/. The
+# socket is a doorbell — "the queue changed" — never a data channel, so the
+# browser refetches through the ordinary authorised API.
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2
 
 # Testing. The seeds are this project's verification mechanism -- they run the
 # real service layer and narrate what they expect -- so the test suite mostly

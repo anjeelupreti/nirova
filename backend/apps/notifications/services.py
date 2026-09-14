@@ -247,6 +247,13 @@ def _write(
     # exactly the desired outcome.
     NotificationReceipt.objects.bulk_create(receipts, ignore_conflicts=True)
 
+    # bulk_create sends no post_save, so the bell's doorbell is rung here
+    # rather than by the realtime signal; on_commit, like every ring.
+    from apps.realtime.publish import ring
+
+    for receipt in receipts:
+        ring("notifications", user_uuid=str(receipt.recipient_id))
+
     if category in UNSILENCEABLE:
         record(
             action=AuditAction.CREATE,

@@ -47,6 +47,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "channels",
     "rest_framework",
     "corsheaders",
     "django_filters",
@@ -101,7 +102,9 @@ TENANT_APPS = [
     "apps.dataimport",
 ]
 
-LOCAL_APPS = ["apps.common"] + CONTROL_PLANE_APPS + TENANT_APPS
+# `apps.realtime` owns no tables: it only rings a doorbell when tenant data
+# changes, so it belongs to neither list.
+LOCAL_APPS = ["apps.common", "apps.realtime"] + CONTROL_PLANE_APPS + TENANT_APPS
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -149,6 +152,21 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
+
+# Live updates travel through Redis, which the stack already runs for Celery.
+# A separate database number, so a `FLUSHDB` during Celery debugging cannot
+# silently disconnect every open board.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [env("REALTIME_REDIS_URL", default="redis://localhost:6379/2")],
+            # A doorbell nobody is listening for is dropped rather than queued:
+            # a board that reconnects refetches anyway.
+            "expiry": 30,
+        },
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Databases

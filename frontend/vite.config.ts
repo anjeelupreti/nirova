@@ -83,6 +83,15 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY ?? "http://localhost:8000",
         changeOrigin: true,
       },
+      // Live updates, to `daphne` (port 8001) rather than runserver: the
+      // doorbell socket is served by its own ASGI process in every
+      // environment, so development does not hide a proxy that forgets the
+      // Upgrade header.
+      "/ws": {
+        target: process.env.VITE_REALTIME_PROXY ?? "ws://localhost:8001",
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })

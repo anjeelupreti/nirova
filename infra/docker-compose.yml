@@ -82,6 +82,8 @@ x-backend-env: &backend-env
   NIROVA_TENANT_DB_HOST: postgres
   NIROVA_TENANT_DB_PORT: "5432"
   REDIS_URL: redis://redis:6379/0
+  # Live updates, on their own Redis database (see CHANNEL_LAYERS).
+  REALTIME_REDIS_URL: redis://redis:6379/2
   # Both applications are served same-origin through their own nginx, so CORS
   # is unused in this stack. Listed for the case where a developer runs
   # `npm run dev` on the host against this backend.
@@ -245,6 +247,22 @@ services:
   # -----------------------------------------------------------------------
   # Web
   # -----------------------------------------------------------------------
+  # Live updates. The same image, serving only /ws/ through daphne; HTTP
+  # stays on gunicorn. It carries doorbells, never data (apps/realtime).
+  realtime:
+    image: nirova-backend
+    container_name: nirova-realtime
+    environment:
+      <<: *backend-env
+      NIROVA_BOOTSTRAP: ""
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8001", "config.asgi:application"]
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   frontend:
     build:
       context: ..
@@ -256,6 +274,7 @@ services:
     environment:
       NGINX_PORT: "80"
       API_UPSTREAM: backend:8000
+      REALTIME_UPSTREAM: realtime:8001
     ports:
       # 5173 outside, so the URL matches the one `npm run dev` serves and no
       # bookmark or habit changes between the two ways of running this.

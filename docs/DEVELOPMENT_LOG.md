@@ -12737,3 +12737,72 @@ moment they may see it — and failing to send must not undo a release that has
 happened. And the patient record has a **Messages** tab showing every attempt
 with what was written, because reception is asked "did anybody tell her?" and
 the answer has to be better than "the system usually does".
+
+
+## 287 - The queue board was fifteen seconds behind the desk
+
+*14 September 2026.*
+
+Every live screen polled. The queue every fifteen seconds, the bed board every
+two minutes, the notification bell every minute — so a patient called at the
+desk reached the waiting-room screen up to fifteen seconds later, a bed freed
+on one ward reached the other ward's board two minutes later, and a critical
+result reached the bell a minute after it was raised. Meanwhile every open
+board made a request per interval whether or not anything had happened.
+
+**HTTP stays exactly where it is.** Every view in this project is synchronous,
+and moving them all under an event loop to gain a socket would be a large
+change made for a small feature. So the socket is its own process: the same
+image, `daphne` serving only `/ws/`, behind nginx with the Upgrade headers and
+an hour's read timeout (a board left open for a shift sends nothing for long
+stretches, and nginx's sixty-second default would cut it every minute). Its
+Redis layer is database 2, so a `FLUSHDB` while debugging Celery cannot
+silently disconnect every board in the building.
+
+**A doorbell, not a data channel.** What crosses the socket is
+`{"type": "changed", "topic": "queue.<facility>"}` and nothing else — no name,
+no bed, no token. The screen that hears it refetches through the ordinary API,
+where authorisation, scope, care relationships and the audit trail already
+live. A socket that carried the data would be a second API with its own
+permission checks, and the day the two drifted a ward list would reach a
+socket that should never have had it. A test rings with an extra `patient`
+field and asserts it is not forwarded.
+
+**Nobody listens who could not read the screen.** The token is sent as the
+first message rather than in the URL, because a URL is written into every
+access log it passes. It is checked the way the HTTP authenticator checks it —
+signature, expiry, an active account, not issued before the password last
+changed — and the organization against the account's live memberships, so a
+token for one hospital cannot listen to another's queue. Every group name
+carries the organization. A socket silent for ten seconds is closed, topics
+come from a fixed list, and the origin is checked against `ALLOWED_HOSTS` so a
+page on another site cannot open one with a token it lifted.
+
+**Rung after the commit.** Rung inside the transaction, a browser could
+refetch before the row is visible and show the old state with confidence.
+
+**Polling stays as the safety net.** A socket drops, a proxy buffers, Redis
+restarts. The screens keep their intervals; the doorbell makes them immediate
+when it works, and they are merely as they were when it does not. The rings
+come from signals on `QueueToken`, `Bed`, `BedAssignment` and
+`NotificationReceipt` rather than calls at each service, because the next
+place that moves a patient into a bed would forget to ring.
+
+One tab holds one socket, shared by every screen, reconnecting with a backoff
+capped at thirty seconds so a server restart is not met with a stampede from
+every board at once.
+
+Adding the dependencies pulled `cryptography` from 45.0.7 to 50.0.1, which the
+second-factor secrets and the sealed merchant keys both rely on. It is pinned
+at the resolved version, and those test files were run against it before
+anything else.
+
+### What the live check caught
+
+The tests passed and the bell still stayed silent in the running stack. A
+socket through nginx authenticated, an announcement was sent, and nothing
+rang: receipts are written with `bulk_create`, which sends no `post_save`, so
+the signal the bell relied on never fired for a new notification. `notify()`
+now rings each recipient after the insert (on commit, like every ring), and a
+test holds it. Measured through nginx and daphne afterwards, the doorbell
+reached the browser 335 ms after the announcement was posted.

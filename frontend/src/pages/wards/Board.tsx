@@ -48,6 +48,7 @@ import {
   Wrench,
 } from "lucide-react";
 
+import { listen } from "@/lib/live";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button, Card, Input } from "@/components/ui/primitives";
@@ -199,11 +200,17 @@ export function WardBoard({
     setBoard(null);
     setWard("all");
     void load();
-    // A board on a wall is left open for a shift. Two minutes is fresher than
-    // anyone walks past it, and far gentler than a socket per nurses' station.
+    // A board on a wall is left open for a shift. The doorbell makes a bed
+    // freed on the other ward show here at once; the two-minute interval stays
+    // as the safety net, and every board in the building shares one socket
+    // per tab rather than holding one each.
     const timer = window.setInterval(() => void load(), 120_000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    const stop = facility ? listen(`beds.${facility}`, () => void load()) : () => undefined;
+    return () => {
+      window.clearInterval(timer);
+      stop();
+    };
+  }, [load, facility]);
 
   const visibleWards = useMemo(() => {
     if (!board) return [];

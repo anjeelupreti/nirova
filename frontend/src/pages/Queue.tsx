@@ -19,6 +19,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { listen } from "@/lib/live";
 import api from "@/lib/api";
 import type {
   Facility,
@@ -113,8 +114,14 @@ export default function QueuePage() {
   useEffect(() => {
     void load();
     const handle = setInterval(() => void load(), REFRESH_MS);
-    return () => clearInterval(handle);
-  }, [load]);
+    // A patient called at the desk is on this board at once rather than up to
+    // fifteen seconds later — the interval stays for when the socket is down.
+    const stop = facilityUuid ? listen(`queue.${facilityUuid}`, () => void load()) : () => undefined;
+    return () => {
+      clearInterval(handle);
+      stop();
+    };
+  }, [load, facilityUuid]);
 
   async function act(path: string, body?: unknown) {
     setBusy(true);
@@ -157,7 +164,7 @@ export default function QueuePage() {
     <Page>
       <PageHeader
         title="Queue"
-        description={`Live OPD queue, refreshing every ${REFRESH_MS / 1000} seconds.`}
+        description="Live OPD queue."
         actions={
           <>
             <Select

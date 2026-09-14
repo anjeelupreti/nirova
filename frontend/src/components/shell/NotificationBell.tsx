@@ -18,6 +18,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { useNavigate } from "react-router-dom";
 import { Bell, CheckCheck, ChevronRight } from "lucide-react";
 
+import { listen } from "@/lib/live";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { NotificationRow, NotificationSummary } from "@/types";
@@ -61,9 +62,13 @@ export function NotificationBell() {
     const timer = window.setInterval(loadSummary, REFRESH_MS);
     const onFocus = () => loadSummary();
     window.addEventListener("focus", onFocus);
+    // The doorbell: a critical result is on the bell the moment it is raised,
+    // not up to a minute later. The interval stays as the safety net.
+    const stop = listen("notifications", loadSummary);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
+      stop();
     };
   }, [loadSummary]);
 
