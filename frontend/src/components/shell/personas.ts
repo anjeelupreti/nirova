@@ -30,6 +30,7 @@ export type PersonaId =
   | "nurse"
   | "frontdesk"
   | "pharmacy"
+  | "laboratory"
   | "finance"
   | "people"
   | "platform"
@@ -77,9 +78,12 @@ const LADDER: {
     },
     // Somebody who can see the plan *and* the money is running the place, not
     // working a desk in it.
+    // `user.read` across the organization as well: an accountant holds
+    // the other two, and was shown the owner's overview as their own day.
     requires: [
       ["subscription.read", "organization"],
       ["finance.read", "facility"],
+      ["user.read", "organization"],
     ],
   },
   {
@@ -117,6 +121,18 @@ const LADDER: {
       accent: 3,
     },
     requires: [["patient.clinical.read", "facility"], ["encounter.create", "own"]],
+  },
+  // Before pharmacy: a laboratory technician holds `stock.read` (reagents),
+  // and was being greeted by the dispensary.
+  {
+    persona: {
+      id: "laboratory",
+      label: "The bench",
+      blurb: "Samples to collect, results to enter, criticals to call",
+      icon: "laboratory",
+      accent: 2,
+    },
+    requires: [["diagnostic.process", "facility"]],
   },
   {
     persona: {

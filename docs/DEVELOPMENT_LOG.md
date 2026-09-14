@@ -12951,3 +12951,34 @@ list becomes a row that scrolls.
 **My profile is details and employment**: sign-in details, employment record
 and licences, attendance and shifts, leave, payslips, shift swaps, team
 requests. A password that must be changed links to Settings.
+
+## 292 - A lab technician was shown the dispensary
+
+Two people still opened My day onto a board that was not theirs, and both for
+the same reason: the persona ladder matches the first rung whose permissions a
+person holds, and two rungs asked for too little.
+
+**The laboratory technician matched pharmacy.** The role holds `stock.read`
+for reagents, which was all the pharmacy rung required. A laboratory rung now
+sits above it, on `diagnostic.process`, with a board of its own ("The bench"):
+the worklist in the order work should be picked up -- STAT, urgent, oldest, as
+the server already sorts it -- with each order's stage (to collect, at the
+bench, to verify), counts of each and of overdue; critical values not yet
+communicated; and the last seven days' bench time, orders past target,
+released and rejected samples.
+
+**The accountant matched leadership** and was shown the owner's overview,
+because that rung asked only for `subscription.read` and `finance.read`, both
+of which an accountant holds. It now also asks for `user.read` across the
+organization. The finance rung gets its first personal board: today's cash-up
+by payment method, unpaid invoices oldest first with the balance on each, and
+the organization's collected, owed and past-due figures.
+
+**Receivables follow the role's reach, not the building.** The first version
+listed unpaid invoices at the facility the board had guessed -- the hospital --
+and said "every invoice here is paid" beside "NPR 1,400 still owed" across the
+organization, because the one unpaid invoice was at the clinic. Somebody whose
+`invoice.read` reaches the whole organization now sees every site's.
+
+Checked against the demo data rather than assumed: no laboratory order is open
+anywhere (all 88 are released or rejected), so the empty worklist is true.

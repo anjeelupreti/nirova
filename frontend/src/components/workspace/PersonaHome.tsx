@@ -10,7 +10,9 @@
  */
 
 import {
+  AccountsHome,
   DoctorHome,
+  LabHome,
   FrontDeskHome,
   NurseHome,
   PeopleHome,
@@ -41,8 +43,12 @@ export function PersonaHome({
       return <PharmacyHome workspace={workspace} facility={oneFacility} />;
     case "people":
       return <PeopleHome workspace={workspace} />;
+    case "laboratory":
+      return <LabHome facility={oneFacility} />;
+    case "finance":
+      return <AccountsHome facility={oneFacility} />;
     default:
-      // Leadership, finance and the general case have no *personal* board:
+      // Leadership and the general case have no *personal* board:
       // their day is the organization's day, which is the dashboard. The
       // approvals below are what is theirs.
       return null;

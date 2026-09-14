@@ -37,15 +37,20 @@ import {
 import type {
   CounterSession,
   CriticalAlert,
+  DailyCollection,
   DepartmentSummary,
+  DiagnosticOrder,
   Encounter,
   Facility,
   HrDashboard,
+  Invoice,
   MyWorkspace,
   NurseWorkspaceSummary,
+  Paginated,
   ProcurementDashboard,
   QueueResponse,
   SalesSummary,
+  TurnaroundReport,
 } from "@/types";
 import { useSession } from "@/hooks/useSession";
 import { useCan } from "@/components/ui/can";
@@ -878,3 +883,297 @@ function Figure({
 }
 
 export type { Facility };
+
+/* -------------------------------------------------------------------------- */
+/* Laboratory                                                                  */
+/* -------------------------------------------------------------------------- */
+
+const STAGE: Record<string, string> = {
+  ordered: "to collect",
+  collected: "collected",
+  received: "at the bench",
+  in_progress: "in progress",
+  resulted: "to verify",
+  verified: "verified, not released",
+};
+
+/**
+ * The bench: what to pick up next, what is critical, and how fast it goes.
+ *
+ * **A technician was shown the dispensary.** The role holds `stock.read` for
+ * reagents, and the persona ladder matched it to pharmacy -- a board of
+ * takings and orders for somebody whose day is samples. The worklist comes
+ * first and in the order work should be picked up (STAT, urgent, then oldest,
+ * as the server sorts it), with the stage each order is at, because "to
+ * collect" and "to verify" are different people walking to different places.
+ */
+export function LabHome({ facility }: { facility: string | null }) {
+  const bench = useResource<{ count: number; overdue: number; orders: DiagnosticOrder[] }>(
+    facility ? `/diagnostics/worklist/?facility=${facility}` : null,
+  );
+  const alerts = useResource<Paginated<CriticalAlert>>("/diagnostics/critical-alerts/?open=true");
+  const turnaround = useResource<TurnaroundReport>(
+    facility ? `/diagnostics/turnaround/?facility=${facility}` : null,
+  );
+
+  const orders = bench.data?.orders ?? [];
+  const count = (statuses: string[]) => orders.filter((order) => statuses.includes(order.status)).length;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <WorkspacePanel
+        title="Worklist"
+        description="STAT first, then urgent, then oldest"
+        icon="laboratory"
+        to="/diagnostics"
+        toLabel="Open laboratory"
+        span={2}
+      >
+        {bench.loading ? (
+          <PanelLoading height={220} />
+        ) : bench.error ? (
+          <PanelProblem error={bench.error} />
+        ) : orders.length === 0 ? (
+          <PanelEmpty message="Nothing on the bench. Every order is released." />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Figure label="To collect" value={count(["ordered"])} />
+              <Figure label="At the bench" value={count(["collected", "received", "in_progress"])} />
+              <Figure label="To verify" value={count(["resulted", "verified"])} />
+              <Figure
+                label="Overdue"
+                value={bench.data?.overdue ?? 0}
+                tone={(bench.data?.overdue ?? 0) > 0 ? "critical" : undefined}
+              />
+            </div>
+            <div className="space-y-0.5">
+              {orders.slice(0, 8).map((order) => (
+                <WorklistRow
+                  key={order.uuid}
+                  title={order.patient_name}
+                  detail={`${order.priority === "routine" ? "" : `${order.priority.toUpperCase()} · `}${order.test_name} · ${STAGE[order.status] ?? order.status.replace("_", " ")}`}
+                  meta={waitedFor(order.ordered_at)}
+                  tone={
+                    order.priority === "stat" || order.is_overdue
+                      ? "critical"
+                      : order.priority === "urgent"
+                        ? "warning"
+                        : undefined
+                  }
+                  to="/diagnostics"
+                />
+              ))}
+              {orders.length > 8 ? (
+                <p className="pt-1 type-caption">and {orders.length - 8} more on the worklist</p>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </WorkspacePanel>
+
+      <div className="space-y-4">
+        <WorkspacePanel title="Critical values" description="Not yet communicated" icon="warning" to="/diagnostics">
+          {alerts.loading ? (
+            <PanelLoading />
+          ) : alerts.error ? (
+            <PanelProblem error={alerts.error} />
+          ) : (alerts.data?.results ?? []).length === 0 ? (
+            <PanelEmpty message="No critical value is waiting to be called through." />
+          ) : (
+            <div className="space-y-0.5">
+              {(alerts.data?.results ?? []).slice(0, 5).map((alert) => (
+                <WorklistRow
+                  key={alert.uuid}
+                  title={`${alert.analyte} ${alert.value}`}
+                  detail={`${alert.patient_name} · ${alert.order_reference}`}
+                  meta={waitedFor(alert.raised_at)}
+                  tone="critical"
+                  to="/diagnostics"
+                />
+              ))}
+            </div>
+          )}
+        </WorkspacePanel>
+
+        <WorkspacePanel title="Turnaround" description="Last seven days" icon="duration">
+          {turnaround.loading ? (
+            <PanelLoading />
+          ) : turnaround.error ? (
+            <PanelProblem error={turnaround.error} />
+          ) : !turnaround.data ? (
+            <PanelEmpty message="Nothing released in the last week." />
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <Figure
+                label="Bench time"
+                value={formatValue(turnaround.data.average_lab_minutes, "duration")}
+              />
+              <Figure
+                label="Past target"
+                value={formatValue(turnaround.data.breach_rate_percent, "percent")}
+                tone={turnaround.data.breach_rate_percent > 10 ? "warning" : undefined}
+              />
+              <Figure label="Released" value={turnaround.data.released} />
+              <Figure
+                label="Rejected samples"
+                value={turnaround.data.rejected}
+                tone={turnaround.data.rejected > 0 ? "warning" : undefined}
+              />
+            </div>
+          )}
+        </WorkspacePanel>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Accounts                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Accounts: what came in today, and who still owes.
+ *
+ * **An accountant was shown the owner's overview as their own day**, because
+ * the ladder's leadership rung asked only for two permissions the accountant
+ * also holds. Their day is the cash-up and the receivables: today's takings by
+ * method, because the drawer is counted apart from the wallets, and the unpaid
+ * invoices oldest first, because the oldest is the one least likely to be paid.
+ */
+export function AccountsHome({ facility }: { facility: string | null }) {
+  const can = useCan();
+  const collection = useResource<DailyCollection>(
+    facility ? `/billing/collection/?facility=${facility}` : null,
+  );
+  /*
+    Receivables follow the role's reach, not the building. An accountant's
+    grant is the whole organization, and the demo's one unpaid invoice was at
+    the clinic while this board looked at the hospital -- "every invoice here
+    is paid" beside "NPR 1,400 still owed" across the organization.
+  */
+  const everySite = can("invoice.read", "organization");
+  const unpaid = useResource<Paginated<Invoice>>(
+    everySite
+      ? "/billing/invoices/?unpaid=true&is_credit_note=false&ordering=issued_at"
+      : facility
+        ? `/billing/invoices/?unpaid=true&is_credit_note=false&facility=${facility}&ordering=issued_at`
+        : null,
+  );
+  const organization = useResource<{
+    billing?: { collected: string; outstanding: string; overdue_invoices: number };
+  }>("/org/today/", can("analytics.read", "organization"));
+
+  const methods = Object.values(collection.data?.by_method ?? {}).filter(
+    (method) => Number(method.total) !== 0,
+  );
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <WorkspacePanel
+        title="Collected today"
+        description={collection.data?.facility ?? "This facility"}
+        icon="payment"
+        to="/billing"
+        toLabel="Open billing"
+      >
+        {collection.loading ? (
+          <PanelLoading height={160} />
+        ) : collection.error ? (
+          <PanelProblem error={collection.error} />
+        ) : !collection.data ? (
+          <PanelEmpty message="Choose where you work to see its cash-up." />
+        ) : (
+          <div className="space-y-3">
+            <Figure
+              label="Net collected"
+              value={formatValue(Number(collection.data.net_collected), "money")}
+              large
+            />
+            <p className="type-caption">
+              {collection.data.payment_count} payments · {collection.data.invoices_issued} invoices issued
+              {Number(collection.data.refunded) > 0
+                ? ` · ${formatValue(Number(collection.data.refunded), "money")} refunded`
+                : ""}
+            </p>
+            {methods.length > 0 ? (
+              <ul className="divide-y divide-border text-sm">
+                {methods.map((method) => (
+                  <li key={method.label} className="flex justify-between py-1.5">
+                    <span className="text-muted-foreground">{method.label}</span>
+                    <span className="tabular-nums">{formatValue(Number(method.total), "money")}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="type-caption">Nothing received yet today.</p>
+            )}
+          </div>
+        )}
+      </WorkspacePanel>
+
+      <WorkspacePanel
+        title="Unpaid invoices"
+        description={
+          unpaid.data
+            ? `${unpaid.data.count} open${everySite ? " across every site" : ""}, oldest first`
+            : "Oldest first"
+        }
+        icon="invoice"
+        to="/billing"
+        span={2}
+      >
+        {unpaid.loading ? (
+          <PanelLoading height={160} />
+        ) : unpaid.error ? (
+          <PanelProblem error={unpaid.error} />
+        ) : (unpaid.data?.results ?? []).length === 0 ? (
+          <PanelEmpty message={everySite ? "Every invoice is paid." : "Every invoice here is paid."} />
+        ) : (
+          <div className="space-y-0.5">
+            {(unpaid.data?.results ?? []).slice(0, 8).map((invoice) => {
+              const days = invoice.issued_at
+                ? Math.floor((Date.now() - new Date(invoice.issued_at).getTime()) / 86_400_000)
+                : 0;
+              return (
+                <WorklistRow
+                  key={invoice.uuid}
+                  title={invoice.bill_to_name}
+                  detail={[invoice.number, invoice.patient_mrn].filter(Boolean).join(" · ")}
+                  meta={waitedFor(invoice.issued_at)}
+                  trailing={
+                    <span className="text-sm font-semibold tabular-nums">
+                      {formatValue(Number(invoice.balance_due), "money")}
+                    </span>
+                  }
+                  tone={days > 30 ? "critical" : days > 7 ? "warning" : undefined}
+                  to="/billing"
+                />
+              );
+            })}
+          </div>
+        )}
+      </WorkspacePanel>
+
+      {organization.data?.billing ? (
+        <WorkspacePanel title="Across the organization" description="Every site, today" icon="finance" to="/billing">
+          <div className="grid grid-cols-2 gap-4">
+            <Figure
+              label="Collected"
+              value={formatValue(Number(organization.data.billing.collected), "money")}
+            />
+            <Figure
+              label="Still owed"
+              value={formatValue(Number(organization.data.billing.outstanding), "money")}
+            />
+            <Figure
+              label="Past due"
+              value={organization.data.billing.overdue_invoices}
+              tone={organization.data.billing.overdue_invoices > 0 ? "critical" : undefined}
+            />
+          </div>
+        </WorkspacePanel>
+      ) : null}
+    </div>
+  );
+}

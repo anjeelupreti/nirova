@@ -1362,7 +1362,7 @@ in one place — self service, my day, my workspace, the profile drop-down."*
 - [x] Queues are shown as queues; a funnel is only for stages that shrink
 - [ ] Trends against yesterday and last week, not only today's figure
 - [ ] Revenue by department and payer, with drill-through to the invoices
-- [ ] A board for the laboratory and for accounts in My day
+- [x] A board for the laboratory and for accounts in My day (log 292)
 
 ## Standing guards
 
