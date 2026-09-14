@@ -12690,3 +12690,50 @@ not is the sender's judgement.
 Verified in the running stack: an announcement reached sixteen people in-app
 and by email through the worker, and a critical alert raised through the
 ordinary service queued and delivered itself with no caller involvement.
+
+
+## 286 - Telling the patient, without telling their phone too much
+
+*14 September 2026.*
+
+The hospital reaches its staff now. The patient — who owns the appointment,
+the result and the bill — still heard nothing unless they opened the app, and
+a clinic loses something like a fifth of its outpatient slots to people who
+simply forgot. The fix is a text the evening before.
+
+**Consent was recorded and never read.** `Patient.consent_sms` and
+`consent_email` have existed since registration was built, per channel,
+because a patient may accept reminders and refuse campaigns. Nothing consulted
+them. Now nothing is sent without them — and a patient who said no is recorded
+as *declined*, which is a different thing from a patient with no number on
+file, recorded as *unreachable*. One is their choice; the other is a
+registration to fix.
+
+**A text message is read by whoever is holding the phone.** A reminder names
+the hospital and the time. A result message says a result is ready and where to
+see it. Neither carries a name, a test, a consultant or a department: "your
+HIV result is ready" read off a lock screen by somebody else is a disclosure
+the hospital made. Tests assert the absence of each.
+
+**"Tomorrow", not a date.** The console converts to Bikram Sambat with a
+maintained library; the server has no such table, and this codebase has
+refused to hand-type one since log 279 — a wrong month in a hospital message
+is a missed appointment. A reminder sent the evening before does not need a
+calendar at all. The Nepali names the part of the day ("भोलि बिहान 11:15
+बजे"), because "११ बजे" alone is ambiguous in a way "11:00" is not; and the
+digits stay 0–9 in a text, because it is read on whatever handset the patient
+owns and a feature phone that cannot render Devanagari shows boxes where the
+time should be.
+
+**Once.** Every message is keyed on what it is about — the appointment
+reference, the order reference — with a unique constraint, so a sweep that
+runs twice, a second scheduler or a retried task tells somebody once. The
+sweep is a crontab at six in the evening rather than an interval, because
+"every twenty-four hours from whenever the scheduler last restarted" would
+eventually send reminders at four in the morning.
+
+A result is announced to the patient at the moment it is released — the
+moment they may see it — and failing to send must not undo a release that has
+happened. And the patient record has a **Messages** tab showing every attempt
+with what was written, because reception is asked "did anybody tell her?" and
+the answer has to be better than "the system usually does".

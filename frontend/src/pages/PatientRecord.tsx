@@ -54,6 +54,21 @@ import {
   WorkspacePanel,
 } from "@/components/workspace/WorkspaceFrame";
 import type { ClinicalSummary, PatientAccount, PatientDetail } from "@/types";
+
+/** One message the hospital sent — or tried to, or was told not to. */
+interface PatientOutreach {
+  uuid: string;
+  kind: string;
+  kind_label: string;
+  channel: string;
+  address: string;
+  status: "sent" | "failed" | "unreachable" | "declined";
+  status_label: string;
+  detail: string;
+  body: string;
+  sent_at: string | null;
+  created_at: string;
+}
 import { formatDate, formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
@@ -133,6 +148,11 @@ export default function PatientRecordPage() {
     uuid ? `/billing/patients/${uuid}/account/` : null,
     mayBilling,
   );
+  // What the hospital has said to this patient. Identity-level: reception
+  // is the desk that is asked "did anybody tell her?".
+  const messages = useResource<{ results: PatientOutreach[] }>(
+    uuid ? `/clinical/patients/${uuid}/messages/` : null,
+  );
 
   if (patient.loading) {
     return (
@@ -204,6 +224,12 @@ export default function PatientRecordPage() {
             icon: "billing",
             hidden: !mayBilling,
           },
+          {
+            id: "messages",
+            label: "Messages",
+            icon: "notification",
+            count: messages.data?.results.length ?? null,
+          },
         ]}
       >
         {{
@@ -222,6 +248,7 @@ export default function PatientRecordPage() {
           results: <ResultsTab results={results} />,
           medications: <MedicationsTab medications={medications} />,
           billing: <AccountTab account={account} />,
+          messages: <MessagesTab messages={messages} />,
         }}
       </TabbedSection>
     </Page>
@@ -980,6 +1007,70 @@ function AccountTab({ account }: { account: ReturnType<typeof useResource<Patien
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Messages                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What this hospital has said to the patient.
+ *
+ * Every attempt, including the ones that did not go: a patient who refused
+ * texts and a patient with no number on file both look like "nothing was
+ * sent", and they are opposite problems — one is their choice, the other is
+ * a registration to fix. The text is shown as it was sent, because a reminder
+ * somebody disputes is one somebody has to be able to read back.
+ */
+function MessagesTab({
+  messages,
+}: {
+  messages: ReturnType<typeof useResource<{ results: PatientOutreach[] }>>;
+}) {
+  if (messages.loading) return <PanelLoading height={180} />;
+  if (messages.error) return <PanelProblem error={messages.error} />;
+  const rows = messages.data?.results ?? [];
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        title="Nothing sent yet"
+        description="Appointment reminders and result notices appear here, including any that could not be delivered."
+      />
+    );
+  }
+
+  const tone: Record<PatientOutreach["status"], string> = {
+    sent: "text-good",
+    failed: "text-destructive",
+    unreachable: "text-warning",
+    declined: "text-muted-foreground",
+  };
+
+  return (
+    <div className="divide-y rounded-lg border bg-card">
+      {rows.map((row) => (
+        <div key={row.uuid} className="space-y-1.5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">
+              {row.kind_label}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {row.channel === "none" ? "no channel" : row.channel.toUpperCase()}
+                {row.address ? ` · ${row.address}` : ""}
+              </span>
+            </p>
+            <span className={cn("text-xs font-medium", tone[row.status])}>
+              {row.status_label}
+            </span>
+          </div>
+          <p className="whitespace-pre-line text-sm text-muted-foreground">{row.body}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatDateTime(row.sent_at ?? row.created_at)}
+            {row.status !== "sent" && row.detail ? ` · ${row.detail}` : ""}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }

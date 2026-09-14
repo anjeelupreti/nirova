@@ -628,6 +628,18 @@ def verify_order(order: DiagnosticOrder, actor=None) -> DiagnosticOrder:
             "verified_by": getattr(actor, "email", ""),
         },
     )
+
+    # The patient is told a result exists — never what it says. Releasing is
+    # the moment they may see it, and a result nobody mentions is one they
+    # ring reception about three times. Failure here must not undo a release
+    # that has already happened.
+    try:
+        from apps.notifications.patient_outreach import tell_patient_result_ready
+
+        tell_patient_result_ready(order)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not tell the patient about %s", order.reference)
+
     return order
 
 

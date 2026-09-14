@@ -287,6 +287,8 @@ CORS_ALLOW_HEADERS = (
     "x-facility",
 )
 
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 
@@ -312,6 +314,14 @@ CELERY_BEAT_SCHEDULE = {
     "billing-reconcile-online-payments": {
         "task": "billing.reconcile_online_payments",
         "schedule": 10 * 60,
+    },
+    # Tomorrow's appointments, told to the patient the evening before
+    # (apps/notifications/tasks.py). Crontab rather than an interval: "every
+    # 24 hours from whenever the scheduler last restarted" would eventually
+    # send reminders at four in the morning.
+    "notifications-remind-patients": {
+        "task": "notifications.remind_patients",
+        "schedule": crontab(hour=18, minute=0),
     },
 }
 if NIROVA_DEMO_DAY_SLUG:

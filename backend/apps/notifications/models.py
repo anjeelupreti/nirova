@@ -334,3 +334,10 @@ from apps.notifications.delivery import (  # noqa: E402,F401
     DeliveryStatus,
     NotificationDelivery,
 )
+
+# Messages to patients, and what became of them.
+from apps.notifications.patient_outreach import (  # noqa: E402,F401
+    OutreachKind,
+    OutreachStatus,
+    PatientMessage,
+)

@@ -172,6 +172,38 @@ class PatientViewSet(viewsets.ModelViewSet):
         authorization.require("patient.update", Scope.OWN)
         return super().partial_update(request, *args, **kwargs)
 
+    @action(detail=True, methods=["get"], url_path="messages")
+    def messages(self, request, uuid=None):
+        """What this hospital has said to this patient, and what became of it.
+
+        Reception is asked "did anybody tell her?" and the answer has to be
+        better than "the system usually does" — so the reminder that was sent,
+        the one the patient refused, and the one that had no number to go to
+        are all here, with what was actually written.
+        """
+        from apps.notifications.patient_outreach import PatientMessage
+
+        patient = self.get_object()
+        rows = PatientMessage.objects.filter(patient=patient)[:50]
+        return Response({
+            "results": [
+                {
+                    "uuid": str(row.uuid),
+                    "kind": row.kind,
+                    "kind_label": row.get_kind_display(),
+                    "channel": row.channel,
+                    "address": row.address,
+                    "status": row.status,
+                    "status_label": row.get_status_display(),
+                    "detail": row.detail,
+                    "body": row.body,
+                    "sent_at": row.sent_at,
+                    "created_at": row.created_at,
+                }
+                for row in rows
+            ],
+        })
+
     @action(detail=True, methods=["post"], url_path="merge")
     def merge(self, request, uuid=None):
         """Merge a duplicate record into this one.

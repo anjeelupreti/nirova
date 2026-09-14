@@ -1312,7 +1312,13 @@ never built.*
       uses, with the token sealed
 - [x] An announcement composer for `notification.broadcast`, which cannot be
       critical and emails only when the sender says so
-- [ ] Patient-facing reminders (appointment tomorrow, result ready)
+- [x] **Patient reminders** (log 286): the evening before an appointment and
+      when a result is released, in the patient's language, only on a channel
+      they consented to, and once
+- [x] A message to a patient carries no name, test, consultant or department
+- [x] Declined and unreachable are recorded as different things, and shown on
+      the patient record's Messages tab
+- [ ] A bill-outstanding reminder (the kind exists; nothing sends it yet)
 - [ ] A real-time channel: the queue board, the bed board and the bell still
       poll
 - [ ] Messaging between staff about a patient

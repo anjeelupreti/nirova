@@ -42,3 +42,32 @@ def deliver_notification(organization_slug: str, notification_uuid: str,
             # wrong: the transaction that would have kept it did not commit.
             return {}
         return deliver(notification, force=force)
+
+
+@shared_task(name="notifications.remind_patients")
+def remind_patients() -> dict:
+    """The evening-before appointment reminder, for every live tenant.
+
+    A clinic loses a fifth of its outpatient slots to people who forgot. This
+    runs once a day; `send_to_patient` is keyed on the appointment reference,
+    so running it twice — a retry, a second scheduler — still tells somebody
+    once.
+    """
+    from apps.notifications.patient_outreach import remind_tomorrows_appointments
+    from apps.tenancy.connections import context_for_organization
+    from apps.tenancy.context import tenant_context
+    from apps.tenancy.models import Organization, OrganizationStatus
+
+    running = [OrganizationStatus.ACTIVE, OrganizationStatus.TRIAL,
+               OrganizationStatus.PAST_DUE]
+    summary = {}
+    for organization in Organization.objects.filter(status__in=running):
+        try:
+            with tenant_context(context_for_organization(organization)):
+                counts = remind_tomorrows_appointments()
+        except Exception:  # noqa: BLE001 — one tenant must not stop the rest
+            logger.exception("patient reminders failed for %s", organization.slug)
+            continue
+        if any(counts.values()):
+            summary[organization.slug] = counts
+    return summary
