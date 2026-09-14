@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { formatTime } from "@/lib/dates";
+import { PrescriptionTemplates } from "@/components/clinical/PrescriptionTemplates";
 
 const SEVERITY_STYLE: Record<string, string> = {
   critical: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -584,13 +585,29 @@ function PrescribePanel({
           </div>
         ))}
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setLines([...lines, { ...EMPTY_LINE }])}
-        >
-          Add medicine
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setLines([...lines, { ...EMPTY_LINE }])}
+          >
+            Add medicine
+          </Button>
+        </div>
+
+        {/*
+          The scripts this prescriber already agreed with themselves. Applying
+          one fills the lines above; the safety checks then run on them exactly
+          as they do on anything typed, and nothing is prescribed until it is
+          signed.
+        */}
+        <PrescriptionTemplates
+          lines={lines}
+          onApply={(applied, patientInstructions) => {
+            setLines(applied.length > 0 ? applied : [{ ...EMPTY_LINE }]);
+            if (patientInstructions) setNotice(patientInstructions);
+          }}
+        />
 
         {/* Warnings, most severe first. */}
         {safety && safety.warnings.length > 0 && (

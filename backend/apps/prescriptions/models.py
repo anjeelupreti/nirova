@@ -390,3 +390,9 @@ class PrescriptionPresentation(BaseModel):
 
     def __str__(self):
         return f"{self.prescription.reference} @ {self.facility.code}"
+
+# Prescription templates live beside the prescription they produce.
+from apps.prescriptions.templates_models import (  # noqa: E402,F401
+    PrescriptionTemplate,
+    PrescriptionTemplateLine,
+)

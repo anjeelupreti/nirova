@@ -1269,6 +1269,30 @@ a doctor need in their system, what do nurses need?" — see `docs/PRODUCT.md`
 - [ ] The laboratory and accounts have no board of their own yet
 - [ ] Drill-through: a figure on a board does not yet open the rows behind it
 
+## §144 Templates `[~]`
+
+*New on 14 September 2026 (log 284). "There should be templates, for reports
+and prescriptions — how much time, what quantity, how much detail — clear for
+patients to understand and for our record keeping."*
+
+- [x] **Prescription templates**: dose, route, frequency, duration, quantity,
+      when-required indication, plain-words instructions, and advice printed
+      for the patient
+- [x] Applying one fills the form and writes nothing; the safety checks run on
+      the result as on anything typed
+- [x] The quantity is computed from dose × frequency × duration, and a
+      frequency that cannot be computed must carry one
+- [x] Mine and ours: sharing or editing a shared template needs
+      `catalog.manage`; another clinician's personal template is not found
+- [x] Retired, never deleted
+- [x] The route and frequency vocabularies are validated where the row is
+      made — a template saved with `route="oral"` was refused by the
+      prescribing form at the moment a doctor tried to use it
+- [ ] Report templates (laboratory panels, radiology reports, discharge
+      summaries)
+- [ ] Clinical note templates for the consultation screen
+- [ ] Order sets: investigations and medicines together
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

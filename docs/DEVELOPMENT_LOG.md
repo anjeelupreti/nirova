@@ -12569,3 +12569,46 @@ Every personal board is about one place, and the first facility in the list
 was the wrong guess: a doctor at the clinic was shown an empty emergency
 department, because the emergency department is at the hospital. The employee
 record says where somebody works, so that is used first.
+
+
+## 284 - The same script, written forty times a morning
+
+*14 September 2026.*
+
+A clinic doctor writes "Amoxicillin 500 mg, one capsule three times daily for
+five days, after food" perhaps forty times in a morning, and typed every one
+of them. That is not only slow. A line typed forty times is forty chances to
+write 5 mg for 500, or to leave the duration off and send somebody home with
+an open-ended course of an antibiotic.
+
+**A template is a starting point, never a prescription.** Applying one puts
+lines on the prescribing form; the allergy, interaction and duplicate checks
+then run on them exactly as on anything typed, and only signing writes
+anything to a patient's record. A template that wrote a prescription would be
+a prescription nobody read, which is the whole risk of templates in a clinical
+system and the reason this one stops short of it.
+
+**The quantity is computed.** Dose × doses-a-day × days, from the
+`DOSES_PER_DAY` table the prescribing code already carries: one capsule three
+times daily for five days is fifteen, and nobody should be doing that
+arithmetic forty times. Where it *cannot* be computed — when required, "other"
+— the template must carry a number, because a prescription with no quantity is
+one the pharmacy rings back about.
+
+**Mine and ours.** Every prescriber sees the organization's templates and
+their own; nobody sees another clinician's. Sharing one, or editing a shared
+one, needs `catalog.manage`: the organization's templates are its formulary,
+and changing one changes what every prescriber here is offered. Somebody
+else's personal template is *not found* rather than forbidden — its existence
+is not your business either way. And templates are retired, never deleted, so
+the name in an audit entry keeps meaning something.
+
+### The defect the running app found
+
+The first template saved `route="oral"` — the word, not the code, which is
+`PO`. A Django `CharField` with `choices` does not validate on save, so it
+stored happily and was rejected by the prescribing form's own safety check at
+the moment a doctor applied it: a template that cannot be prescribed from,
+which is worse than no template. The vocabulary is now checked where the row
+is made, and a test applies a template and posts the result to the real
+preview endpoint — the only version of this test that would have caught it.
