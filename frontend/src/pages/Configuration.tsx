@@ -35,6 +35,7 @@ import MasterData, { type MasterSpec } from "@/components/MasterData";
 import SystemSettings from "@/components/SystemSettings";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/layout";
+import { useSession } from "@/hooks/useSession";
 
 const PAYER_KINDS = ["insurer", "government", "corporate", "ngo", "self_pay",
                      "other"];
@@ -353,7 +354,20 @@ const PROVIDERS: MasterSpec = {
   ],
 };
 
-const SECTIONS = [
+/**
+ * Each list belongs to a module, and a customer who did not buy the module
+ * has nothing to configure in it. Without `module` here, a pharmacy opened
+ * Configuration and found tabs for theatres and diagnostic tests that
+ * answered 402 — the endpoints behind them are gated
+ * (`apps/entitlements/gate.py`).
+ */
+const SECTIONS: {
+  id: string;
+  label: string;
+  icon: typeof Network;
+  spec: MasterSpec | null;
+  module?: string;
+}[] = [
   // First, and not a master-data list: everything below is a list the daily
   // screens read, and this is the handful of decisions that change how the
   // system behaves. A group opening a second facility abroad needs it before
@@ -362,17 +376,19 @@ const SECTIONS = [
   // First: a facility with no departments is one nothing can be routed
   // inside, so it is the first thing a new organization needs.
   { id: "departments", label: "Departments", icon: Network, spec: DEPARTMENTS },
-  { id: "payers", label: "Payers", icon: ShieldCheck, spec: PAYERS },
-  { id: "packages", label: "Packages", icon: Building, spec: PACKAGES },
-  { id: "locations", label: "Stock locations", icon: Package, spec: LOCATIONS },
-  { id: "theatres", label: "Theatres", icon: Scissors, spec: THEATRES },
-  { id: "tests", label: "Diagnostic tests", icon: FlaskConical, spec: TESTS },
+  { id: "payers", label: "Payers", icon: ShieldCheck, spec: PAYERS, module: "insurance" },
+  { id: "packages", label: "Packages", icon: Building, spec: PACKAGES, module: "insurance" },
+  { id: "locations", label: "Stock locations", icon: Package, spec: LOCATIONS, module: "pharmacy" },
+  { id: "theatres", label: "Theatres", icon: Scissors, spec: THEATRES, module: "hospital" },
+  { id: "tests", label: "Diagnostic tests", icon: FlaskConical, spec: TESTS, module: "laboratory" },
   { id: "providers", label: "Referral providers", icon: Send, spec: PROVIDERS },
 ];
 
 export default function ConfigurationPage() {
-  const [section, setSection] = useState(SECTIONS[0].id);
-  const active = SECTIONS.find((entry) => entry.id === section) ?? SECTIONS[0];
+  const { hasModule } = useSession();
+  const sections = SECTIONS.filter((entry) => !entry.module || hasModule(entry.module));
+  const [section, setSection] = useState(sections[0].id);
+  const active = sections.find((entry) => entry.id === section) ?? sections[0];
 
   return (
     <div className="space-y-4">
@@ -382,7 +398,7 @@ export default function ConfigurationPage() {
       />
 
       <div className="flex flex-wrap gap-1.5">
-        {SECTIONS.map(({ id, label, icon: Icon }) => (
+        {sections.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"

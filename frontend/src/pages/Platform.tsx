@@ -33,9 +33,7 @@ import {
   Loader2,
   PieChart,
   Server,
-  ShieldQuestion,
   TrendingUp,
-  Users,
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
@@ -44,7 +42,7 @@ import type {
   Paginated,
   PlatformDashboard,
   PlatformOrganization,
-  PlatformPlan,
+  PlanChangePreview,
   PlatformSubscription,
 } from "@/types";
 import {
@@ -52,11 +50,14 @@ import {
   AlertDescription,
   AlertTitle,
   Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  Input,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -66,6 +67,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { Registrations } from "@/pages/platform/Registrations";
+import { Catalogue } from "@/pages/platform/Catalogue";
 import { formatDate, formatDateTime } from "@/lib/dates";
 
 type Tab = "overview" | "registrations" | "customers" | "subscriptions" | "plans";
@@ -76,7 +78,7 @@ const TABS: { id: Tab; label: string; icon: typeof Building2 }[] = [
   { id: "registrations", label: "Registrations", icon: Inbox },
   { id: "customers", label: "Customers", icon: Building2 },
   { id: "subscriptions", label: "Subscriptions", icon: Layers },
-  { id: "plans", label: "Plans", icon: PieChart },
+  { id: "plans", label: "Catalogue", icon: PieChart },
 ];
 
 const rupees = (value: string | number) =>
@@ -133,7 +135,7 @@ export default function PlatformPage() {
       {tab === "registrations" && <Registrations />}
       {tab === "customers" && <Customers />}
       {tab === "subscriptions" && <Subscriptions />}
-      {tab === "plans" && <Plans />}
+      {tab === "plans" && <Catalogue />}
     </div>
   );
 }
@@ -766,7 +768,145 @@ function Subscriptions() {
             </CardContent>
           </Card>
         ))}
+
+      {rows
+        .filter((row) => row.uuid === open)
+        .map((row) => (
+          <ChangePlan key={`plan-${row.uuid}`} subscription={row} onChanged={() => setOpen(null)} />
+        ))}
     </div>
+  );
+}
+
+/**
+ * Moving one customer to another plan.
+ *
+ * The preview is the point. A plan change is one dropdown and one button, and
+ * what it does is add and remove capabilities from a hospital that is open —
+ * so this asks the API what would happen, prints it, and only then offers to
+ * do it. A reduction needs the reason typed and the consequence acknowledged.
+ */
+function ChangePlan({
+  subscription,
+  onChanged,
+}: {
+  subscription: PlatformSubscription;
+  onChanged: () => void;
+}) {
+  const [plans, setPlans] = useState<{ code: string; name: string }[]>([]);
+  const [chosen, setChosen] = useState("");
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null);
+  const [reason, setReason] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void api
+      .get<{ plans: { code: string; name: string }[] }>("/platform/catalogue/", {
+        withoutOrganization: true,
+      })
+      .then((body) => setPlans(body.plans.filter((plan) => plan.code !== subscription.plan_code)))
+      .catch(() => setPlans([]));
+  }, [subscription.plan_code]);
+
+  useEffect(() => {
+    setPreview(null);
+    if (!chosen) return;
+    void api
+      .get<PlanChangePreview>(
+        `/platform/subscriptions/${subscription.uuid}/plan/?plan=${chosen}`,
+        { withoutOrganization: true },
+      )
+      .then(setPreview)
+      .catch((err) => setProblem(err instanceof ApiError ? err.message : "Could not preview that."));
+  }, [chosen, subscription.uuid]);
+
+  async function apply() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await api.post(
+        `/platform/subscriptions/${subscription.uuid}/plan/`,
+        { plan: chosen, reason, confirm: true },
+        { withoutOrganization: true },
+      );
+      onChanged();
+    } catch (err) {
+      setProblem(err instanceof ApiError ? err.message : "That change was refused.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Change plan</CardTitle>
+        <CardDescription>
+          {subscription.organization_name} is on {subscription.plan_name}. What a
+          different plan would add and take away is shown before anything moves.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            className="w-56"
+            aria-label="Move to plan"
+            value={chosen}
+            onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setChosen(event.target.value)}
+          >
+            <option value="">Move to…</option>
+            {plans.map((plan) => (
+              <option key={plan.code} value={plan.code}>
+                {plan.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            className="min-w-[16rem] flex-1"
+            placeholder="Why is this customer moving?"
+            value={reason}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setReason(event.target.value)}
+          />
+          <Button disabled={!chosen || !reason.trim() || busy} onClick={() => void apply()}>
+            Apply
+          </Button>
+        </div>
+
+        {problem ? (
+          <Alert variant="destructive">
+            <AlertDescription>{problem}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {preview ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <p className="type-label text-muted-foreground">Gains</p>
+              <p className="mt-1 text-sm">
+                {preview.gains_modules.length > 0
+                  ? preview.gains_modules.map(humanise).join(", ")
+                  : "Nothing new."}
+              </p>
+            </div>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+              <p className="type-label text-muted-foreground">Loses</p>
+              <p className="mt-1 text-sm">
+                {preview.loses_modules.length > 0
+                  ? preview.loses_modules.map(humanise).join(", ")
+                  : "Nothing."}
+              </p>
+            </div>
+            <div className="sm:col-span-2 text-sm text-muted-foreground">
+              {rupees(preview.price.from)} → {rupees(preview.price.to)} a month
+              {Object.keys(preview.limit_changes).length > 0
+                ? ` · ${Object.keys(preview.limit_changes).length} limit(s) change`
+                : ""}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -774,118 +914,6 @@ function Subscriptions() {
 /* Plans                                                                       */
 /* -------------------------------------------------------------------------- */
 
-function Plans() {
-  const [rows, setRows] = useState<PlatformPlan[]>([]);
-
-  useEffect(() => {
-    void api
-      .get<Paginated<PlatformPlan>>("/platform/plans/", {
-        withoutOrganization: true,
-      })
-      .then((page) => setRows(page.results))
-      .catch(() => setRows([]));
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      <Alert>
-        <ShieldQuestion className="h-4 w-4" />
-        <AlertTitle>A limit not on the plan resolves to zero</AlertTitle>
-        <AlertDescription>
-          The entitlement engine fails closed: an unknown limit key is nothing,
-          never unlimited. A plan that forgot to mention a limit sells nothing
-          rather than everything.
-        </AlertDescription>
-      </Alert>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {rows.map((plan) => (
-          <Card key={plan.uuid} className={cn(!plan.is_active && "opacity-60")}>
-            <CardHeader>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base">{plan.name}</CardTitle>
-                  <CardDescription>{plan.tagline}</CardDescription>
-                </div>
-                {!plan.is_public && <Badge variant="outline">private</Badge>}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-2xl font-semibold tabular-nums">
-                  {rupees(plan.base_price)}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    {" "}
-                    / {humanise(plan.billing_interval)}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {plan.trial_days} days' trial · {plan.grace_days} days' grace
-                  {Number(plan.setup_fee) > 0 &&
-                    ` · ${rupees(plan.setup_fee)} setup`}
-                </p>
-              </div>
-
-              {plan.modules.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    Modules
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {plan.modules.map((module) => (
-                      <Badge key={module} variant="secondary">
-                        {humanise(module)}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {plan.limits.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    Limits
-                  </p>
-                  <ul className="space-y-0.5 text-sm">
-                    {plan.limits.map((limit) => (
-                      <li
-                        key={limit.key}
-                        className="flex justify-between gap-2"
-                      >
-                        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                          {limit.key}
-                        </span>
-                        <span className="shrink-0 tabular-nums">
-                          {limit.is_unlimited ? "∞" : limit.value}
-                          {limit.enforcement !== "hard" && (
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              {limit.enforcement}
-                            </span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-        {rows.length === 0 && (
-          <Card className="md:col-span-2 lg:col-span-3">
-            <CardContent className="py-16 text-center text-sm text-muted-foreground">
-              <Users className="mx-auto mb-2 h-8 w-8 opacity-40" />
-              No plans defined.
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Bits                                                                        */
 /* -------------------------------------------------------------------------- */
 
 function Stat({

@@ -21,6 +21,12 @@ export interface Resource<T> {
   error: string | null;
   /** When the answer was read. A figure with no as-of time is a guess. */
   at: Date | null;
+  /**
+   * The organization did not buy this module. Not an error and not an empty
+   * list: a panel about a module nobody bought should disappear, not sit
+   * there in red saying something failed.
+   */
+  notIncluded: boolean;
   reload: () => void;
 }
 
@@ -30,12 +36,13 @@ export function useResource<T>(path: string | null, enabled = true): Resource<T>
     loading: Boolean(path) && enabled,
     error: null,
     at: null,
+    notIncluded: false,
   });
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
     if (!path || !enabled) {
-      setState({ data: null, loading: false, error: null, at: null });
+      setState({ data: null, loading: false, error: null, at: null, notIncluded: false });
       return;
     }
     let cancelled = false;
@@ -45,16 +52,23 @@ export function useResource<T>(path: string | null, enabled = true): Resource<T>
       .get<T>(path)
       .then((data) => {
         if (cancelled) return;
-        setState({ data, loading: false, error: null, at: new Date() });
+        setState({ data, loading: false, error: null, at: new Date(), notIncluded: false });
       })
       .catch((problem: unknown) => {
         if (cancelled) return;
+        const notIncluded =
+          problem instanceof ApiError && problem.isEntitlementProblem;
         setState({
           data: null,
           loading: false,
-          error:
-            problem instanceof ApiError ? problem.message : "This could not be read.",
+          // A module that was never bought is not a failure to report.
+          error: notIncluded
+            ? null
+            : problem instanceof ApiError
+              ? problem.message
+              : "This could not be read.",
           at: null,
+          notIncluded,
         });
       });
 

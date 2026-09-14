@@ -12410,3 +12410,104 @@ plainly a date; the rest were left alone and checked by hand.
 
 A Bikram Sambat date *picker*: filters still take Gregorian through the
 browser's own control, which works and reads oddly next to a BS column.
+
+
+## 282 - Sold in modules, and shown as sold
+
+*14 September 2026.*
+
+The prompt was a hard one to hear and correct: *"right now, if you see the
+system, you become confused on where to do what… it looks purposeless."*
+Before building anything, the running system was opened as five different
+people and what they saw was written down — `docs/PRODUCT.md` is that
+document: what the product is for, who opens it every day, what each of them
+needs, and what is missing before any of them could depend on it.
+
+Two findings drove this entry.
+
+**A pharmacy was shown the ICU.** `hasModule` has existed on the session hook
+since the entitlement engine was written and was **called in exactly zero
+places**. Every tenant saw every screen regardless of what they had bought,
+which is not a pricing problem — it is a positioning one. A counter assistant
+who opens the product and finds Wards, Theatre, ICU and Blood bank in the
+sidebar concludes it is not for them, and is right to.
+
+**The catalogue was complete and unreachable.** Modules, features, plans,
+per-plan limits, add-ons, entitlement resolution with provenance, metering —
+all of it built, and the only way to price a module or open a trial was a seed
+and a deployment. The commercial side owned nothing it could change.
+
+### What was built
+
+**The catalogue is editable** (`catalog/editing.py`, `platform_api/
+catalogue_api.py`). Plans, their price, trial and grace; which modules are
+included and what an excluded one costs to add; which features are on; every
+limit with its ceiling, its enforcement and the point the customer is warned.
+Three rules make that safe on a live catalogue:
+
+- **A plan is a promise to everyone on it.** A change that takes something
+  away is refused until the caller has been told which organizations lose
+  what, by number and by name, and confirms. Adding goes straight through.
+  "Are you sure?" is a dialogue nobody reads; "this removes Laboratory from 14
+  organizations, including Manakamana Health" is one they do.
+- **Modules are code, not data.** A module code corresponds to enforcement
+  written in the application; inventing `dialysis` in a form would produce a
+  module nothing checks and a customer billed for nothing. Their metadata is
+  editable; their existence is not.
+- **Nothing is deleted.** A plan nobody may buy is unpublished; one nobody
+  should be on is deactivated, which leaves existing subscribers alone.
+
+**Moving a customer between plans is previewed first.** What they gain, what
+they lose, which limits tighten, what it costs — and a reduction needs the
+reason typed and the consequence acknowledged. It was writing this that
+turned up a subscription list ordered newest-first serving a *cancelled*
+subscription for editing; a closed subscription is now refused outright.
+
+**The rail asks three questions, not two.** Does the organization have the
+module, does this person hold the permission, and at a wide enough scope. One
+declaration in `nav.ts` drives the sidebar, the command palette, the landing
+screen and a route gate, so a bookmark to a module you do not have gets the
+same answer as the sidebar: what the module is, that it is not included, and
+who can add it — never a 403, which says "you may not" when the truth is "we
+do not have it".
+
+**Hiding is a courtesy; this is the control.** `apps/entitlements/gate.py`
+refuses the API of a module the plan does not include, by URL prefix, in one
+place — rather than a permission class on two hundred viewsets and the
+discovery next year that three were missed. Service-layer guards
+(`admit()` and its kin) stay where they are: they refuse the *acts*, and this
+refuses the *access*. What every customer bought something to do —
+patients, the diary, billing, notifications, settings — is deliberately never
+gated, and a test asserts it.
+
+**And the customer can see what they have.** `Plan & usage` shows the plan,
+what it includes, what else Nirova does (greyed, with what each module is),
+and every allowance against its usage. Hiding the rest of the product does
+not make anybody buy it; it makes them assume it cannot be done.
+
+### Two defects found while wiring it
+
+The vendor's own console answered **500 on every page load**: platform staff
+have no organization bound, and `/api/me/workspace/` reads a tenant database.
+Nothing waiting is the true answer, not an error. And platform-only staff
+were shown a hospital rail — Dashboard, My workspace, Self service — none of
+which they can open.
+
+### A guard earning its keep
+
+The query-budget test failed the moment the gate went in: **29 queries for 8
+employees** where the budget is 28. Resolving entitlements on every request to
+a gated prefix is five queries per page load for an answer that changes when
+somebody signs a contract. The gate now remembers an organization's modules
+for thirty seconds — and every write that could change the answer (a grant, an
+override, a subscription, a plan's modules, features or limits, an add-on)
+clears it through a signal, so a support agent granting a module sees it on
+the next click and a plan edit that removes one stops serving it at once. The
+invalidation is in one place rather than at the call sites, where the next one
+added would forget.
+
+### Not yet
+
+Leads, help desk, tasks and tenant broadcast — the vendor's own desk — are
+Phase 12 in `PRODUCT.md`. Usage-based invoicing of tenants is not built: the
+meters run and nothing bills from them.

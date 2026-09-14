@@ -1198,6 +1198,52 @@ headings and the navigation were not up to an international standard.*
 - [ ] A Bikram Sambat date picker; filters still take Gregorian through the
       browser's own control (log 281)
 
+## §142 Sold in modules, and shown as sold `[~]`
+
+*New on 14 September 2026 (log 282). Prompted by "it looks purposeless" and
+"go modular… things should be selectable". `docs/PRODUCT.md` is the product
+definition the rest of this section serves.*
+
+### The catalogue, editable
+- [x] Plans, prices, trial and grace days, public and saleable flags, created
+      and edited in the platform console — no seed, no deployment
+- [x] Which modules a plan includes, and what an excluded one costs to add
+- [x] Which features are on; every limit with its ceiling, enforcement and
+      warning point (blank is unlimited, 0 is none — different promises)
+- [x] **A change that takes something away names who loses what** — the count
+      and the organizations — and is refused until confirmed
+- [x] A module the application does not enforce cannot be put in a plan
+- [x] Nothing is deleted: unpublish, or deactivate and leave subscribers alone
+- [ ] Plan versioning: today an edit applies to every subscriber at once, with
+      confirmation. Versioned plans that apply on renewal are the next step
+- [ ] Add-ons are resolved and priced but not editable here
+
+### Moving a customer
+- [x] A plan change is previewed: modules gained and lost, limits tightened,
+      the price difference
+- [x] A reason is required; a reduction needs confirming
+- [x] A cancelled or expired subscription cannot be moved between plans
+
+### Gated, everywhere
+- [x] The rail asks three questions: module, permission, scope — one
+      declaration driving sidebar, palette, landing screen and route
+- [x] A route outside the plan answers with what the module is and who can add
+      it, not a 403
+- [x] **The API is gated too** (`apps/entitlements/gate.py`): a module's
+      endpoints are refused by URL prefix, so hiding the screen is a control
+      rather than a courtesy
+- [x] What every customer bought something to do — patients, diary, billing,
+      notifications, settings — is never gated, asserted by test
+- [x] A panel whose module is not included disappears rather than showing an
+      error; Configuration hides the lists that belong to unbought modules
+- [ ] Feature flags (`FeatureFlag.*`) are resolved and sold but only three are
+      consulted in the product
+
+### The customer's own view
+- [x] **Plan & usage**: the plan, what is included, what else Nirova does, and
+      every allowance against its usage
+- [ ] Asking for a module from that screen (it goes to a lead, Phase 12)
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

@@ -29,6 +29,19 @@ class MyWorkspaceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # **Platform staff have no workspace in a hospital.** They are signed
+        # in against the control plane with no organization bound, and every
+        # source here reads a tenant database — which raised, so the vendor's
+        # own console answered 500 on every page load. Nothing waiting is the
+        # true answer, not an error.
+        if getattr(request, "tenant", None) is None:
+            return Response({
+                "waiting": [], "approvals_total": 0,
+                "is_complete": True, "broken_sources": [],
+                "notifications": None, "today": None,
+                "note": "You are signed in to the platform, not to a hospital.",
+            })
+
         authorization = get_authorization(request)
         waiting, broken = [], []
 

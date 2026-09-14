@@ -5,6 +5,7 @@ from apps.organization.settings_api import SettingsView
 from apps.organization.views import (
     DepartmentViewSet,
     EntitlementView,
+    PlanView,
     FacilityChangeRequestViewSet,
     FacilityViewSet,
 )
@@ -18,6 +19,8 @@ router.register(
 
 urlpatterns = [
     path("entitlements/", EntitlementView.as_view(), name="entitlements"),
+    # What we bought, what else exists, and how close we are to a limit.
+    path("plan/", PlanView.as_view(), name="plan"),
     # Before the router, so "settings" cannot be shadowed by a viewset that
     # later registers the same prefix.
     path("settings/", SettingsView.as_view(), name="settings"),

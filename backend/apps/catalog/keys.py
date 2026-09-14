@@ -57,6 +57,16 @@ class LimitKey:
     MAX_PATIENTS = "max_patients"
     MAX_MONTHLY_TRANSACTIONS = "max_monthly_transactions"
 
+    #: The ceilings the editor offers by name. Per-facility-type keys are
+    #: generated from the facility types instead (see below), and the storage
+    #: layer still accepts any key.
+    ALL = (
+        MAX_FACILITIES, MAX_USERS, MAX_EMPLOYEES,
+        MAX_DEPARTMENTS_PER_FACILITY, MAX_STORAGE_GB,
+        MAX_API_CALLS_PER_MONTH, MAX_SMS_PER_MONTH, MAX_PATIENTS,
+        MAX_MONTHLY_TRANSACTIONS,
+    )
+
     #: Per-facility-type ceilings, e.g. "max_facilities.pharmacy". These sit
     #: *under* MAX_FACILITIES: a customer entitled to 10 facilities of which
     #: at most 2 may be hospitals is a normal, expressible arrangement.
@@ -95,6 +105,17 @@ class FeatureFlag:
     FHIR_API = "fhir_api"
     AI_ASSIST = "ai_assist"
     SELF_SERVICE_FACILITY_CREATION = "self_service_facility_creation"
+
+    #: Every flag this application actually consults. The catalogue editor
+    #: offers these rather than a free-text box: a flag nobody reads is a
+    #: promise to a customer that nothing keeps.
+    ALL = (
+        MULTI_FACILITY, CENTRAL_PROCUREMENT, CENTRAL_PAYROLL,
+        INTER_FACILITY_TRANSFER, CUSTOM_REPORTS, SCHEDULED_REPORTS,
+        WHITE_LABEL, SSO, AUDIT_EXPORT, OFFLINE_MODE, DICOM_PACS,
+        LAB_ANALYZER_INTERFACE, FHIR_API, AI_ASSIST,
+        SELF_SERVICE_FACILITY_CREATION,
+    )
 
 
 class MeterKey:

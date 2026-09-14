@@ -490,3 +490,90 @@ def record_snapshot(organization, reason: str = "", entitlements=None) -> Entitl
         provenance=entitlements.provenance,
         triggering_reason=reason[:255],
     )
+
+
+# ---------------------------------------------------------------------------
+# What the customer has, and what else exists
+# ---------------------------------------------------------------------------
+
+
+def plan_summary(organization) -> dict:
+    """The organization's own view of its subscription.
+
+    Until now a customer could see their *limits* (the capacity screen) and
+    nothing about what they had bought: which modules are included, what the
+    plan costs, when it renews, and — the part that matters commercially —
+    what else exists and what it would add. A product sold in modules has to
+    be able to say what the other modules are; hiding them does not make the
+    customer buy, it makes them assume the product cannot do it.
+
+    Read-only on purpose. Nothing here changes a subscription: that is the
+    platform's act, with the consequences shown first
+    (`platform_api/catalogue_api.py`).
+    """
+    from apps.catalog.models import Module
+    from apps.entitlements.resolver import active_subscription
+
+    entitlements = resolve_entitlements(organization)
+    subscription = active_subscription(organization)
+    plan = subscription.plan if subscription else None
+
+    priced = {}
+    if plan is not None:
+        priced = {
+            row.module.code: row
+            for row in plan.plan_modules.select_related("module").all()
+        }
+
+    modules = []
+    for module in Module.objects.filter(is_active=True).order_by("display_order", "name"):
+        row = priced.get(module.code)
+        modules.append({
+            "code": module.code,
+            "name": module.name,
+            "description": module.description,
+            "is_core": module.is_core,
+            "included": entitlements.has_module(module.code),
+            # What it would cost to add, when the plan prices it. `None`
+            # means "ask us" rather than "free".
+            "price_to_add": (
+                str(row.additional_price)
+                if row is not None and not row.is_included and row.additional_price
+                else None
+            ),
+        })
+
+    limits = []
+    for key, spec in sorted(entitlements.limits.items()):
+        used = get_current_usage(organization, key)
+        limits.append({
+            "key": key,
+            "value": spec.value,
+            "unlimited": spec.is_unlimited,
+            "used": used,
+            "remaining": spec.remaining(used),
+            "enforcement": spec.enforcement,
+            "warn_at_percent": spec.warn_at_percent,
+            "near_limit": (
+                not spec.is_unlimited and spec.value
+                and used >= spec.value * spec.warn_at_percent / 100
+            ),
+        })
+
+    return {
+        "plan": {
+            "code": entitlements.plan_code,
+            "name": plan.name if plan else "",
+            "tagline": plan.tagline if plan else "",
+            "base_price": str(plan.base_price) if plan else "0.00",
+            "currency": plan.currency if plan else "NPR",
+            "billing_interval": plan.billing_interval if plan else "",
+            "status": entitlements.subscription_status,
+            "is_entitled": entitlements.is_entitled,
+            "trial_ends_at": subscription.trial_ends_at if subscription else None,
+            "renews_at": subscription.current_period_end if subscription else None,
+        },
+        "modules": modules,
+        "limits": limits,
+        "features": sorted(code for code, on in entitlements.features.items() if on),
+    }

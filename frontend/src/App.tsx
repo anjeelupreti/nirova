@@ -22,7 +22,7 @@ import {
   usePaletteShortcut,
   type PaletteAction,
 } from "@/components/shell/CommandPalette";
-import { resolveHome, visibleGroups } from "@/components/shell/nav";
+import { moduleForRoute, resolveHome, visibleGroups } from "@/components/shell/nav";
 import { RouteProgress, ShellSkeleton } from "@/components/ui/loader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/primitives";
 import { useSession } from "@/hooks/useSession";
@@ -49,7 +49,7 @@ const AccountPage = lazy(() => import("@/pages/Account"));
 const AppointmentsPage = lazy(() => import("@/pages/Appointments"));
 const BillingPage = lazy(() => import("@/pages/Billing"));
 const BloodPage = lazy(() => import("@/pages/Blood"));
-const CapacityPage = lazy(() => import("@/pages/Capacity"));
+const PlanPage = lazy(() => import("@/pages/Plan"));
 const ClaimsPage = lazy(() => import("@/pages/Claims"));
 const ConfigurationPage = lazy(() => import("@/pages/Configuration"));
 const ConsultationPage = lazy(() => import("@/pages/Consultation"));
@@ -90,6 +90,7 @@ const WorkspacePage = lazy(() => import("@/pages/Workspace"));
 import LoginPage from "@/pages/Login";
 import SignupPage from "@/pages/auth/Signup";
 import { ForgotPasswordPage, ResetPasswordPage } from "@/pages/auth/PasswordReset";
+import NotInPlan from "@/components/shell/NotInPlan";
 import { ChoosePassword } from "@/pages/auth/ChoosePassword";
 import { EnrolSecondFactor } from "@/pages/auth/EnrolSecondFactor";
 
@@ -108,6 +109,9 @@ export default function App() {
   const { session: data, can } = session;
   const isAuthenticated = session.isAuthenticated;
 
+  const isPlatformOnly =
+    Boolean(data?.user.is_platform_staff) && (data?.memberships.length ?? 0) === 0;
+
   /*
     The two numbers on the rail.
 
@@ -118,7 +122,9 @@ export default function App() {
     themselves are authoritative and refresh when opened.
   */
   useEffect(() => {
-    if (!isAuthenticated) return;
+    // Platform staff have no hospital to have a workspace in; asking anyway
+    // is a request whose only possible answer is "nothing".
+    if (!isAuthenticated || isPlatformOnly) return;
     let cancelled = false;
     void api
       .get<MyWorkspace>("/me/workspace/")
@@ -140,10 +146,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
-
-  const isPlatformOnly =
-    Boolean(data?.user.is_platform_staff) && (data?.memberships.length ?? 0) === 0;
+  }, [isAuthenticated, isPlatformOnly]);
 
   /*
     Two lists from one model.
@@ -154,9 +157,14 @@ export default function App() {
     reach by remembering it is under an avatar, which is worse than the
     forty-item rail it replaced.
   */
-  const groups = visibleGroups(can, Boolean(data?.user.is_platform_staff));
+  const groups = visibleGroups(can, Boolean(data?.user.is_platform_staff), {
+    hasModule: session.hasModule,
+    isPlatformOnly,
+  });
   const paletteGroups = visibleGroups(can, Boolean(data?.user.is_platform_staff), {
     includeSystem: true,
+    hasModule: session.hasModule,
+    isPlatformOnly,
   });
   const railState = useRailState(groups);
 
@@ -212,6 +220,7 @@ export default function App() {
     roles: [],
     isPlatformOnly,
     can,
+    hasModule: session.hasModule,
   });
 
   const actions: PaletteAction[] = [
@@ -288,6 +297,13 @@ export default function App() {
             downloaded and let it snap back on arrival, which on a slow
             connection looked like the page loading twice.
           */}
+          {/*
+            One gate for every route, rather than a check inside each screen.
+            A module the organization has not bought is answered with what it
+            is and who can add it (`NotInPlan`) — at the route, so a bookmark
+            and a link from a colleague get the same answer as the sidebar.
+          */}
+          <ModuleGate hasModule={session.hasModule}>
           <Suspense fallback={<RouteProgress />}>
             <Routes>
               <Route path="/" element={<Navigate to={home} replace />} />
@@ -335,7 +351,7 @@ export default function App() {
               <Route path="/time" element={<TimePage />} />
               <Route path="/payroll" element={<PayrollPage />} />
               <Route path="/facilities" element={<FacilitiesPage />} />
-              <Route path="/capacity" element={<CapacityPage />} />
+              <Route path="/capacity" element={<PlanPage />} />
               <Route path="/facility-requests" element={<FacilityRequestsPage />} />
               <Route path="/platform" element={<PlatformPage />} />
               {/* The design system, rendered. Not in the sidebar: it is for
@@ -344,6 +360,7 @@ export default function App() {
               <Route path="*" element={<Navigate to={home} replace />} />
             </Routes>
           </Suspense>
+          </ModuleGate>
         </main>
       </div>
 
@@ -356,4 +373,24 @@ export default function App() {
       />
     </div>
   );
+}
+
+/**
+ * Refuses a route whose module the organization has not bought.
+ *
+ * Reads the module from the navigation table (`moduleForRoute`), which is the
+ * same table the sidebar filters on — one declaration, so the rail and the
+ * router cannot disagree about what is included.
+ */
+function ModuleGate({
+  hasModule,
+  children,
+}: {
+  hasModule: (module: string) => boolean;
+  children: React.ReactNode;
+}) {
+  const location = useLocation();
+  const module = moduleForRoute(location.pathname);
+  if (module && !hasModule(module)) return <NotInPlan module={module} />;
+  return <>{children}</>;
 }

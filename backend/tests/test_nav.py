@@ -231,3 +231,38 @@ def test_every_visible_screen_opens_for_the_role_that_sees_it(tenant):
         )
 
     assert not problems, chr(10).join(problems)
+
+
+def test_every_module_the_rail_gates_on_is_one_the_catalogue_sells():
+    """The rail hides screens by module now, and a typo there would hide a
+    screen from everybody for ever — silently, because a module nobody sells
+    is a module nobody has."""
+    import re
+
+    from apps.catalog.keys import ModuleCode
+
+    source = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "shell" / "nav.ts"
+    if not source.exists():
+        pytest.skip("frontend source not present")
+    declared = set(re.findall(r'module:\s*"([a-z_]+)"', source.read_text(encoding="utf-8")))
+    assert declared, "no navigation item names a module; the gating is not wired"
+    unknown = sorted(declared - set(ModuleCode.ALL))
+    assert not unknown, (
+        f"the rail gates on modules the catalogue does not sell: {', '.join(unknown)}"
+    )
+
+
+def test_the_screens_a_pharmacy_never_bought_are_gated():
+    """A counter assistant shown ICU, theatre and the blood bank concludes the
+    product is not for them. These are the ones that must be behind a module."""
+    import re
+
+    source = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "shell" / "nav.ts"
+    if not source.exists():
+        pytest.skip("frontend source not present")
+    text = source.read_text(encoding="utf-8")
+    for route in ("/wards", "/icu", "/theatre", "/emergency", "/diagnostics",
+                  "/blood", "/payroll", "/finance", "/claims"):
+        entry = re.search(r'\{\s*\n\s+to: "' + re.escape(route) + r'",(.*?)\n\s+\},', text, re.S)
+        assert entry, f"{route} is no longer a navigation entry"
+        assert "module:" in entry.group(1), f"{route} is shown whatever the customer bought"

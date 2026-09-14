@@ -124,6 +124,10 @@ MIDDLEWARE = [
     # placed before it would be cleared a moment later.
     "apps.portal.auth.PortalTenantMiddleware",
     "apps.audit.middleware.AuditContextMiddleware",
+    # After the tenant is bound: refuses an API whose module this customer's
+    # plan does not include (apps/entitlements/gate.py). The console hides
+    # those screens; this is what makes hiding them a control.
+    "apps.entitlements.gate.ModuleGateMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

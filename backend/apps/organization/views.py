@@ -303,3 +303,19 @@ class EntitlementView(APIView):
     def get(self, request):
         entitlements = resolve_entitlements(request.organization)
         return Response(entitlements.as_dict())
+
+
+class PlanView(APIView):
+    """The plan, the modules in it, the modules that exist, and the limits.
+
+    Answers the question a customer asks when a screen is missing: *is this
+    something the product cannot do, or something we did not buy?* Those are
+    very different answers and the product owes the honest one.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from apps.entitlements.services import plan_summary
+
+        return Response(plan_summary(request.organization))

@@ -666,6 +666,20 @@ export interface PatientAccount {
   }[];
 }
 
+/** What moving a customer between plans would do, asked before doing it. */
+export interface PlanChangePreview {
+  organization: string;
+  from_plan: string;
+  to_plan: string;
+  gains_modules: string[];
+  loses_modules: string[];
+  gains_features: string[];
+  loses_features: string[];
+  limit_changes: Record<string, { from: number | null; to: number | null; tighter: boolean }>;
+  price: { from: string; to: string; currency: string };
+  loses_something: boolean;
+}
+
 /** A wallet this hospital can take payment through. */
 export interface OnlineProviderOption {
   provider: "esewa" | "khalti";

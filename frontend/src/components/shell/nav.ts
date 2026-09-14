@@ -29,6 +29,12 @@ export interface NavItem {
   /** The scope those endpoints ask for. */
   scope?: string;
   /**
+   * The module this screen is sold as. Absent means core — every tenant has
+   * it whatever they bought. A tenant without the module does not see the
+   * item, and the route says so plainly rather than 403-ing (`NotInPlan`).
+   */
+  module?: string;
+  /**
    * A second permission the screen also requires, at the same scope. For a
    * screen that sits where two jobs meet: the sales report needs both sight of
    * the counter and the right to read reports, so a doctor (reports, no
@@ -55,14 +61,31 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** Whether this person may open the screen an item points at. */
+/**
+ * Whether this person may open the screen an item points at.
+ *
+ * Three questions, and all three have to be yes: does the organization have
+ * the module (what they bought), does this person hold the permission (what
+ * they may do), and at a wide enough scope. The first was missing entirely
+ * until §142 — `hasModule` existed on the session hook and was called
+ * nowhere, so a pharmacy that had bought the counter was shown ICU, theatre
+ * and the blood bank, and concluded the product was not for them.
+ */
 export function mayOpen(
-  item: Pick<NavItem, "needs" | "alsoNeeds" | "scope">,
+  item: Pick<NavItem, "needs" | "alsoNeeds" | "scope" | "module">,
   can: (permission: string, scope?: string) => boolean,
+  hasModule: (module: string) => boolean = () => true,
 ): boolean {
+  if (item.module && !hasModule(item.module)) return false;
   if (item.needs && !can(item.needs, item.scope)) return false;
   if (item.alsoNeeds && !can(item.alsoNeeds, item.scope)) return false;
   return true;
+}
+
+/** The module a route is sold as, or "" when it is core. */
+export function moduleForRoute(path: string): string {
+  const item = ALL_NAV_ITEMS.find((entry) => entry.to === path);
+  return item?.module ?? "";
 }
 
 /**
@@ -101,6 +124,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // Moved out of People, which is where somebody looks for *other* people.
       {
         to: "/self-service",
+        module: "hrms",
         label: "Self service",
         icon: "verifiedPerson",
         keywords: ["payslip", "my leave", "my attendance", "ess"],
@@ -124,6 +148,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // in different groups.
       {
         to: "/appointments",
+        module: "clinic",
         label: "Appointments",
         icon: "appointment",
         needs: "encounter.read",
@@ -132,6 +157,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/queue",
+        module: "clinic",
         label: "Queue",
         icon: "queue",
         needs: "encounter.read",
@@ -140,6 +166,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/portal",
+        module: "patient_portal",
         label: "Portal accounts",
         icon: "access",
         needs: "patient.read",
@@ -164,6 +191,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         to: "/emergency",
+        module: "hospital",
         label: "Emergency",
         icon: "emergency",
         needs: "encounter.read",
@@ -172,6 +200,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/wards",
+        module: "hospital",
         label: "Wards",
         icon: "ward",
         needs: "encounter.read",
@@ -180,6 +209,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/nurse-workspace",
+        module: "hospital",
         label: "Nurse workspace",
         icon: "nurse",
         needs: "patient.clinical.read",
@@ -188,6 +218,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/icu",
+        module: "hospital",
         label: "ICU",
         icon: "icu",
         needs: "patient.clinical.read",
@@ -196,6 +227,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/theatre",
+        module: "hospital",
         label: "Theatre",
         icon: "theatre",
         needs: "patient.clinical.read",
@@ -210,6 +242,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         to: "/diagnostics",
+        module: "laboratory",
         label: "Laboratory",
         icon: "laboratory",
         needs: "encounter.read",
@@ -218,6 +251,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/blood",
+        module: "blood_bank",
         label: "Blood bank",
         icon: "bloodBank",
         needs: "patient.clinical.read",
@@ -240,6 +274,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         to: "/pharmacy",
+        module: "pharmacy",
         label: "Pharmacy",
         icon: "pharmacy",
         needs: "stock.read",
@@ -248,6 +283,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/counter",
+        module: "pharmacy",
         label: "Counter",
         icon: "counter",
         needs: "sale.read",
@@ -256,6 +292,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/procurement",
+        module: "procurement",
         label: "Procurement",
         icon: "procurement",
         needs: "purchase.read",
@@ -278,6 +315,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/sales",
+        module: "pharmacy",
         label: "Sales",
         icon: "trendUp",
         needs: "sale.read",
@@ -287,6 +325,7 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       {
         to: "/claims",
+        module: "insurance",
         label: "Claims",
         icon: "claim",
         needs: "invoice.read",
@@ -298,6 +337,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // general ledger and the bank statements in their sidebar.
       {
         to: "/finance",
+        module: "finance",
         label: "Finance",
         icon: "finance",
         needs: "finance.read",
@@ -323,6 +363,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       {
         to: "/people",
+        module: "hrms",
         label: "Directory",
         icon: "directory",
         needs: "employee.read",
@@ -337,12 +378,14 @@ export const NAV_GROUPS: NavGroup[] = [
       // all three had to request leave through somebody else.
       {
         to: "/time",
+        module: "hrms",
         label: "Attendance",
         icon: "attendance",
         keywords: ["roster", "shift", "holiday", "clock in", "absence", "leave", "roster"],
       },
       {
         to: "/payroll",
+        module: "payroll",
         label: "Payroll",
         icon: "payroll",
         needs: "salary.read",
@@ -450,7 +493,7 @@ export const SYSTEM_ITEMS: NavItem[] = [
   // knowing which facilities exist.
   {
     to: "/capacity",
-    label: "Subscription",
+    label: "Plan",
     icon: "capacity",
     needs: "subscription.read",
     scope: "organization",
@@ -504,6 +547,7 @@ export const SYSTEM_ITEMS: NavItem[] = [
   // not, and the mistake is a different size.
   {
     to: "/import",
+    module: "api_access",
     label: "Data import",
     icon: "dataImport",
     needs: "data.import",
@@ -528,14 +572,26 @@ export const ALL_NAV_ITEMS: NavItem[] = [
 export function visibleGroups(
   can: (permission: string, scope?: string) => boolean,
   isPlatformStaff: boolean,
-  { includeSystem = false }: { includeSystem?: boolean } = {},
+  {
+    includeSystem = false,
+    hasModule = () => true,
+    isPlatformOnly = false,
+  }: {
+    includeSystem?: boolean;
+    hasModule?: (module: string) => boolean;
+    /** Platform staff who belong to no hospital. Their rail is the console
+     *  and nothing else: a dashboard, a workspace and a self-service screen
+     *  all read a tenant database they have no tenant in. */
+    isPlatformOnly?: boolean;
+  } = {},
 ): NavGroup[] {
   const groups = NAV_GROUPS.filter(
-    (group) => !group.platformOnly || isPlatformStaff,
+    (group) => (!group.platformOnly || isPlatformStaff)
+      && (!isPlatformOnly || group.platformOnly),
   )
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => mayOpen(item, can)),
+      items: group.items.filter((item) => mayOpen(item, can, hasModule)),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -545,9 +601,9 @@ export function visibleGroups(
   // whole split: one list, two audiences. Appended rather than merged into an
   // existing group so the palette can label them "System" and a reader can see
   // that these are not rail destinations.
-  const system = SYSTEM_ITEMS.filter(
-    (item) => mayOpen(item, can),
-  );
+  const system = isPlatformOnly
+    ? []
+    : SYSTEM_ITEMS.filter((item) => mayOpen(item, can, hasModule));
   return system.length > 0
     ? [...groups, { label: "System", icon: "settings" as const, items: system }]
     : groups;
@@ -607,11 +663,15 @@ export function resolveHome({
   roles,
   isPlatformOnly,
   can,
+  hasModule = () => true,
 }: {
   landing?: string;
   roles: string[];
   isPlatformOnly: boolean;
   can: (permission: string, scope?: string) => boolean;
+  /** What the organization bought. Landing somebody on a screen their plan
+   *  does not include would greet them with "not in your plan" every day. */
+  hasModule?: (module: string) => boolean;
 }): string {
   if (isPlatformOnly) return "/platform";
 
@@ -620,13 +680,13 @@ export function resolveHome({
     // A preference pointing at a screen this person can no longer open — their
     // role changed since they set it — falls through to the role default
     // rather than landing them on a permission error every morning.
-    if (item && mayOpen(item, can)) return landing;
+    if (item && mayOpen(item, can, hasModule)) return landing;
   }
 
   for (const [role, path] of ROLE_HOME) {
     if (!roles.includes(role)) continue;
     const item = ALL_NAV_ITEMS.find((entry) => entry.to === path);
-    if (!item || mayOpen(item, can)) return path;
+    if (!item || mayOpen(item, can, hasModule)) return path;
   }
 
   /*
