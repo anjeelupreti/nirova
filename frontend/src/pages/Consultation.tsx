@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { DiagnosisPanel } from "@/components/clinical/DiagnosisPanel";
 import { useSession } from "@/hooks/useSession";
 import {
   PrescriptionPreview,
@@ -1086,6 +1087,7 @@ export default function ConsultationPage() {
             prefill={applied?.note ?? null}
             onSaved={() => void load()}
           />
+          <DiagnosisPanel encounter={encounter} onSaved={() => void load()} />
         </div>
         <div className="space-y-5">
           <PrescribePanel

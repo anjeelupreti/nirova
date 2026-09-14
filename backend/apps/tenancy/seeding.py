@@ -26,6 +26,9 @@ collision only appears when the nursing seed runs after the clinical seeds.
 #: database until it completed. If you add a seed, add it here and run
 #: `manage.py bootstrap` against a fresh database -- not against yours.
 TENANT_SEEDS = [
+    # The vocabulary first: a diagnosis is coded against it, and a code that
+    # is not in it is refused (`apps/terminology`).
+    "seed_icd10",
     # Foundations. Staff before anything that assigns work to them, patients
     # before anything that charges, treats or admits one.
     "seed_hr_demo",

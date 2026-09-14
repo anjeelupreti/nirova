@@ -172,12 +172,27 @@ class PatientViewSet(viewsets.ModelViewSet):
         authorization.require("patient.update", Scope.OWN)
         return super().partial_update(request, *args, **kwargs)
 
-    @action(
-        detail=True,
-        methods=["get", "post"],
-        url_path="discussion",
-        permission_classes=[IsAuthenticated, HasClinicalAccess],
-    )
+    def get_permissions(self):
+        """The discussion is the clinical tier, and posting to it is a write.
+
+        Declared here rather than on the `@action`, because an action's
+        `permission_classes` only exist once a router has built the view --
+        so `manage.py audit_writes`, which asks the class what authority a
+        write takes, could not see them and reported the POST as guarded by
+        `patient.read` alone. It was: an auditor, whose whole role is
+        read-only oversight, could have written into a patient's record.
+        """
+        if getattr(self, "action", None) == "discussion":
+            return [
+                IsAuthenticated(),
+                HasClinicalAccess(),
+                HasPermission.of(
+                    "patient.clinical.read", scope=Scope.OWN, write="encounter.create",
+                )(),
+            ]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["get", "post"], url_path="discussion")
     def discussion(self, request, uuid=None):
         """Staff talking to staff about this patient. See `apps/patients/discussion.py`."""
         from apps.patients.discussion import discussion_response

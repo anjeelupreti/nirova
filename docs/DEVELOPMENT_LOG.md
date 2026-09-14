@@ -13129,3 +13129,62 @@ with this time yesterday" or "last night" on hover. Two zeros show nothing;
 The demo tenant's first snapshot was taken on 15 September, so comparisons for
 levels begin the next day. At the time of checking (01:41) today and yesterday
 were both zero for every event, so the band correctly showed no pills.
+
+## 298 - A diagnosis nobody coded is a diagnosis nobody can count
+
+First item of [HEALTHOS.md](HEALTHOS.md) Phase A, and the audit's finding that
+cost the least to state and the most to leave: `icd10_code` has been a free
+text field since the first commit -- optional, unvalidated, and filled only by
+seed data. Every ministry return and every insurance claim is a count of
+codes. Worse, and found while fixing it: **the console had no way to record a
+diagnosis at all.** The patient record displayed them, the discharge summary
+printed them, and nothing wrote one.
+
+**A vocabulary, per tenant** (`apps/terminology`). ICD-10 is the same
+everywhere, so a shared copy would save space and make a hospital's own
+additions impossible -- and hospitals do add. Seeded with 184 codes covering a
+Nepali outpatient morning, ward round and emergency shift: enteric fever,
+dengue, leptospirosis and kala-azar beside diabetes, COPD and stroke; the
+obstetric set; the common fractures; snake bite and organophosphate poisoning;
+and the mental health presentations that usually go uncoded. Not all 70,000 of
+ICD-10, because a clinician scrolling 70,000 entries codes nothing.
+
+**Found by what a clinician says**, not by the classification's wording:
+`keywords` carries "sugar" for diabetes, "bp" for hypertension, "piles" for
+haemorrhoids. The order is the value -- exact code, then code prefix, then
+title prefix, then anything containing it, and within each band the codes this
+hospital uses most, counted on every use.
+
+**Refused where it matters, permissive where it does not.** A code that is not
+in the vocabulary is refused: stored, it would be counted by the return as
+though it were real. A *missing* code is accepted -- the clinical fact matters
+more than the classification, and a system that refuses the fact is one people
+work around. The uncoded ones are a registered report, "Diagnoses without a
+code", with the coded percentage beside them, so they are fixed later rather
+than never.
+
+**And the panel that was missing.** The consultation now records a diagnosis:
+search, certainty, "main reason for the visit", and a deliberate "record
+without a code" beside it. A coded diagnosis takes the classification's title
+when none was typed.
+
+### Two things the coding work found
+
+**The doctor's board linked to consultations that did not exist.** Both rows
+-- the waiting list and the unfinished consultations -- passed the *patient's*
+id to `/consultation/:uuid`, which loads an *encounter*. Every one of them
+answered "the requested resource does not exist", and the two identifiers are
+both uuids, so the mistake is invisible in a diff. Found by opening one while
+screenshotting the new panel. The unfinished consultations now link by
+encounter; a waiting token has no encounter until somebody calls the patient,
+so that row goes to the queue, where calling them creates one.
+`tests/test_frontend_calls.py` now fails on any `/consultation/${...patient}`.
+
+**The discussion accepted a write from read-only oversight.** `manage.py
+audit_writes` caught it: an `@action`'s `permission_classes` only exist once a
+router has built the view, so the command -- which asks the class what
+authority a write takes -- saw `patient.read` alone, and it was right that the
+POST took no more than that. An auditor could have written into a patient's
+record. The guard is now declared in `get_permissions()`, where both DRF and
+the audit read it: reading the discussion is the clinical tier, writing to it
+takes `encounter.create`, the authority that writes a clinical note.

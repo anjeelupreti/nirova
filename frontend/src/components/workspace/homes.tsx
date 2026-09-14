@@ -465,9 +465,11 @@ export function DoctorHome({
                   }
                   meta={`${token.waiting_minutes}m`}
                   trailing={<StatusBadge status={token.status} />}
-                  // Straight into the consultation. The single most-repeated
-                  // action of a clinic day should not be three clicks.
-                  to={`/consultation/${token.patient_uuid}`}
+                  // The queue, not the consultation: `/consultation/:uuid` is
+                  // an *encounter*, and a waiting token has none until somebody
+                  // calls the patient. This link used to pass the patient's id
+                  // and every row 404'd.
+                  to="/queue"
                 />
               ))}
           </div>
@@ -588,7 +590,7 @@ export function DoctorHome({
                 }
                 meta={waitedFor(encounter.started_at)}
                 trailing={<StatusBadge status={encounter.status} />}
-                to={`/consultation/${encounter.patient}`}
+                to={`/consultation/${encounter.uuid}`}
               />
             ))}
           </div>

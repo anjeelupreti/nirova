@@ -132,6 +132,7 @@ def load() -> None:
     from apps.insurance import services as insurance
     from apps.pharmacy import services as pharmacy
     from apps.referrals import services as referrals
+    from apps.terminology import services as terminology
 
     for report in [
         # -- money --------------------------------------------------------
@@ -251,6 +252,15 @@ def load() -> None:
             parameters=("days",),
             group="Privacy",
             is_heavy=True,
+        ),
+        Report(
+            code="clinical.uncoded_diagnoses",
+            name="Diagnoses without a code",
+            answers="What will the monthly return miss, and who recorded it?",
+            permission="report.read",
+            run=terminology.uncoded_diagnoses,
+            parameters=("since", "facility"),
+            group="Clinical",
         ),
         Report(
             code="privacy.read_volume",

@@ -103,3 +103,32 @@ def test_every_call_starts_with_a_slash():
         "these paths are relative and will resolve against the current "
         "route:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_a_consultation_link_carries_an_encounter_not_a_patient():
+    """`/consultation/:uuid` loads `/clinical/encounters/<uuid>/`.
+
+    The doctor's own board linked every row with the *patient's* id -- the
+    waiting list and the unfinished consultations both -- so the most-repeated
+    link on a clinic day answered "the requested resource does not exist".
+    Caught by opening one, not by reading the code, which is why this is a
+    test: the two identifiers are both uuids and look identical in a diff.
+    """
+    root = _frontend()
+    if not root.exists():
+        pytest.skip(f"frontend source not present at {root}")
+
+    pattern = re.compile(r"/consultation/\$\{([^}]+)\}")
+    offenders = []
+    for file in sorted(root.rglob("*.tsx")):
+        for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
+            for expression in pattern.findall(line):
+                # `encounter.uuid`, `detail.uuid`, a bare `uuid` are right.
+                # Anything naming a patient is the bug this test exists for.
+                if "patient" in expression.lower():
+                    offenders.append(f"{file.relative_to(root)}:{number}  {expression}")
+
+    assert not offenders, (
+        "these links pass a patient to a route that loads an encounter, and "
+        "will 404 every time: " + "; ".join(offenders)
+    )

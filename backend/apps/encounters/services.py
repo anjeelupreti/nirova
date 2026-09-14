@@ -287,6 +287,25 @@ def add_diagnosis(encounter, data: dict, actor=None) -> Diagnosis:
     clinical act as a picture clarifies; making the clinician un-set the old
     one first would be friction for nothing.
     """
+    data = dict(data)
+    code = (data.get("icd10_code") or "").strip().upper()
+    if code:
+        from apps.terminology import services as terminology
+
+        known = terminology.resolve(code)
+        if known is None and terminology.vocabulary_exists():
+            # Refused rather than stored: a code nobody can look up is worse
+            # than none, because the monthly return counts it as a real one.
+            raise DomainError(
+                f"{code} is not in this organization's diagnosis vocabulary.",
+                code="unknown_diagnosis_code",
+                detail={"icd10_code": code},
+            )
+        data["icd10_code"] = code
+        # The classification's own wording, unless somebody wrote their own.
+        if known is not None and not (data.get("name") or "").strip():
+            data["name"] = known.title
+
     is_primary = data.get("is_primary", False)
     if is_primary:
         Diagnosis.objects.filter(encounter=encounter, is_primary=True).update(
@@ -301,6 +320,12 @@ def add_diagnosis(encounter, data: dict, actor=None) -> Diagnosis:
         created_by_id=getattr(actor, "uuid", None),
         **data,
     )
+    if diagnosis.icd10_code:
+        from apps.terminology import services as terminology
+
+        # Counted, so the picker reorders towards what this hospital writes.
+        terminology.note_use(diagnosis.icd10_code)
+
     record(
         AuditAction.CREATE,
         entity_type="encounters.Diagnosis",
