@@ -87,7 +87,7 @@ PREFERENCES = [
             ("/dashboard", "Dashboard"),
             ("/queue", "Queue"),
             ("/patients", "Patients"),
-            ("/workspace", "My workspace"),
+            ("/workspace", "My day"),
             ("/notifications", "Notifications"),
         ],
     ),

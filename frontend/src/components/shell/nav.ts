@@ -106,18 +106,32 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Workspace",
     icon: "home",
     items: [
+      // **My day first, the organization's second.** They were the other way
+      // round while both screens claimed to be "your day" (§143): a nurse and
+      // a counter assistant open the product to do their own work, and an
+      // organization dashboard is the first thing only for whoever runs the
+      // place.
       {
+        to: "/workspace",
+        label: "My day",
+        icon: "workspace",
+        badge: "workspace",
+        keywords: [
+          "workspace", "approvals", "inbox", "pending", "tasks", "my patients",
+          "my clinic", "what needs you", "for you",
+        ],
+      },
+      {
+        // `analytics.read` rather than nothing: the dashboard is now the
+        // organization's day — occupancy, takings, what is stuck — and that is
+        // a manager's screen. A nurse was being shown it first and it told her
+        // nothing about her shift.
         to: "/dashboard",
         label: "Dashboard",
         icon: "dashboard",
-        keywords: ["home", "overview", "kpi", "figures", "today"],
-      },
-      {
-        to: "/workspace",
-        label: "My workspace",
-        icon: "workspace",
-        badge: "workspace",
-        keywords: ["approvals", "inbox", "pending", "tasks", "what needs you", "for you"],
+        needs: "analytics.read",
+        scope: "facility",
+        keywords: ["home", "overview", "kpi", "figures", "today", "occupancy"],
       },
       // Notifications are the bell in the top bar, as in every product people
       // already use; the full page is reached from its "View all".
@@ -640,7 +654,9 @@ const ROLE_HOME: [role: string, path: string][] = [
   ["store_keeper", "/procurement"],
   ["lab_technician", "/diagnostics"],
   ["nurse", "/nurse-workspace"],
-  ["doctor", "/dashboard"],
+  // Their own day, not the organization's: a doctor's dashboard was a board
+  // about the hospital when what they wanted was their clinic list.
+  ["doctor", "/workspace"],
   ["receptionist", "/queue"],
   ["auditor", "/reports"],
 ];

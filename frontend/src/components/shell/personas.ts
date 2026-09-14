@@ -94,25 +94,29 @@ const LADDER: {
   },
   {
     persona: {
-      id: "nurse",
-      label: "My ward",
-      blurb: "Beds, medications due, observations outstanding",
-      icon: "nurse",
-      accent: 3,
-    },
-    // Charting and administering is the nurse's day. A doctor holds the
-    // clinical read but not the bedside write, which is what separates them.
-    requires: [["patient.clinical.read", "facility"], ["encounter.create", "own"]],
-  },
-  {
-    persona: {
       id: "doctor",
       label: "My clinic",
       blurb: "Your list, results to acknowledge, scripts to sign",
       icon: "doctor",
       accent: 1,
     },
-    requires: [["patient.clinical.read", "facility"]],
+    // **Before the nurse, and on `prescription.create`.** The nurse's rule
+    // used to be "clinical read plus `encounter.create`" on the theory that a
+    // doctor does not write at the bedside — but a doctor opens encounters
+    // all day, so every doctor matched the nurse first and was shown a ward
+    // board with observations due instead of their own clinic list. Writing a
+    // prescription is the consultant's act; a nurse does not hold it.
+    requires: [["patient.clinical.read", "facility"], ["prescription.create", "own"]],
+  },
+  {
+    persona: {
+      id: "nurse",
+      label: "My ward",
+      blurb: "Beds, medications due, observations outstanding",
+      icon: "nurse",
+      accent: 3,
+    },
+    requires: [["patient.clinical.read", "facility"], ["encounter.create", "own"]],
   },
   {
     persona: {

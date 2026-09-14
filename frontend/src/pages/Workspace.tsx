@@ -1,19 +1,22 @@
 /**
- * What needs me today.
+ * My day.
  *
- * Every module has a screen showing what is pending in it, and somebody who
- * approves purchase orders, signs off tills and reviews leave has to remember
- * to visit three of them. This is the one place that answers the question.
+ * **Two screens were both trying to be somebody's day.** The dashboard picked
+ * a board by role — the nurse's shift, the doctor's clinic, the counter's
+ * till — and this one listed approvals, so a doctor opened "My workspace" and
+ * found an empty approvals inbox while the board they actually needed sat on
+ * a different screen. They mean different things now: this is *mine* (the
+ * patients, the list, the things waiting on my decision) and the dashboard is
+ * *the organization's* (how the place is running, for whoever oversees it).
  *
- * **The incomplete banner is the point of this screen, not decoration.** An
- * empty approval queue is a positive claim that there is nothing to approve.
- * If a source failed, saying "nothing waiting" is a lie that costs somebody
- * their afternoon, so a failure is stated at the top, in the way that is hard
- * to scroll past, and the total is marked as at-least rather than exact.
+ * The board comes first because it is what the shift is spent on; approvals
+ * sit under it because they are interruptions, however important.
  *
- * **Ordered by what it costs to leave it sitting**, not alphabetically and not
- * by count. An unreviewed emergency access and a shift swap are not the same
- * kind of waiting.
+ * **The incomplete banner is the point of the approvals half, not decoration.**
+ * An empty queue is a positive claim that there is nothing to approve. If a
+ * source failed, saying "nothing waiting" is a lie that costs somebody their
+ * afternoon, so a failure is stated where it is hard to scroll past and the
+ * total is marked as at-least rather than exact.
  *
  * **Every group links to the screen that can act on it.** This one lists; it
  * deliberately has no approve buttons. Approving a payroll run out of a
@@ -47,6 +50,12 @@ import {
   CardTitle,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { PersonaHome } from "@/components/workspace/PersonaHome";
+import { useResource } from "@/components/workspace/useResource";
+import { availablePersonas, resolvePersona, type PersonaId } from "@/components/shell/personas";
+import { useSession } from "@/hooks/useSession";
+import { useCan } from "@/components/ui/can";
+import type { Facility, Paginated } from "@/types";
 
 function waitingFor(since: string | null): string {
   if (!since) return "";
@@ -58,7 +67,20 @@ function waitingFor(since: string | null): string {
   return `${days} days`;
 }
 
+/** Which board this person is shown, remembered per device. */
+const BOARD_KEY = "nirova.board";
+
 export default function WorkspacePage() {
+  const can = useCan();
+  const { session } = useSession();
+  const [board, setBoard] = useState<PersonaId | "auto">(() => {
+    try {
+      return (window.localStorage.getItem(BOARD_KEY) as PersonaId) ?? "auto";
+    } catch {
+      return "auto";
+    }
+  });
+  const [facilities, setFacilities] = useState<Facility[]>([]);
   const [data, setData] = useState<MyWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +105,45 @@ export default function WorkspacePage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    void api
+      .get<Paginated<Facility>>("/org/facilities/")
+      .then((page) => setFacilities(page.results))
+      .catch(() => setFacilities([]));
+  }, []);
+
+  const isPlatformOnly =
+    Boolean(session?.user.is_platform_staff) && (session?.memberships.length ?? 0) === 0;
+  const persona = resolvePersona({ can, isPlatformOnly, override: board });
+  const boards = availablePersonas(can);
+  /*
+    Which building this board is about.
+
+    Every personal board is about one place — the ward you are on, the counter
+    you are standing at — and the first facility in the list is the wrong
+    guess: a doctor at the clinic was shown an empty emergency department,
+    because the emergency department is at the hospital. The employee record
+    says where this person works, so that is used first; a hospital is the
+    next best guess, because the boards with the most on them are there.
+  */
+  const worksAt = data?.today.facility ?? "";
+  const oneFacility =
+    facilities.find((row) => row.name === worksAt)?.uuid
+    ?? facilities.find((row) => row.facility_type === "hospital")?.uuid
+    ?? facilities[0]?.uuid
+    ?? null;
+  // The same answer the board needs, read once here and handed down.
+  const workspace = useResource<MyWorkspace>("/me/workspace/");
+
+  const chooseBoard = (next: PersonaId | "auto") => {
+    setBoard(next);
+    try {
+      window.localStorage.setItem(BOARD_KEY, next);
+    } catch {
+      /* A preference that cannot be saved still works for this session. */
+    }
+  };
+
   if (loading && data === null) {
     return (
       <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
@@ -94,7 +155,7 @@ export default function WorkspacePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My workspace"
+        title="My day"
         description={
           <>
             {data?.today.has_employee_record
@@ -107,6 +168,23 @@ export default function WorkspacePage() {
         actions={
           <>
             <div className="flex items-center gap-2">
+              {boards.length > 1 ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="sr-only">Which board</span>
+                  <select
+                    value={board}
+                    onChange={(event) => chooseBoard(event.target.value as PersonaId)}
+                    className="h-9 rounded-md border border-input bg-card px-2 text-sm"
+                  >
+                    <option value="auto">Suits my role</option>
+                    {boards.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               {data?.notifications.unread ? (
                 <Link to="/notifications">
                   <Badge variant="outline" className="gap-1">
@@ -149,12 +227,14 @@ export default function WorkspacePage() {
         </Alert>
       ) : null}
 
+      <PersonaHome persona={persona} workspace={workspace} oneFacility={oneFacility} />
+
       {data && data.approvals.length === 0 && data.is_complete ? (
         <Card>
           <CardContent className="flex items-center gap-3 py-10">
             <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium">Nothing is waiting for you.</p>
+              <p className="text-sm font-medium">Nothing is waiting on your decision.</p>
               <p className="text-xs text-muted-foreground">
                 Every source was read successfully, so this is a real nothing
                 rather than a quiet failure.

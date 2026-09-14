@@ -1244,6 +1244,31 @@ definition the rest of this section serves.*
       every allowance against its usage
 - [ ] Asking for a module from that screen (it goes to a lead, Phase 12)
 
+## §143 My day, and the organization's `[~]`
+
+*New on 14 September 2026 (log 283). "No contents on the workspace… what does
+a doctor need in their system, what do nurses need?" — see `docs/PRODUCT.md`
+§8 for the doctrine this implements.*
+
+- [x] **`My day` is the person's own**: the board for their work plus the
+      decisions waiting on them. A doctor's was an empty approvals inbox
+- [x] **`Dashboard` is the organization's**, and asks for `analytics.read` —
+      a nurse was shown hospital occupancy before her own shift
+- [x] My day is the first thing in the rail; the dashboard second, and only
+      for whoever runs the place
+- [x] A doctor is told apart from a nurse by `prescription.create`, not by
+      `encounter.create` — which doctors hold, so every doctor was being shown
+      a ward board
+- [x] The doctor's board shows **critical results unacknowledged** and
+      **consultations left open**
+- [x] A panel is fetched only by somebody who may read it — the counter's own
+      board showed two permission refusals for panels that were not theirs
+- [x] The board is about the building the person works in, not the first one
+      in the list
+- [ ] The front desk still lacks unpaid consultations and the call list
+- [ ] The laboratory and accounts have no board of their own yet
+- [ ] Drill-through: a figure on a board does not yet open the rows behind it
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

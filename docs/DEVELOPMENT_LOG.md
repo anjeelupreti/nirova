@@ -12511,3 +12511,61 @@ added would forget.
 Leads, help desk, tasks and tenant broadcast — the vendor's own desk — are
 Phase 12 in `PRODUCT.md`. Usage-based invoicing of tenants is not built: the
 meters run and nothing bills from them.
+
+
+## 283 - Two screens were both trying to be your day
+
+*14 September 2026.*
+
+A doctor opened **My workspace** and found an empty approvals inbox. The board
+they actually needed — their clinic list, the emergency department, what is
+waiting on them — was on the **Dashboard**, which also showed a nurse the
+hospital's occupancy and a counter assistant the organization's takings. Two
+screens, both claiming to be somebody's day, and neither of them the right one
+for most people.
+
+**They mean different things now.** `My day` is *mine*: the board for the work
+I do, and the decisions waiting on me. `Dashboard` is *the organization's*:
+how the place is running, for whoever oversees it — and it now asks for
+`analytics.read`, which managers, controllers and directors hold and
+clinicians do not. A nurse was being shown an organization dashboard first
+and it told her nothing about her shift.
+
+The rail follows: **My day** is the first item, Dashboard the second and only
+where it is somebody's job.
+
+### A misclassification hiding in a comment
+
+The persona ladder decided a nurse by "clinical read **plus**
+`encounter.create`", on the reasoning — written in the comment — that "a
+doctor holds the clinical read but not the bedside write". A doctor opens
+encounters all day. So **every doctor matched the nurse rule first** and was
+shown a ward board with observations due instead of their own clinic. The
+distinguishing act is `prescription.create`: writing a prescription is the
+consultant's, and a nurse does not hold it. Found by opening the running
+system as a doctor, not by reading the ladder.
+
+### What a consultant carries home
+
+The doctor's board gained the two things that were reachable only by
+remembering to go and look: **critical results nobody has acknowledged** — the
+most dangerous thing on a clinician's desk — and **consultations left open**,
+which are notes that were never finished. Neither is facility-scoped: a doctor
+covering two sites still has to answer for the result, wherever it was taken.
+
+### Two red refusals on a board that was not theirs
+
+A counter assistant's own day greeted them with *"Not read — this action
+requires the 'report.read' permission"*, twice: the pharmacy board fetched the
+sales summary and the procurement dashboard, and a counter assistant holds
+neither. That reads as a broken product rather than as a panel that is not
+theirs. Panels are now asked for only by somebody who may read them —
+`useResource(path, enabled)` exists for exactly this — and the counter gets
+what it does have: the till it is standing at.
+
+### The board is about the right building
+
+Every personal board is about one place, and the first facility in the list
+was the wrong guess: a doctor at the clinic was shown an empty emergency
+department, because the emergency department is at the hospital. The employee
+record says where somebody works, so that is used first.

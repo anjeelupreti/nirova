@@ -35,7 +35,10 @@ import {
   waitedFor,
 } from "./WorkspaceFrame";
 import type {
+  CounterSession,
+  CriticalAlert,
   DepartmentSummary,
+  Encounter,
   Facility,
   HrDashboard,
   MyWorkspace,
@@ -44,6 +47,8 @@ import type {
   QueueResponse,
   SalesSummary,
 } from "@/types";
+import { useSession } from "@/hooks/useSession";
+import { useCan } from "@/components/ui/can";
 
 /* -------------------------------------------------------------------------- */
 /* Shared                                                                      */
@@ -364,11 +369,29 @@ export function DoctorHome({
   workspace: ReturnType<typeof useResource<MyWorkspace>>;
   facility: string | null;
 }) {
+  const { session } = useSession();
   const queue = useResource<QueueResponse>(
     facility ? `/clinical/queue/?facility=${facility}` : null,
   );
   const ed = useResource<DepartmentSummary>(
     facility ? `/ed/summary/?facility=${facility}` : null,
+  );
+  /*
+    The two things a consultant carries home if nobody shows them.
+
+    A critical value that nobody acknowledged is the single most dangerous
+    thing on a clinician's desk, and an open encounter is a note that was
+    never finished — both were reachable only by remembering to go and look.
+    Neither is facility-scoped here on purpose: a doctor covering two sites
+    still has to answer for the result, wherever it was taken.
+  */
+  const criticals = useResource<{ results: CriticalAlert[] }>(
+    "/diagnostics/critical-alerts/?open=true",
+  );
+  const mine = useResource<{ results: Encounter[] }>(
+    session?.user.uuid
+      ? `/clinical/encounters/?provider_uuid=${session.user.uuid}&open=true`
+      : null,
   );
 
   const inService = (queue.data?.queue ?? []).filter(
@@ -473,6 +496,74 @@ export function DoctorHome({
 
         <ApprovalsPanel workspace={workspace} />
       </div>
+
+      <WorkspacePanel
+        title="Results to acknowledge"
+        description="Critical values, oldest first"
+        icon="laboratory"
+        to="/diagnostics"
+        toLabel="Open laboratory"
+      >
+        {criticals.loading ? (
+          <PanelLoading height={140} />
+        ) : criticals.notIncluded ? null : criticals.error ? (
+          <PanelProblem error={criticals.error} />
+        ) : (criticals.data?.results ?? []).length === 0 ? (
+          <PanelEmpty message="Every critical result has been acknowledged." />
+        ) : (
+          <div className="space-y-0.5">
+            {(criticals.data?.results ?? []).slice(0, 5).map((alert) => (
+              <WorklistRow
+                key={alert.uuid}
+                tone="critical"
+                title={alert.patient_name}
+                detail={
+                  <>
+                    <span className="type-code">{alert.patient_mrn}</span>
+                    {alert.analyte ? ` · ${alert.analyte} ${alert.value}` : ""}
+                  </>
+                }
+                meta={waitedFor(alert.raised_at)}
+                to="/diagnostics"
+              />
+            ))}
+          </div>
+        )}
+      </WorkspacePanel>
+
+      <WorkspacePanel
+        title="Consultations left open"
+        description="Notes not finished"
+        icon="consultation"
+        to="/queue"
+        toLabel="Open queue"
+        span={2}
+      >
+        {mine.loading ? (
+          <PanelLoading height={140} />
+        ) : mine.error ? (
+          <PanelProblem error={mine.error} />
+        ) : (mine.data?.results ?? []).length === 0 ? (
+          <PanelEmpty message="Nothing left open. Every consultation is written up." />
+        ) : (
+          <div className="space-y-0.5">
+            {(mine.data?.results ?? []).slice(0, 6).map((encounter) => (
+              <WorklistRow
+                key={encounter.uuid}
+                title={encounter.patient_name}
+                detail={
+                  <>
+                    <span className="type-code">{encounter.reference}</span>
+                    {encounter.chief_complaint ? ` · ${encounter.chief_complaint}` : ""}
+                  </>
+                }
+                meta={waitedFor(encounter.started_at)}
+                to={`/consultation/${encounter.patient}`}
+              />
+            ))}
+          </div>
+        )}
+      </WorkspacePanel>
     </div>
   );
 }
@@ -488,22 +579,67 @@ export function PharmacyHome({
   workspace: ReturnType<typeof useResource<MyWorkspace>>;
   facility: string | null;
 }) {
+  const can = useCan();
   /*
     Both endpoints are per-building and **404 without `?facility=`**, because
     their views resolve the facility with `get_object_or_404`. The first
     version called them bare, so this board rendered two permanent failures —
     and the leadership board, which had the same bug, hid them entirely. Found
     by screenshotting the running app, not by reading the code.
+
+    **And both are asked for only by somebody who may read them.** A counter
+    assistant holds neither `report.read` nor `purchase.read`, so their own
+    board greeted them with two red permission refusals for panels they never
+    asked for — which reads as a broken product rather than as a board that is
+    not theirs. `enabled` is what that argument on `useResource` is for.
   */
+  const mayReadTakings = can("report.read", "facility");
+  const mayReadSupply = can("purchase.read", "facility");
   const sales = useResource<SalesSummary>(
     facility ? `/pos/summary/?facility=${facility}` : null,
+    mayReadTakings,
   );
   const procurement = useResource<ProcurementDashboard>(
     facility ? `/procurement/dashboard/?facility=${facility}` : null,
+    mayReadSupply,
+  );
+  // What a counter assistant *does* have: the till they are standing at.
+  const till = useResource<{ results: CounterSession[] }>(
+    !mayReadTakings && facility
+      ? `/pos/sessions/?facility=${facility}&status=open`
+      : null,
   );
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
+      {!mayReadTakings ? (
+        <WorkspacePanel
+          title="Your till"
+          description="Open the counter and sell"
+          icon="counter"
+          to="/counter"
+          toLabel="Open counter"
+          span={2}
+        >
+          {till.loading ? (
+            <PanelLoading height={140} />
+          ) : (till.data?.results ?? []).length === 0 ? (
+            <PanelEmpty message="No till open. Open one from the counter to start selling." />
+          ) : (
+            <div className="space-y-0.5">
+              {(till.data?.results ?? []).map((session) => (
+                <WorklistRow
+                  key={session.uuid}
+                  title={`${session.counter} · ${session.location_code}`}
+                  detail={`Opened by ${session.cashier_name}`}
+                  meta={waitedFor(session.opened_at)}
+                  to="/counter"
+                />
+              ))}
+            </div>
+          )}
+        </WorkspacePanel>
+      ) : (
       <WorkspacePanel
         title="Counter today"
         description="Takings and margin"
@@ -562,8 +698,10 @@ export function PharmacyHome({
           </div>
         )}
       </WorkspacePanel>
+      )}
 
       <div className="space-y-4">
+        {mayReadSupply ? (
         <WorkspacePanel title="Supply" icon="procurement" to="/procurement">
           {procurement.loading ? (
             <PanelLoading height={140} />
@@ -593,6 +731,7 @@ export function PharmacyHome({
             </div>
           )}
         </WorkspacePanel>
+        ) : null}
 
         <ApprovalsPanel workspace={workspace} />
       </div>

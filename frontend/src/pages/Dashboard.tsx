@@ -47,11 +47,6 @@ import {
 import { useResource } from "@/components/workspace/useResource";
 import {
   ApprovalsPanel,
-  DoctorHome,
-  FrontDeskHome,
-  NurseHome,
-  PeopleHome,
-  PharmacyHome,
 } from "@/components/workspace/homes";
 import type {
   DepartmentSummary,
@@ -148,9 +143,6 @@ export default function DashboardPage() {
     const preferred = persona.id === "pharmacy" ? ["pharmacy"] : ["hospital"];
     setFacility(pickFacility(facilityList, preferred)?.uuid ?? facilityList[0].uuid);
   }, [facility, facilityList, persona.id, wholeOrganization]);
-  // Boards other than leadership's are about one building.
-  const oneFacility =
-    facility === ALL_FACILITIES ? pickFacility(facilityList, ["hospital"])?.uuid ?? null : facility;
 
   /* Read once here and passed down: six homes want it and six requests for the
      same answer is the busiest endpoint in the product for no clinical reason. */
@@ -220,23 +212,18 @@ export default function DashboardPage() {
         }
       />
 
-      {persona.id === "nurse" ? <NurseHome workspace={workspace} /> : null}
-      {persona.id === "frontdesk" ? (
-        <FrontDeskHome workspace={workspace} facility={oneFacility} />
-      ) : null}
-      {persona.id === "doctor" ? (
-        <DoctorHome workspace={workspace} facility={oneFacility} />
-      ) : null}
-      {persona.id === "pharmacy" ? (
-        <PharmacyHome workspace={workspace} facility={oneFacility} />
-      ) : null}
-      {persona.id === "people" ? <PeopleHome workspace={workspace} /> : null}
+      {/*
+        The organization's day, and only that. The boards about *one person* —
+        the nurse's shift, the doctor's clinic, the counter's till — moved to
+        My workspace when the two screens were separated (§143): a product
+        with two screens both claiming to be "your day" is a product nobody
+        knows where to start in.
+      */}
       {persona.id === "leadership" || persona.id === "finance" ? (
         <LeadershipHome workspace={workspace} facility={facility} facilities={facilityList} />
-      ) : null}
-      {persona.id === "general" || persona.id === "platform" ? (
+      ) : (
         <GeneralHome workspace={workspace} />
-      ) : null}
+      )}
     </Page>
   );
 }
