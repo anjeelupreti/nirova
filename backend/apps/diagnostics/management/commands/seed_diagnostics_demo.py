@@ -107,12 +107,50 @@ class Command(BaseCommand):
                 raise CommandError("No clinic facility. Run `seed_demo` first.")
 
             self._catalogue(facility)
+            self._report_templates()
             self._ensure_radiology(organization)
             self._routine(organization, facility, doctor, technician)
             self._critical(organization, facility, doctor, technician)
             self._rejection(organization, facility, doctor, technician)
             self._radiology(organization, facility, doctor, technician)
             self._report(facility)
+
+    def _report_templates(self):
+        """The organization's chest X-ray templates: normal, and consolidation."""
+        from apps.diagnostics.models import ReportTemplate
+
+        templates = [
+            {
+                "name": "Chest X-ray: normal",
+                "test_code": "CXR",
+                "modality": "xray",
+                "findings": (
+                    "Trachea central. Heart size normal. Both lung fields clear. "
+                    "Costophrenic angles sharp. No bony abnormality seen."
+                ),
+                "impression": "Normal chest X-ray.",
+                "advice": "No abnormality was seen on your chest X-ray.",
+            },
+            {
+                "name": "Chest X-ray: consolidation",
+                "test_code": "CXR",
+                "modality": "xray",
+                "findings": (
+                    "Trachea central. Heart size normal. Patchy opacity in the ___ "
+                    "zone with air bronchograms. Costophrenic angles ___. No pneumothorax."
+                ),
+                "impression": "Consolidation in the ___ zone, in keeping with infection. Correlate clinically.",
+                "advice": (
+                    "The X-ray shows changes often seen with a chest infection. Your "
+                    "doctor will explain the treatment."
+                ),
+            },
+        ]
+        for spec in templates:
+            ReportTemplate.objects.update_or_create(
+                name=spec["name"], owner_id=None, defaults=spec,
+            )
+        self.stdout.write(f"  {len(templates)} report templates")
 
     def _ensure_radiology(self, organization):
         """Buy the radiology module if the plan does not include it.

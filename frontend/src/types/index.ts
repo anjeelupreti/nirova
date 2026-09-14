@@ -2290,6 +2290,10 @@ export interface Admission extends AdmissionSummary {
   outcome_notes: string;
   discharge_summary: string;
   discharge_advice: string;
+  discharge_diet: string;
+  discharge_activity: string;
+  /** Specific reasons to come straight back, printed as a list. */
+  discharge_warning_signs: string[];
   follow_up_on: string | null;
   cancelled_reason: string;
   notes: string;

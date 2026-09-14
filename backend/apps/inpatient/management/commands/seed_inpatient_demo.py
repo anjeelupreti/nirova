@@ -106,6 +106,7 @@ class Command(BaseCommand):
 
             self._services(facility)
             self._wards(facility)
+            self._discharge_templates()
             self._bed_rules(facility, patients[0], clerk)
             admission = self._admit(
                 organization, facility, patients[0], clerk, consultant
@@ -130,6 +131,123 @@ class Command(BaseCommand):
                     "is_recurring_daily": True,
                 },
             )
+
+    def _discharge_templates(self):
+        """The organization's discharge templates for what this ward sees most.
+
+        Written for the patient as much as the record: plain advice, and warning
+        signs specific enough to act on.
+        """
+        from apps.inpatient.models import DischargeTemplate
+
+        templates = [
+            {
+                "name": "Community-acquired pneumonia",
+                "diagnosis": "Community-acquired pneumonia",
+                "course": (
+                    "Admitted with fever, cough and breathlessness. Chest X-ray: ___. "
+                    "Treated with IV antibiotics for ___ days, changed to oral on day ___. "
+                    "Oxygen stopped on day ___. No fever for 48 hours before discharge."
+                ),
+                "advice": (
+                    "Finish every tablet of the antibiotic, even when you feel better. "
+                    "Drink plenty of water. Tiredness can last a few weeks; that is normal."
+                ),
+                "diet": "Normal food. Plenty of fluids.",
+                "activity": "Walk a little more each day. No heavy work for two weeks.",
+                "warning_signs": [
+                    "Breathing gets harder, or lips or fingers turn blue",
+                    "Fever comes back after it had settled",
+                    "Chest pain",
+                    "Confusion or unusual sleepiness",
+                ],
+                "follow_up_days": 7,
+            },
+            {
+                "name": "Enteric fever (typhoid)",
+                "diagnosis": "Enteric fever",
+                "course": (
+                    "Admitted with ___ days of fever. Blood culture / Widal: ___. "
+                    "Treated with ___ for ___ days. Fever settled on day ___."
+                ),
+                "advice": (
+                    "Finish the full course of medicine. Wash hands with soap after the "
+                    "toilet and before eating. Drink boiled or filtered water only."
+                ),
+                "diet": "Soft, freshly cooked food. Avoid street food and raw salads for a month.",
+                "activity": "Rest at home for a week. Return to school or work when strong.",
+                "warning_signs": [
+                    "Fever returns after it had settled",
+                    "Severe belly pain, or a hard, swollen belly",
+                    "Blood in the stool, or black stool",
+                    "Vomiting so you cannot keep fluids down",
+                ],
+                "follow_up_days": 7,
+            },
+            {
+                "name": "Urinary tract infection with sepsis",
+                "diagnosis": "Urinary tract infection with sepsis",
+                "course": (
+                    "Admitted with fever and ___. Urine culture: ___. Treated with IV ___ "
+                    "for ___ days, changed to oral ___. Blood pressure and kidney tests "
+                    "normal before discharge."
+                ),
+                "advice": "Finish the antibiotic. Drink at least two litres of water a day.",
+                "diet": "Normal food. Plenty of water.",
+                "activity": "Rest for a few days, then normal activity.",
+                "warning_signs": [
+                    "Fever or shivering again",
+                    "Pain in the back or side",
+                    "Passing very little urine",
+                    "Fainting, or confusion",
+                ],
+                "follow_up_days": 7,
+            },
+            {
+                "name": "Normal vaginal delivery",
+                "diagnosis": "Spontaneous vaginal delivery",
+                "course": (
+                    "Delivered a live ___ baby, weight ___ kg, on ___. Blood loss ___. "
+                    "Perineum ___. Mother and baby well; breastfeeding established."
+                ),
+                "advice": (
+                    "Breastfeed whenever the baby wants. Keep the stitches clean and dry. "
+                    "Take the iron tablets for three months."
+                ),
+                "diet": "Normal, nourishing food with extra fluids while breastfeeding.",
+                "activity": "Light work only for six weeks. No heavy lifting.",
+                "warning_signs": [
+                    "Heavy bleeding: soaking a pad in an hour",
+                    "Fever, or foul-smelling discharge",
+                    "Severe headache, blurred vision or fits",
+                    "Baby not feeding, very sleepy, or yellow on the first day",
+                ],
+                "follow_up_days": 42,
+            },
+            {
+                "name": "Acute gastroenteritis",
+                "diagnosis": "Acute gastroenteritis",
+                "course": (
+                    "Admitted with ___ days of loose stools and vomiting, ___ dehydration. "
+                    "Rehydrated with IV fluids; tolerating oral fluids before discharge."
+                ),
+                "advice": "Keep drinking oral rehydration solution after every loose stool.",
+                "diet": "Small, light meals. Avoid oily and spicy food for a few days.",
+                "activity": "Rest until the stools settle.",
+                "warning_signs": [
+                    "Cannot keep fluids down",
+                    "Very little urine, or dizzy on standing",
+                    "Blood in the stool",
+                    "High fever",
+                ],
+                "follow_up_days": None,
+            },
+        ]
+        for spec in templates:
+            DischargeTemplate.objects.update_or_create(
+                name=spec["name"], owner_id=None, defaults=spec,
+            )
+        self.stdout.write(f"  {len(templates)} discharge templates")
 
     def _wards(self, facility):
         self.stdout.write(self.style.MIGRATE_HEADING("\n1. Wards and beds"))

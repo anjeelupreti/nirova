@@ -12982,3 +12982,47 @@ organization, because the one unpaid invoice was at the clinic. Somebody whose
 
 Checked against the demo data rather than assumed: no laboratory order is open
 anywhere (all 88 are released or rejected), so the empty worklist is true.
+
+## 293 - "Come back if unwell" tells nobody anything
+
+The discharge summary and the imaging report both existed as printed
+documents. What they lacked was a way of writing them well, quickly, the same
+way twice.
+
+**Discharge templates** (`apps/inpatient/discharge_templating.py`,
+`/api/ipd/discharge-templates/`). A ward discharges the same few conditions
+over and over, and every summary was typed from nothing while a family waited:
+a few lines of course, "advice given", and one hard-coded sentence about
+returning if unwell. A template carries both halves of the sheet. For the next
+clinician: the diagnosis and a course with blanks for this patient ("Chest
+X-ray: ___"). For the patient, in plain words: advice, food, activity, and
+**warning signs specific to the condition** -- a typhoid discharge names a hard,
+swollen belly; a delivery names soaking a pad in an hour -- plus a follow-up
+interval that becomes a date. Applying one fills only the fields still empty
+and discharges nobody; the use is counted. Mine and ours, as with prescription
+templates; sharing needs `catalog.manage`. Five are seeded: pneumonia, enteric
+fever, urinary infection with sepsis, normal delivery, gastroenteritis.
+
+The admission now keeps the patient's half structured -- `discharge_diet`,
+`discharge_activity`, `discharge_warning_signs` -- and the printed summary has
+an "At home" section and a "Come back to hospital at once if" list, falling back
+to the general list only when the clinician gave none. The dialog separates the
+two halves on screen, so it is plain which half is read at home.
+
+**Report templates** (`apps/diagnostics/report_templates.py`,
+`/api/diagnostics/report-templates/`). An imaging report was one text box, and
+it printed in the "Result" column of the laboratory table beside empty Flag,
+Unit and Reference columns. A template holds findings, impression and a
+sentence for the patient, per test or per modality, and fills the entry box
+under FINDINGS / IMPRESSION / ADVICE headings; applying over something already
+written asks first. The printed report reads those headings back as sections,
+titled "Imaging report", the impression set apart. A report typed by hand under
+the same headings prints the same way and can be saved as a template. Two chest
+X-ray templates are seeded.
+
+Checked in the running app: the discharge dialog with the pneumonia template
+applied fills the diagnosis, the course with its blanks, and the patient's
+half. **Not checked on screen:** the printed discharge summary and the imaging
+report. The automated browser could not reach a discharged stay through the
+ward list, and the demo has no open imaging order to report; both were checked
+by type and by reading the component, not by looking at them.

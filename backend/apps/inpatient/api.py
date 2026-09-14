@@ -223,7 +223,8 @@ class AdmissionDetailSerializer(AdmissionListSerializer):
             "final_diagnosis", "attendant_name", "attendant_phone",
             "attendant_relation", "deposit_expected", "diet_plan",
             "mlc_number", "police_informed_at", "outcome_notes",
-            "discharge_summary", "discharge_advice", "follow_up_on",
+            "discharge_summary", "discharge_advice", "discharge_diet",
+            "discharge_activity", "discharge_warning_signs", "follow_up_on",
             "cancelled_reason", "notes", "bed_assignments", "clearances",
         )
         read_only_fields = fields
@@ -287,6 +288,12 @@ class DischargeSerializer(serializers.Serializer):
     outcome = serializers.CharField(max_length=24, default="discharged")
     summary = serializers.CharField(required=False, allow_blank=True, default="")
     advice = serializers.CharField(required=False, allow_blank=True, default="")
+    diet = serializers.CharField(required=False, allow_blank=True, default="")
+    activity = serializers.CharField(required=False, allow_blank=True, default="")
+    warning_signs = serializers.ListField(
+        child=serializers.CharField(max_length=255, allow_blank=True),
+        required=False, default=list,
+    )
     follow_up_on = serializers.DateField(required=False, allow_null=True)
     final_diagnosis = serializers.CharField(
         max_length=512, required=False, allow_blank=True, default=""
@@ -652,6 +659,9 @@ class AdmissionViewSet(viewsets.ReadOnlyModelViewSet):
             follow_up_on=data.get("follow_up_on"),
             final_diagnosis=data.get("final_diagnosis", ""),
             override_reason=data.get("override_reason", ""),
+            diet=data.get("diet", ""),
+            activity=data.get("activity", ""),
+            warning_signs=data.get("warning_signs") or [],
         )
         return Response(AdmissionDetailSerializer(admission).data)
 

@@ -46,6 +46,7 @@ import {
 
 import WardSetup from "@/pages/wards/Setup";
 import { DischargeSummaryPreview } from "@/components/documents/DischargeSummaryDocument";
+import { DischargeTemplates, type AppliedDischarge } from "@/components/clinical/DischargeTemplates";
 import { useSession } from "@/hooks/useSession";
 import { WardBoard } from "@/pages/wards/Board";
 import api, { ApiError } from "@/lib/api";
@@ -1304,6 +1305,9 @@ function DischargeDialog({
     outcome: "discharged",
     summary: "",
     advice: "",
+    diet: "",
+    activity: "",
+    warning_signs: "",
     final_diagnosis: "",
     follow_up_on: "",
     override_reason: "",
@@ -1313,6 +1317,24 @@ function DischargeDialog({
 
   const compassionate = ["died", "lama"].includes(form.outcome);
   const needsOverride = !blockers.can_discharge && !compassionate;
+  const warningSigns = form.warning_signs
+    .split("\n")
+    .map((sign) => sign.trim())
+    .filter(Boolean);
+
+  // A template fills only what is still empty: whatever has already been
+  // written about this patient stays.
+  const applyTemplate = (template: AppliedDischarge) =>
+    setForm((f) => ({
+      ...f,
+      final_diagnosis: f.final_diagnosis || template.diagnosis,
+      summary: f.summary || template.course,
+      advice: f.advice || template.advice,
+      diet: f.diet || template.diet,
+      activity: f.activity || template.activity,
+      warning_signs: f.warning_signs || template.warning_signs.join("\n"),
+      follow_up_on: f.follow_up_on || template.follow_up_on || "",
+    }));
 
   const submit = async () => {
     setBusy(true);
@@ -1320,6 +1342,7 @@ function DischargeDialog({
     try {
       await api.post(`/ipd/admissions/${admission.reference}/discharge/`, {
         ...form,
+        warning_signs: warningSigns,
         follow_up_on: form.follow_up_on || null,
       });
       onDone();
@@ -1332,7 +1355,7 @@ function DischargeDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <Card className="my-8 w-full max-w-lg">
+      <Card className="my-8 w-full max-w-2xl">
         <CardHeader>
           <CardTitle>Discharge {admission.patient_name}</CardTitle>
           <CardDescription>
@@ -1419,6 +1442,20 @@ function DischargeDialog({
             </div>
           )}
 
+          {!compassionate ? (
+            <DischargeTemplates
+              draft={{
+                diagnosis: form.final_diagnosis,
+                course: form.summary,
+                advice: form.advice,
+                diet: form.diet,
+                activity: form.activity,
+                warning_signs: warningSigns,
+              }}
+              onApply={applyTemplate}
+            />
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="d-diagnosis">Final diagnosis</Label>
             <Input
@@ -1434,10 +1471,13 @@ function DischargeDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="d-summary">Discharge summary</Label>
+            <Label htmlFor="d-summary">Course in hospital</Label>
+            <p className="text-xs text-muted-foreground">
+              For the next clinician: what was found, what was done, how it went.
+            </p>
             <Textarea
               id="d-summary"
-              rows={3}
+              rows={5}
               value={form.summary}
               onChange={(event) =>
                 setForm((f) => ({ ...f, summary: event.target.value }))
@@ -1445,16 +1485,57 @@ function DischargeDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="d-advice">Advice on leaving</Label>
-            <Textarea
-              id="d-advice"
-              rows={2}
-              value={form.advice}
-              onChange={(event) =>
-                setForm((f) => ({ ...f, advice: event.target.value }))
-              }
-            />
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              For the patient, in plain words. This half of the sheet is read at home.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="d-advice">Advice</Label>
+              <Textarea
+                id="d-advice"
+                rows={3}
+                value={form.advice}
+                onChange={(event) =>
+                  setForm((f) => ({ ...f, advice: event.target.value }))
+                }
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="d-diet">Food</Label>
+                <Textarea
+                  id="d-diet"
+                  rows={2}
+                  value={form.diet}
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, diet: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="d-activity">Activity</Label>
+                <Textarea
+                  id="d-activity"
+                  rows={2}
+                  value={form.activity}
+                  onChange={(event) =>
+                    setForm((f) => ({ ...f, activity: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="d-warning">Come back at once if</Label>
+              <Textarea
+                id="d-warning"
+                rows={4}
+                value={form.warning_signs}
+                placeholder={"One per line, e.g.\nBreathing gets harder\nFever comes back"}
+                onChange={(event) =>
+                  setForm((f) => ({ ...f, warning_signs: event.target.value }))
+                }
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

@@ -64,6 +64,15 @@ const day = (iso: string | null | undefined) =>
     ? formatDate(iso)
     : "—";
 
+/** Printed when the discharging clinician gave no specific warning signs. */
+const GENERAL_WARNING_SIGNS = [
+  "Difficulty breathing",
+  "Chest pain",
+  "Confusion or fainting",
+  "Bleeding",
+  "A fever that does not settle",
+];
+
 const FLAG: Record<string, string> = {
   low: "L", high: "H", critical_low: "CRIT L", critical_high: "CRIT H", abnormal: "ABN",
 };
@@ -252,12 +261,40 @@ function DischargeSummaryDocument({
         )}
       </Section>
 
-      <Section title="Advice on discharge">
-        <p className="whitespace-pre-line text-sm">{admission.discharge_advice || "—"}</p>
-        <p className="mt-2 text-sm">
-          Return to the emergency department at once for difficulty breathing,
-          chest pain, confusion, bleeding, or a fever that does not settle.
-        </p>
+      <Section title="At home">
+        {admission.discharge_advice ? (
+          <p className="whitespace-pre-line text-sm">{admission.discharge_advice}</p>
+        ) : null}
+        {admission.discharge_diet || admission.discharge_activity ? (
+          <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[6rem_1fr]">
+            {admission.discharge_diet ? (
+              <>
+                <dt className="text-muted-foreground">Food</dt>
+                <dd className="whitespace-pre-line">{admission.discharge_diet}</dd>
+              </>
+            ) : null}
+            {admission.discharge_activity ? (
+              <>
+                <dt className="text-muted-foreground">Activity</dt>
+                <dd className="whitespace-pre-line">{admission.discharge_activity}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
+        {!admission.discharge_advice && !admission.discharge_diet && !admission.discharge_activity ? (
+          <p className="text-sm">—</p>
+        ) : null}
+      </Section>
+
+      <Section title="Come back to hospital at once if">
+        <ul className="list-disc space-y-0.5 pl-5 text-sm">
+          {(admission.discharge_warning_signs?.length
+            ? admission.discharge_warning_signs
+            : GENERAL_WARNING_SIGNS
+          ).map((sign) => (
+            <li key={sign}>{sign}</li>
+          ))}
+        </ul>
       </Section>
     </PrintableDocument>
   );

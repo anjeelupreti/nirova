@@ -11,6 +11,8 @@ from apps.diagnostics.views import (
     WorklistView,
 )
 
+from apps.diagnostics.report_templates import ReportTemplateDetailView, ReportTemplateView
+
 router = DefaultRouter()
 router.register("tests", TestDefinitionViewSet, basename="test-definition")
 router.register("orders", DiagnosticOrderViewSet, basename="diagnostic-order")
@@ -18,6 +20,12 @@ router.register("critical-alerts", CriticalAlertViewSet, basename="critical-aler
 
 urlpatterns = [
     path("worklist/", WorklistView.as_view(), name="diagnostics-worklist"),
+    path("report-templates/", ReportTemplateView.as_view(), name="report-templates"),
+    path(
+        "report-templates/<uuid:uuid>/",
+        ReportTemplateDetailView.as_view(),
+        name="report-template",
+    ),
     path("turnaround/", TurnaroundReportView.as_view(), name="turnaround-report"),
     path(
         "patients/<uuid:uuid>/results/",

@@ -856,6 +856,9 @@ def discharge(
     follow_up_on=None,
     final_diagnosis: str = "",
     override_reason: str = "",
+    diet: str = "",
+    activity: str = "",
+    warning_signs=None,
 ) -> Admission:
     """Send the patient home, and free the bed.
 
@@ -909,6 +912,11 @@ def discharge(
 
     admission.discharge_summary = summary or admission.discharge_summary
     admission.discharge_advice = advice
+    admission.discharge_diet = diet
+    admission.discharge_activity = activity
+    from apps.inpatient.discharge_templating import clean_warning_signs
+
+    admission.discharge_warning_signs = clean_warning_signs(warning_signs)
     admission.follow_up_on = follow_up_on
     if final_diagnosis:
         admission.final_diagnosis = final_diagnosis

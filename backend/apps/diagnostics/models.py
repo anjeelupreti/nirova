@@ -608,3 +608,35 @@ class CriticalValueAlert(BaseModel):
         """
         end = self.acknowledged_at or timezone.now()
         return int((end - self.raised_at).total_seconds() / 60)
+
+
+class ReportTemplate(BaseModel):
+    """Findings, impression and a sentence for the patient, written once.
+
+    See `apps/diagnostics/report_templates.py`. `test_code` empty applies to
+    every narrative test of `modality`; `owner_id` empty is the organization's.
+    """
+
+    name = models.CharField(max_length=128, db_index=True)
+    test_code = models.CharField(max_length=32, blank=True, db_index=True)
+    modality = models.CharField(max_length=20, blank=True)
+    findings = models.TextField(blank=True)
+    impression = models.TextField(blank=True)
+    advice = models.TextField(blank=True)
+
+    owner_id = models.UUIDField(null=True, blank=True, db_index=True)
+    owner_name = models.CharField(max_length=255, blank=True)
+    times_used = models.PositiveIntegerField(default=0)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "diagnostic_report_template"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def is_shared(self) -> bool:
+        return self.owner_id is None

@@ -403,6 +403,11 @@ class Admission(BaseModel):
     outcome_notes = models.TextField(blank=True)
     discharge_summary = models.TextField(blank=True)
     discharge_advice = models.TextField(blank=True)
+    #: The patient's half of the summary, structured so it prints as the
+    #: patient needs it: what to eat, what to do, and when to come straight back.
+    discharge_diet = models.TextField(blank=True)
+    discharge_activity = models.TextField(blank=True)
+    discharge_warning_signs = models.JSONField(default=list, blank=True)
     follow_up_on = models.DateField(null=True, blank=True)
 
     cancelled_reason = models.CharField(max_length=512, blank=True)
@@ -747,3 +752,45 @@ from apps.inpatient.nursing_models import (  # noqa: E402, F401
     TaskCategory,
     TaskStatus,
 )
+
+
+class DischargeTemplate(BaseModel):
+    """A going-home written well once: course, advice, warning signs, follow-up.
+
+    See `apps/inpatient/discharge_templating.py`. `owner_id` empty is the
+    organization's; set, it is one clinician's own.
+    """
+
+    name = models.CharField(max_length=128, db_index=True)
+    diagnosis = models.CharField(max_length=255, blank=True)
+    department = models.ForeignKey(
+        Department, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="discharge_templates",
+    )
+    owner_id = models.UUIDField(null=True, blank=True, db_index=True)
+    owner_name = models.CharField(max_length=255, blank=True)
+
+    #: For the next clinician: what happened, with blanks for this patient.
+    course = models.TextField(blank=True)
+    #: For the patient, in plain words.
+    advice = models.TextField(blank=True)
+    diet = models.TextField(blank=True)
+    activity = models.TextField(blank=True)
+    #: Specific reasons to come back at once, printed as a list.
+    warning_signs = models.JSONField(default=list, blank=True)
+    follow_up_days = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    times_used = models.PositiveIntegerField(default=0)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "ipd_discharge_template"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @property
+    def is_shared(self) -> bool:
+        return self.owner_id is None

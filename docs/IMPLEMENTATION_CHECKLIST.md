@@ -1364,6 +1364,21 @@ in one place — self service, my day, my workspace, the profile drop-down."*
 - [ ] Revenue by department and payer, with drill-through to the invoices
 - [x] A board for the laboratory and for accounts in My day (log 292)
 
+## §148 Report and discharge templates `[~]`
+
+*New on 15 September 2026 (log 293). "Templates for reports and prescriptions
+... clear and concise, for both patients to understand, and for our record
+keeping as well."*
+
+- [x] Discharge templates: course for the clinician; advice, food, activity and
+      condition-specific warning signs for the patient; follow-up as a date
+- [x] The printed discharge summary has "At home" and "Come back at once if"
+- [x] Report templates for imaging: findings, impression, advice per test or
+      modality; the printed report shows them as sections
+- [x] A template fills only what is empty and writes nothing on its own
+- [ ] Lab panel reports with a plain-language line per abnormal result
+- [ ] The printed summary and imaging report checked on screen
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { PrintableDocument, SignatureBlock } from "@/components/ui/export";
 import type { DiagnosticOrderDetail } from "@/types";
 import { formatDateTime } from "@/lib/dates";
+import { reportSections } from "@/components/documents/reportSections";
 
 const FLAG_TEXT: Record<string, string> = {
   low: "L",
@@ -44,11 +45,13 @@ export function LabReportDocument({
 }) {
   const entered = order.results[0]?.entered_by_name;
   const critical = order.critical_alerts ?? [];
+  // Imaging and other written reports print as sections, not table rows.
+  const narrative = order.modality !== "laboratory";
 
   return (
     <PrintableDocument
       id={`lab-report-${order.uuid}`}
-      title="Laboratory report"
+      title={narrative ? "Imaging report" : "Laboratory report"}
       reference={order.accession_number || order.reference}
       organization={organization}
       facility={order.facility_name}
@@ -65,12 +68,15 @@ export function LabReportDocument({
       footer={
         <SignatureBlock
           signatories={[
-            { role: "Results entered by", name: entered },
+            { role: narrative ? "Reported by" : "Results entered by", name: entered },
             { role: "Verified and released by", name: order.verified_by_name },
           ]}
         />
       }
     >
+      {narrative ? (
+        <NarrativeReport results={order.results} />
+      ) : (
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
@@ -106,6 +112,7 @@ export function LabReportDocument({
           ))}
         </tbody>
       </table>
+      )}
 
       {critical.length > 0 && (
         <div className="mt-4 rounded-md border border-critical/40 p-3 text-sm">
@@ -142,10 +149,44 @@ export function LabReportDocument({
           </dd>
         </div>
       </dl>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Results are interpreted against reference ranges for the patient's age
-        and sex. Please correlate clinically.
-      </p>
+      {narrative ? null : (
+        <p className="mt-4 text-xs text-muted-foreground">
+          Results are interpreted against reference ranges for the patient's age
+          and sex. Please correlate clinically.
+        </p>
+      )}
     </PrintableDocument>
+  );
+}
+
+/**
+ * A written report, as the sections it was written under.
+ *
+ * Imaging and other narrative results were printed in the "Result" column of
+ * the numeric table: a paragraph of findings squeezed beside empty Flag, Unit
+ * and Reference columns. They print as a report now, the impression set apart
+ * because it is the part the requesting clinician reads first.
+ */
+function NarrativeReport({ results }: { results: DiagnosticOrderDetail["results"] }) {
+  return (
+    <div className="space-y-4 text-sm">
+      {results.map((result) => (
+        <div key={result.uuid} className="space-y-3">
+          {reportSections(String(result.display_value ?? "")).map((section, index) => (
+            <section key={`${section.heading ?? "text"}-${index}`} className="break-inside-avoid">
+              {section.heading ? (
+                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {section.heading}
+                </h3>
+              ) : null}
+              <p className={cn("whitespace-pre-line", section.heading === "IMPRESSION" && "font-medium")}>
+                {section.body}
+              </p>
+            </section>
+          ))}
+          {result.was_amended ? <p className="text-xs text-muted-foreground">(amended)</p> : null}
+        </div>
+      ))}
+    </div>
   );
 }

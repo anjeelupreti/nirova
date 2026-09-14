@@ -28,6 +28,7 @@ import { listen } from "@/lib/live";
 import { useSession } from "@/hooks/useSession";
 import { DocumentPreview } from "@/components/documents/DocumentPreview";
 import { LabReportDocument } from "@/components/documents/LabReportDocument";
+import { ReportTemplates } from "@/components/clinical/ReportTemplates";
 import { cn } from "@/lib/utils";
 import type {
   CriticalAlert,
@@ -320,15 +321,25 @@ function ResultEntry({
         )}
 
         {isNarrative ? (
-          <div className="space-y-1">
+          <div className="space-y-2">
+            <ReportTemplates
+              testCode={order.test_code}
+              modality={order.modality}
+              text={narrative}
+              onApply={setNarrative}
+            />
             <Label htmlFor="narrative">Report</Label>
             <Textarea
               id="narrative"
-              rows={8}
+              rows={12}
               value={narrative}
-              placeholder="Findings, then a conclusion."
+              placeholder={"FINDINGS\nWhat was seen.\n\nIMPRESSION\nWhat it means.\n\nADVICE\nOne plain sentence for the patient."}
               onChange={(e) => setNarrative(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Headings in capitals -- FINDINGS, IMPRESSION, ADVICE -- print as
+              sections of the report.
+            </p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
