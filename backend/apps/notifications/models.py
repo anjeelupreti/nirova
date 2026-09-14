@@ -328,3 +328,9 @@ class NotificationPreference(BaseModel):
     def __str__(self) -> str:
         state = "on" if self.enabled else "off"
         return f"{self.owner_id} {self.category}/{self.channel}: {state}"
+
+# Delivery beyond the screen lives beside the notification it delivers.
+from apps.notifications.delivery import (  # noqa: E402,F401
+    DeliveryStatus,
+    NotificationDelivery,
+)

@@ -173,6 +173,36 @@ SETTINGS = [
             "administrator is on hand to reset it for anyone who loses theirs."
         ),
     ),
+    # -- Reaching people off the screen (apps/notifications/delivery.py) ----
+    Setting(
+        namespace="notifications",
+        key="sms_url",
+        label="SMS gateway address",
+        description=(
+            "Where text messages are posted. Nepali gateways all take the same "
+            "shape — a token, a sender, a number and the text — so any of them "
+            "works. Blank: critical alerts reach people by email only, and the "
+            "attempt is recorded as unreachable rather than lost."
+        ),
+        kind="string",
+        default="",
+    ),
+    Setting(
+        namespace="notifications",
+        key="sms_token",
+        label="SMS gateway token",
+        description="The key your SMS provider issued.",
+        kind="secret",
+        default="",
+    ),
+    Setting(
+        namespace="notifications",
+        key="sms_sender",
+        label="SMS sender name",
+        description="What the message appears to come from, where the gateway allows it.",
+        kind="string",
+        default="",
+    ),
     # -- Online payments (apps/billing/gateways.py) -------------------------
     Setting(
         namespace="payments",

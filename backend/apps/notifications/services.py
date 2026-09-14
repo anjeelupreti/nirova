@@ -146,19 +146,62 @@ def notify(
         # A savepoint, so that failing to tell somebody cannot abort the
         # transaction that is recording the thing they were to be told about.
         with tenant_atomic():
-            return _write(
+            notification = _write(
                 source=source, event=event, title=title, body=body, link=link,
                 category=category, subject_type=subject_type,
                 subject_uuid=subject_uuid, facility=facility,
                 actor_name=actor_name, dedupe_key=dedupe_key,
                 expires_at=expires_at, recipients=recipients, channel=channel,
             )
+            _reach_out(notification)
+            return notification
 
     except Exception:
         # The event being notified about has already happened. Swallow, log
         # loudly, and let the caller carry on.
         logger.exception("failed to raise notification %s/%s", source, event)
         return None
+
+
+def _reach_out(notification) -> None:
+    """Queue delivery by email and SMS, **after the transaction commits**.
+
+    On commit, deliberately. A task queued inside the transaction can be
+    picked up by a worker before the row it refers to is visible — and for
+    a critical result the failure mode is a worker finding nothing and a
+    clinician being told nothing.
+
+    Never raises: a notification that could not be queued for delivery is
+    still on the person's screen, and the event it is about has happened
+    either way.
+    """
+    from django.db import transaction
+
+    from apps.notifications.delivery import REACH_OUT
+
+    if notification is None or notification.category not in REACH_OUT:
+        return
+
+    from apps.tenancy.context import get_current_tenant
+
+    tenant = get_current_tenant()
+    slug = getattr(tenant, "organization_slug", "")
+    if not slug:
+        # No tenant bound: a management command or a test that is not running
+        # for anybody. There is nowhere to deliver from.
+        return
+
+    def queue():
+        try:
+            from apps.notifications.tasks import deliver_notification
+
+            deliver_notification.delay(slug, str(notification.uuid))
+        except Exception:  # noqa: BLE001 — a broker outage is not a clinical event
+            logger.exception(
+                "could not queue delivery for notification %s", notification.uuid,
+            )
+
+    transaction.on_commit(queue, using=notification._state.db)
 
 
 def _write(

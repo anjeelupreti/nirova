@@ -1296,6 +1296,27 @@ patients to understand and for our record keeping."*
 - [ ] Report templates (laboratory panels, radiology reports, discharge
       summaries)
 
+## §145 Reach `[~]`
+
+*New on 14 September 2026 (log 285). "No proper notifications, no web socket
+or chat system" — and `PRODUCT.md` §5: the broadcast layer was declared and
+never built.*
+
+- [x] **Email and SMS delivery**, off the request path, retried, and
+      idempotent per person per channel
+- [x] Critical reaches people whatever their preferences say; an approval
+      asks first; ordinary news stays on the screen
+- [x] **Every attempt is recorded** — sent, failed with the provider's words,
+      no address, no gateway — because silence is the failure this removes
+- [x] The SMS gateway is a tenant setting in the shape every Nepali provider
+      uses, with the token sealed
+- [x] An announcement composer for `notification.broadcast`, which cannot be
+      critical and emails only when the sender says so
+- [ ] Patient-facing reminders (appointment tomorrow, result ready)
+- [ ] A real-time channel: the queue board, the bed board and the bell still
+      poll
+- [ ] Messaging between staff about a patient
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

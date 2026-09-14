@@ -253,8 +253,31 @@ class AnnouncementView(APIView):
                 {"sent": 0, "detail": "Nobody was available to receive this."},
                 status=status.HTTP_200_OK,
             )
+
+        # An announcement stays on the screen unless the person sending it
+        # says otherwise: "the OPD is closed on Saturday" is worth an email,
+        # and most announcements are not. Anybody who has turned this category
+        # off on email still does not get one.
+        if request.data.get("also_email"):
+            from django.db import transaction
+
+            from apps.notifications.tasks import deliver_notification
+            from apps.tenancy.context import get_current_tenant
+
+            slug = getattr(get_current_tenant(), "organization_slug", "")
+            if slug:
+                transaction.on_commit(
+                    lambda: deliver_notification.delay(
+                        slug, str(notification.uuid), True,
+                    ),
+                )
+
         return Response(
-            {"sent": notification.receipts.count(), "uuid": str(notification.uuid)},
+            {
+                "sent": notification.receipts.count(),
+                "uuid": str(notification.uuid),
+                "emailed": bool(request.data.get("also_email")),
+            },
             status=status.HTTP_201_CREATED,
         )
 

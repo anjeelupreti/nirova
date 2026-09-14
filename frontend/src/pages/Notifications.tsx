@@ -67,6 +67,8 @@ import {
 import { PageHeader } from "@/components/ui/layout";
 import { Link } from "react-router-dom";
 import { formatDate } from "@/lib/dates";
+import { AnnouncementComposer } from "@/components/AnnouncementComposer";
+import { useCan } from "@/components/ui/can";
 
 type Tab = "waiting" | "all" | "preferences";
 
@@ -137,6 +139,7 @@ function when(value: string): string {
 }
 
 export default function Notifications() {
+  const can = useCan();
   const [tab, setTab] = useState<Tab>("waiting");
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [summary, setSummary] = useState<NotificationSummary | null>(null);
@@ -209,6 +212,11 @@ export default function Notifications() {
         <PageHeader
           title="Notifications"
           description="Alerts and approvals for you."
+          actions={
+            can("notification.broadcast", "facility") ? (
+              <AnnouncementComposer onSent={() => void load()} />
+            ) : null
+          }
         />
         {summary && (
           <div className="flex items-center gap-2">

@@ -12637,3 +12637,56 @@ Two rules keep it from becoming a prescription nobody read:
 An urgent investigation on a template has to say what is being looked for —
 the same rule the ordering form applies — or the template is one that cannot
 be ordered from.
+
+
+## 285 - A critical result that only existed on a screen
+
+*14 September 2026.*
+
+`NotificationChannel` has declared EMAIL and SMS since the notifications app
+was written, and **nothing had ever sent either**. Every alert this system
+raises lived inside a browser tab — so a potassium of 6.9 escalated to a bell
+icon that exists while somebody happens to be looking at the console. At two
+in the morning, nobody is.
+
+**What cannot be silenced in-app cannot be silenced here.** A critical
+notification goes out on every channel the person can be reached on, whatever
+their preferences say — the same rule `set_preference` already enforces for
+the screen. An approval asks the preference first. Everything else stays where
+it is: a stock warning by SMS at midnight teaches people to ignore the channel
+that carries the critical result, and then a real one arrives.
+
+**A delivery that did not happen is recorded as not having happened.** Every
+attempt writes a row — sent, failed with the provider's own words, "no phone
+number on the account", "no SMS gateway configured". A notification quietly
+not sent is the exact failure this module exists to remove, and silence is how
+it comes back. "We tried and the gateway refused" and "we never tried" are
+different facts, and the second is the one that gets a hospital into trouble.
+
+**Sending is a job.** The event has already happened by the time anybody is
+told, so a slow mail server must not slow a ward round. The task is queued
+`on_commit` — queued *inside* the transaction, a worker can pick it up before
+the row is visible, and for a critical result the failure mode is a worker
+finding nothing and a clinician being told nothing. It retries with a backoff,
+and `deliver` is idempotent per receipt and channel, so a retry after a
+partial success does not put a second text on somebody's phone at 3 a.m.
+
+**The SMS gateway is the tenant's own.** Sparrow, Aakash and the rest are all
+the same shape — a URL, a token, a sender, the text — so the setting is that
+shape rather than one named provider, and the token is sealed like every other
+key the product holds for a customer.
+
+### And the one notification a person writes
+
+The announcement endpoint has existed since notifications were built, with no
+way into it from the console: an owner who wanted to say "outpatients are
+closed on Saturday" had a WhatsApp group, which is not on the record and which
+the night staff who joined last week are not in. There is a composer now, for
+whoever holds `notification.broadcast`. It cannot be critical — that is
+reserved for what nobody may silence — and email is a tick box rather than the
+default, because most announcements belong on the screen and the one that does
+not is the sender's judgement.
+
+Verified in the running stack: an announcement reached sixteen people in-app
+and by email through the worker, and a critical alert raised through the
+ordinary service queued and delivered itself with no caller involvement.
