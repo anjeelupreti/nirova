@@ -13188,3 +13188,32 @@ POST took no more than that. An auditor could have written into a patient's
 record. The guard is now declared in `get_permissions()`, where both DRF and
 the audit read it: reading the discussion is the clinical tier, writing to it
 takes `encounter.create`, the authority that writes a clinical note.
+
+## 299 - The monthly return, counted by the system that has the records
+
+Second item of [HEALTHOS.md](HEALTHOS.md) Phase A. Every hospital and clinic
+in Nepal files a monthly return to the ministry, and today that is a clerk, the
+outpatient register, a calculator and an evening -- while the figures sit in
+this database already.
+
+`hmis.monthly` assembles them (`apps/organization/hmis.py`), registered in the
+report library so it inherits permissions, parameters and CSV export like
+every other report. Attendance is banded by **age at the visit**, not age
+today -- a return filed in Poush about Mangsir must band a child by how old
+they were then -- and split into new and repeat by whether the patient had any
+earlier encounter here, rather than by a flag somebody remembered to tick.
+Then: visits by department, the top twenty diagnoses by code, admissions,
+discharges, deaths, LAMA, absconded, transfers, institutional deliveries by
+code, average length of stay, diagnostics ordered by modality, and referrals
+by direction.
+
+**What the system cannot honestly count is named, not zeroed.** Immunisation,
+family planning, nutrition, the TB and HIV programme registers and community
+outreach each appear in `not_collected` with the reason. A zero filed to a
+ministry is a claim that nothing happened; a named gap is a question somebody
+can answer. Those are also the next modules worth building, and the return is
+now the argument for them.
+
+The coded percentage travels with the return, beside the uncoded count, so
+whoever signs it can see how much of the morbidity table is missing before
+they do.

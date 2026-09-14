@@ -132,6 +132,7 @@ def load() -> None:
     from apps.insurance import services as insurance
     from apps.pharmacy import services as pharmacy
     from apps.referrals import services as referrals
+    from apps.organization import hmis
     from apps.terminology import services as terminology
 
     for report in [
@@ -252,6 +253,15 @@ def load() -> None:
             parameters=("days",),
             group="Privacy",
             is_heavy=True,
+        ),
+        Report(
+            code="hmis.monthly",
+            name="Monthly return (HMIS)",
+            answers="What does this facility file to the ministry this month?",
+            permission="report.read",
+            run=hmis.monthly_return,
+            parameters=("since", "until", "facility"),
+            group="Clinical",
         ),
         Report(
             code="clinical.uncoded_diagnoses",
