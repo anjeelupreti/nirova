@@ -24,6 +24,7 @@ import * as React from "react";
 import api from "@/lib/api";
 import { PrintableDocument, SignatureBlock } from "@/components/ui/export";
 import { DocumentPreview } from "@/components/documents/DocumentPreview";
+import { formatDate } from "@/lib/dates";
 
 export interface PrintablePrescription {
   uuid: string;
@@ -59,7 +60,7 @@ export interface PrintablePrescription {
 }
 
 const day = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+  iso ? formatDate(iso) : "—";
 
 export function PrescriptionPreview({
   prescription,

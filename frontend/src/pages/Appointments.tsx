@@ -68,6 +68,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { formatTime, formatWeekday } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Dates                                                                       */
@@ -84,15 +85,11 @@ function shift(day: string, days: number): string {
 
 /** "Mon 3 Mar", the way a diary is read aloud. */
 function readable(day: string): string {
-  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  return formatWeekday(`${day}T12:00:00`);
 }
 
 const clock = (value: string) =>
-  new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  formatTime(value);
 
 /**
  * Status → how the row reads.

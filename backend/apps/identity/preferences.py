@@ -87,8 +87,26 @@ PREFERENCES = [
             ("/dashboard", "Dashboard"),
             ("/queue", "Queue"),
             ("/patients", "Patients"),
-            ("/workspace", "What needs me"),
+            ("/workspace", "My workspace"),
             ("/notifications", "Notifications"),
+        ],
+    ),
+    Preference(
+        key="calendar",
+        label="Dates",
+        description=(
+            "Bikram Sambat is the calendar Nepal runs on: a patient asks for "
+            "an appointment in Ashoj, and a ward round is recorded on a date "
+            "somebody will later look up in BS. Both calendars are shown "
+            "where a date is a legal record -- an invoice, a report -- "
+            "because a date that reaches an insurer or a ministry has to be "
+            "readable by both."
+        ),
+        kind="choice",
+        default="gregorian",
+        choices=[
+            ("gregorian", "Gregorian (12 September 2026)"),
+            ("bikram_sambat", "Bikram Sambat (२७ भाद्र २०८३)"),
         ],
     ),
     Preference(

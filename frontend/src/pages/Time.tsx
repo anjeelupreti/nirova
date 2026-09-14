@@ -73,6 +73,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatTime, formatWeekday } from "@/lib/dates";
 
 type Tab = "mine" | "roster" | "leave" | "attendance" | "setup";
 
@@ -119,10 +120,7 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const clock = (value: string | null) =>
   value
-    ? new Date(value).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatTime(value)
     : "—";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -938,9 +936,7 @@ function Roster({ facility }: { facility: string }) {
                         saturday && "bg-muted/50 text-muted-foreground",
                       )}
                     >
-                      {new Date(day).toLocaleDateString([], {
-                        weekday: "short",
-                      })}
+                      {formatWeekday(day)}
                       <span className="block font-normal">
                         {day.slice(5)}
                       </span>

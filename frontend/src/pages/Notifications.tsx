@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { Link } from "react-router-dom";
+import { formatDate } from "@/lib/dates";
 
 type Tab = "waiting" | "all" | "preferences";
 
@@ -132,7 +133,7 @@ function when(value: string): string {
   if (hours < 24) return `${hours} h ago`;
   const days = Math.round(hours / 24);
   if (days < 8) return `${days} d ago`;
-  return then.toLocaleDateString();
+  return formatDate(then);
 }
 
 export default function Notifications() {

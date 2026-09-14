@@ -82,6 +82,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDateTime, formatTime } from "@/lib/dates";
 
 type Tab = "board" | "performance";
 
@@ -127,20 +128,12 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const clock = (value: string | null) =>
   value
-    ? new Date(value).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatTime(value)
     : "—";
 
 const dayAndClock = (value: string | null) =>
   value
-    ? new Date(value).toLocaleString([], {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatDateTime(value)
     : "—";
 
 /** Minutes since a timestamp, or null. Used to age the charting. */

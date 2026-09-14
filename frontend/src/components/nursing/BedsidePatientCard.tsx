@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import type { NursePatientCard } from "@/types";
 import { Button } from "@/components/ui/primitives";
 import { News2Badge, news2Band } from "@/components/clinical/News2";
+import { formatTime } from "@/lib/dates";
 
 /** The NEWS2 trigger that scores each vitals cell, by the service's parameter names. */
 const PARAMETER = {
@@ -55,7 +56,7 @@ function obsDue(recordedAt: string | undefined, score: number, extreme: boolean)
   if (!recordedAt) return { label: "No observations yet", overdue: true };
   const due = new Date(recordedAt).getTime() + interval(score, extreme) * 60_000;
   const minutes = Math.round((due - Date.now()) / 60_000);
-  const at = new Date(due).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const at = formatTime(due);
   if (minutes < 0) {
     const late = -minutes;
     return {

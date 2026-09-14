@@ -33,6 +33,8 @@ import api from "@/lib/api";
 
 export type Theme = "system" | "light" | "dark";
 export type Density = "comfortable" | "compact";
+/** Which calendar dates are written in. See `lib/dates.ts`. */
+export type Calendar = "gregorian" | "bikram_sambat";
 
 /**
  * The five identities in `styles/tokens/palettes.css`.
@@ -56,6 +58,7 @@ export interface Preferences {
   theme: Theme;
   palette: Palette;
   density: Density;
+  calendar: Calendar;
   landing: string;
   reduced_motion: boolean;
   notify_critical_results: boolean;
@@ -74,6 +77,7 @@ const FALLBACK: Preferences = {
   theme: "system",
   palette: "vital",
   density: "comfortable",
+  calendar: "gregorian",
   landing: "auto",
   reduced_motion: false,
   notify_critical_results: true,
@@ -124,6 +128,10 @@ function applyToDocument(preferences: Preferences, systemIsDark: boolean) {
   root.dataset.palette = preferences.palette;
 
   root.dataset.density = preferences.density;
+  // Read by `lib/dates.ts`, which formats every date in the console and is
+  // not a React hook — a date inside a chart tooltip or an Excel export has
+  // no component to read context from.
+  root.dataset.calendar = preferences.calendar;
   root.dataset.reducedMotion = preferences.reduced_motion ? "true" : "false";
 
   // Tells the browser which scrollbars and form controls to draw. Without it

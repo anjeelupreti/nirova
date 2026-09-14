@@ -220,7 +220,7 @@ function LoginAside() {
       <ul className="grid gap-4 text-sm text-hero-foreground/90 xl:grid-cols-3">
         <li>
           <p className="font-semibold text-hero-foreground">Built for Nepal</p>
-          <p className="mt-0.5 text-hero-foreground/75">Bikram Sambat fiscal years and payroll months, PAN and VAT invoices, SSF and PF, and a patient app in Nepali.</p>
+          <p className="mt-0.5 text-hero-foreground/75">Bikram Sambat dates throughout, fiscal years and payroll months, PAN and VAT invoices, SSF and PF, eSewa and Khalti, and a patient app in Nepali.</p>
         </li>
         <li>
           <p className="font-semibold text-hero-foreground">Every access accountable</p>

@@ -51,6 +51,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -982,7 +983,7 @@ function DoneStep({ batch, onReset }: { batch: Batch; onReset: () => void }) {
         title={`${batch.reference} is imported`}
         description={
           batch.imported_at
-            ? `${new Date(batch.imported_at).toLocaleString()} by ${batch.imported_by_name || "—"}`
+            ? `${formatDateTime(batch.imported_at)} by ${batch.imported_by_name || "—"}`
             : undefined
         }
       >

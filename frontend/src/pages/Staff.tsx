@@ -54,6 +54,7 @@ import { TemporaryPassword } from "@/components/access/TemporaryPassword";
 import { ResetSecondFactor } from "@/components/access/ResetSecondFactor";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
@@ -124,11 +125,7 @@ const SCOPES = [
 
 function when(value: string | null): string {
   if (!value) return "";
-  return new Date(value).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatDate(value);
 }
 
 /* -------------------------------------------------------------------------- */

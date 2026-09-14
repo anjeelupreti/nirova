@@ -64,6 +64,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatTime, formatWeekday } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Helper Functions                                                           */
@@ -326,7 +327,7 @@ export default function NurseWorkspacePage() {
                 </Badge>
               )}
               <span className="text-sm text-muted-foreground">
-                {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+                {formatWeekday(new Date())}
               </span>
             </>
           }
@@ -1187,7 +1188,7 @@ function EmarModal({
                                   {line.last_administered.status}
                                 </Badge>
                                 <span className="block text-[10px] text-muted-foreground font-mono mt-0.5">
-                                  {new Date(line.last_administered.administered_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  {formatTime(line.last_administered.administered_at)}
                                 </span>
                               </div>
                             ) : (
@@ -1233,7 +1234,7 @@ function EmarModal({
                       {emarData.administrations.map((adm) => (
                         <TableRow key={adm.uuid}>
                           <TableCell className="text-xs font-mono">
-                            {new Date(adm.administered_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            {formatTime(adm.administered_at)}
                           </TableCell>
                           <TableCell className="text-xs font-medium">{adm.medicine_name}</TableCell>
                           <TableCell className="text-xs font-mono">
@@ -1688,7 +1689,7 @@ function NursingTasksModal({
                   </div>
                   {t.completed_by_name && (
                     <span className="text-[10px] text-good font-medium block">
-                      ✓ Done by {t.completed_by_name} at {new Date(t.completed_at!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      ✓ Done by {t.completed_by_name} at {formatTime(t.completed_at!)}
                     </span>
                   )}
                 </div>

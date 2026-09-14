@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/primitives";
 import { Avatar } from "@/components/ui/data";
 import { EmptyState, Skeleton } from "@/components/ui/feedback";
+import { formatTime } from "@/lib/dates";
 
 /** Nepali notes and coins, largest first — the order a drawer is counted in. */
 const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5, 2, 1] as const;
@@ -64,7 +65,7 @@ const rupees = (value: number) =>
   `Rs ${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const since = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  formatTime(iso);
 
 /** COUNTER-1, COUNTER-2, … — the first not currently open. */
 function freeTill(open: CounterSession[]): string {

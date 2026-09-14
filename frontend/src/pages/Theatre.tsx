@@ -77,6 +77,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate, formatTime } from "@/lib/dates";
 
 type Tab = "lists" | "waiting" | "implants" | "performance";
 
@@ -126,10 +127,7 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const clock = (value: string | null) =>
   value
-    ? new Date(value).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatTime(value)
     : "—";
 
 const URGENCY_TONE: Record<
@@ -925,7 +923,7 @@ function CaseDetail({
               <Field label="Urgency" value={humanise(surgicalCase.urgency)} />
               <Field
                 label="Requested"
-                value={`${surgicalCase.requested_by_name} · ${new Date(surgicalCase.requested_at).toLocaleDateString()}`}
+                value={`${surgicalCase.requested_by_name} · ${formatDate(surgicalCase.requested_at)}`}
               />
               {surgicalCase.approved_by_name && (
                 <Field
@@ -1543,7 +1541,7 @@ function Implants() {
                   <TableCell>{row.site || "—"}</TableCell>
                   <TableCell className="text-xs">
                     {row.operated_on
-                      ? new Date(row.operated_on).toLocaleDateString()
+                      ? formatDate(row.operated_on)
                       : "—"}
                   </TableCell>
                 </TableRow>

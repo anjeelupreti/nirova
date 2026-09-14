@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { Button, Card, Input } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, Skeleton } from "@/components/ui/feedback";
 import { News2Badge } from "@/components/clinical/News2";
+import { formatTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Shape of GET /ipd/board/                                                    */
@@ -137,7 +138,7 @@ type Focus = "all" | "free" | "home" | "review";
 /* -------------------------------------------------------------------------- */
 
 const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  formatTime(iso);
 
 const minutesSince = (iso: string) =>
   Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));

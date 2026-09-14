@@ -20,12 +20,13 @@
  */
 
 import type { Sale } from "@/types";
+import { formatDate, formatTime } from "@/lib/dates";
 
 const money = (value: string | number) =>
   Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const expiry = (iso: string) =>
-  iso ? new Date(iso).toLocaleDateString("en-GB", { month: "2-digit", year: "2-digit" }) : "";
+  iso ? formatDate(iso) : "";
 
 export function CounterReceipt({
   sale,
@@ -55,7 +56,7 @@ export function CounterReceipt({
       </header>
 
       <div className="mt-2 border-t border-dashed border-black pt-1">
-        <Row left={when.toLocaleDateString("en-GB")} right={when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} />
+        <Row left={formatDate(when)} right={formatTime(when)} />
         <Row left={`Till ${sale.session_reference}`} right={sale.sold_by_name} />
         <p>Customer: {sale.customer_label || sale.customer_name || "Walk-in"}</p>
         {sale.customer_pan && <p>Buyer PAN: {sale.customer_pan}</p>}

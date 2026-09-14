@@ -51,6 +51,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -510,7 +511,7 @@ function RaiseReturn({ onRaised }: { onRaised: () => void }) {
       {sale && sale.is_returnable && (
         <>
           <div className="text-sm text-muted-foreground">
-            {sale.reference} · {new Date(sale.sold_at).toLocaleString()} ·{" "}
+            {sale.reference} · {formatDateTime(sale.sold_at)} ·{" "}
             {sale.customer_name || "no customer recorded"} · sold by{" "}
             {sale.sold_by_name} · {MONEY(sale.total)}
           </div>

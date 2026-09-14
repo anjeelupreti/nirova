@@ -88,6 +88,7 @@ import { ReturnsPanel } from "@/pages/pos/Returns";
 import { OpenTill } from "@/pages/pos/OpenTill";
 import { CounterReceipt } from "@/components/documents/CounterReceipt";
 import { printElement } from "@/lib/export";
+import { formatTime } from "@/lib/dates";
 
 /** One line in the basket, before it is anything the server knows about. */
 interface BasketItem {
@@ -1112,7 +1113,7 @@ function SalesView({ session }: { session: CounterSession }) {
                   <TableCell className="font-medium">
                     {sale.reference}
                     <span className="block text-xs text-muted-foreground">
-                      {new Date(sale.sold_at).toLocaleTimeString()}
+                      {formatTime(sale.sold_at)}
                     </span>
                   </TableCell>
                   <TableCell>{sale.customer_label}</TableCell>

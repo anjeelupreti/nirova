@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/primitives";
 import type { Facility, Paginated } from "@/types";
+import { formatDate, formatDayMonth } from "@/lib/dates";
 
 interface SalesReport {
   start: string;
@@ -105,13 +106,11 @@ function change(now: number, before: number | undefined): number | null {
 }
 
 function shortDate(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return formatDayMonth(`${value}T00:00:00`);
 }
 
 function longDate(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  return formatDate(`${value}T00:00:00`);
 }
 
 const money = (value: string | number) => formatValue(Number(value), "money");

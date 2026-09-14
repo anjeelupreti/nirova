@@ -79,6 +79,7 @@ import {
   TableRow,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 type Tab = "runs" | "mine" | "rates" | "setup";
 
@@ -589,7 +590,7 @@ function RunDetail({
           {run.status === "paid" && (
             <span className="flex items-center gap-1 text-sm text-good">
               <CheckCircle2 className="h-4 w-4" />
-              Paid{run.paid_at && ` on ${new Date(run.paid_at).toLocaleDateString()}`}
+              Paid{run.paid_at && ` on ${formatDate(run.paid_at)}`}
             </span>
           )}
           {run.approved_by_name && (

@@ -76,6 +76,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { PayablesPanel } from "@/pages/finance/Payables";
+import { formatDate } from "@/lib/dates";
 
 type Tab =
   | "statements"
@@ -110,9 +111,7 @@ const rupees = (value: string | number | null | undefined) => {
 const humanise = (value: string) => value.replace(/_/g, " ");
 
 const day = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString([], {
-    day: "2-digit", month: "short", year: "2-digit",
-  }) : "—";
+  value ? formatDate(value) : "—";
 
 const BUCKET_LABELS: Record<string, string> = {
   "0-30": "0–30 days",

@@ -24,6 +24,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { formatTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Tones                                                                       */
@@ -497,7 +498,7 @@ export function Freshness({
 }) {
   const when = at ? (typeof at === "string" ? new Date(at) : at) : null;
   const label = when
-    ? when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    ? formatTime(when)
     : "unknown";
 
   return (

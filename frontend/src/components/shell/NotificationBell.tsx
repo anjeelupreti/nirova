@@ -21,6 +21,7 @@ import { Bell, CheckCheck, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { NotificationRow, NotificationSummary } from "@/types";
+import { formatDayMonth } from "@/lib/dates";
 
 const REFRESH_MS = 60_000;
 
@@ -32,7 +33,7 @@ function ago(iso: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   const days = Math.floor(hours / 24);
-  return days < 7 ? `${days}d` : new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return days < 7 ? `${days}d` : formatDayMonth(iso);
 }
 
 export function NotificationBell() {

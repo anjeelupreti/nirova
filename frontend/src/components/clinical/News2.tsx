@@ -19,6 +19,7 @@
 import { Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { formatTime } from "@/lib/dates";
 
 export type News2Risk = "low" | "medium" | "high";
 
@@ -49,7 +50,7 @@ export function News2Badge({
 }) {
   const band = news2Band(score);
   const time = recordedAt
-    ? new Date(recordedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    ? formatTime(recordedAt)
     : null;
 
   return (

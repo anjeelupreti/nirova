@@ -32,6 +32,7 @@
 import { cn } from "@/lib/utils";
 import { PrintableDocument, SignatureBlock } from "@/components/ui/export";
 import type { Invoice } from "@/types";
+import { formatDate } from "@/lib/dates";
 
 function money(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -210,7 +211,7 @@ export function InvoiceDocument({
               {invoice.payments.map((payment) => (
                 <tr key={payment.uuid} className="border-b last:border-0">
                   <td className="py-1 pr-3 tabular-nums">
-                    {new Date(payment.received_at).toLocaleDateString()}
+                    {formatDate(payment.received_at)}
                   </td>
                   <td className="px-3 py-1">
                     {payment.is_refund ? "Refund" : payment.method_display}

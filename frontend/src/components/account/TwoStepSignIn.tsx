@@ -36,6 +36,7 @@ import {
   Label,
 } from "@/components/ui/primitives";
 import { Spinner } from "@/components/ui/loader";
+import { formatDate } from "@/lib/dates";
 
 interface Status {
   enabled: boolean;
@@ -198,7 +199,7 @@ export function TwoStepSignIn({ onEnabled }: { onEnabled?: () => void } = {}) {
             <p className="text-sm text-muted-foreground">
               On since{" "}
               {status.enabled_at
-                ? new Date(status.enabled_at).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+                ? formatDate(status.enabled_at)
                 : "—"}
               . {status.recovery_codes_left} of 10 recovery codes left
               {status.recovery_codes_left <= 3 && " — make new ones before you run out"}.

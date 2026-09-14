@@ -56,6 +56,7 @@ import { PageHeader } from "@/components/ui/layout";
 import { InvoiceDocument } from "@/components/documents/InvoiceDocument";
 import { DocumentPreview } from "@/components/documents/DocumentPreview";
 import { useSession } from "@/hooks/useSession";
+import { formatDate } from "@/lib/dates";
 
 const PAYMENT_METHODS = [
   ["cash", "Cash"],
@@ -575,7 +576,7 @@ export default function BillingPage() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {invoice.issued_at
-                            ? new Date(invoice.issued_at).toLocaleDateString()
+                            ? formatDate(invoice.issued_at)
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">

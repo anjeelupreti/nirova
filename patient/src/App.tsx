@@ -417,7 +417,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Account created</CardTitle>
+          <CardTitle>{tr("signup.created")}</CardTitle>
           <CardDescription>
             Sign in with the phone number and password you just chose.
           </CardDescription>
@@ -434,7 +434,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Set up your account</CardTitle>
+        <CardTitle>{tr("signup.setUp")}</CardTitle>
         <CardDescription>
           You need the number on your hospital card and the code the desk gave
           you. Neither works without the other.
@@ -449,7 +449,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
         )}
 
         <div className="space-y-1">
-          <Label htmlFor="r-org">Hospital</Label>
+          <Label htmlFor="r-org">{tr("signup.hospital")}</Label>
           <Input
             id="r-org"
             value={organization}
@@ -457,7 +457,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="r-mrn">Number on your card</Label>
+          <Label htmlFor="r-mrn">{tr("signup.mrn")}</Label>
           <Input
             id="r-mrn"
             value={form.mrn}
@@ -466,7 +466,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="r-code">Code from the desk</Label>
+          <Label htmlFor="r-code">{tr("signup.code")}</Label>
           <Input
             id="r-code"
             inputMode="numeric"
@@ -481,7 +481,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
           </p>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="r-phone">Your phone number</Label>
+          <Label htmlFor="r-phone">{tr("signup.phone")}</Label>
           <Input
             id="r-phone"
             inputMode="tel"
@@ -491,7 +491,7 @@ function Register({ onDone, onBack }: { onDone: () => void; onBack: () => void }
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="r-pw">Choose a password</Label>
+          <Label htmlFor="r-pw">{tr("signup.password")}</Label>
           <Input
             id="r-pw"
             type="password"
@@ -1132,7 +1132,7 @@ function Results({
   onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
 }) {
   if (rows.length === 0) {
-    return <Empty>No results yet.</Empty>;
+    return <Empty>{tr("empty.results")}</Empty>;
   }
   return (
     <div className="space-y-3">
@@ -1594,7 +1594,7 @@ function Medicines({
   rows: Prescription[];
   onPrint: (type: "result" | "prescription" | "invoice", reference: string) => void;
 }) {
-  if (rows.length === 0) return <Empty>No medicines prescribed.</Empty>;
+  if (rows.length === 0) return <Empty>{tr("empty.medicines")}</Empty>;
   return (
     <div className="space-y-3">
       {rows.map((row, index) => (
@@ -1642,7 +1642,7 @@ function Medicines({
 }
 
 function Referrals({ rows }: { rows: ReferralRow[] }) {
-  if (rows.length === 0) return <Empty>No referrals.</Empty>;
+  if (rows.length === 0) return <Empty>{tr("empty.referrals")}</Empty>;
   return (
     <div className="space-y-3">
       {rows.map((row) => (
@@ -1710,10 +1710,9 @@ function Messages({
       {/* Said here, next to the box, rather than buried in terms of use. */}
       <Alert>
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Answered in working hours</AlertTitle>
+        <AlertTitle>{tr("messages.hours")}</AlertTitle>
         <AlertDescription>
-          This is not a way to get urgent help. If you are unwell now, go to the
-          emergency department or call for an ambulance.
+          {tr("messages.notUrgent")}
         </AlertDescription>
       </Alert>
 
@@ -1726,13 +1725,13 @@ function Messages({
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Ask something</CardTitle>
+          <CardTitle className="text-base">{tr("messages.ask")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
             value={subject}
             onChange={(event) => setSubject(event.target.value)}
-            placeholder="What it is about"
+            placeholder={tr("messages.about")}
           />
           <Textarea
             rows={4}
@@ -1775,7 +1774,7 @@ function Messages({
           </CardContent>
         </Card>
       ))}
-      {rows.length === 0 && <Empty>No messages yet.</Empty>}
+      {rows.length === 0 && <Empty>{tr("empty.messages")}</Empty>}
     </div>
   );
 }
@@ -1823,7 +1822,7 @@ function Sessions({
           </CardContent>
         </Card>
       ))}
-      {live.length === 0 && <Empty>No other devices.</Empty>}
+      {live.length === 0 && <Empty>{tr("empty.devices")}</Empty>}
 
       <Button
         variant="destructive"
@@ -1916,29 +1915,29 @@ function ProfileView({
         </CardHeader>
         <CardContent className="space-y-2.5 text-sm">
           <div className="flex justify-between border-b py-1">
-            <span className="text-muted-foreground">Phone</span>
+            <span className="text-muted-foreground">{tr("profile.phone")}</span>
             <span className="font-medium">{data.phone || "—"}</span>
           </div>
           {data.alternate_phone && (
             <div className="flex justify-between border-b py-1">
-              <span className="text-muted-foreground">Alternate phone</span>
+              <span className="text-muted-foreground">{tr("profile.altPhone")}</span>
               <span>{data.alternate_phone}</span>
             </div>
           )}
           {data.email && (
             <div className="flex justify-between border-b py-1">
-              <span className="text-muted-foreground">Email</span>
+              <span className="text-muted-foreground">{tr("profile.email")}</span>
               <span>{data.email}</span>
             </div>
           )}
           <div className="flex justify-between border-b py-1">
-            <span className="text-muted-foreground">Current address</span>
+            <span className="text-muted-foreground">{tr("profile.address")}</span>
             <span className="max-w-[200px] text-right font-medium">
               {data.temporary_address || data.tole || data.district || "—"}
             </span>
           </div>
           <div className="flex justify-between border-b py-1">
-            <span className="text-muted-foreground">Emergency contact</span>
+            <span className="text-muted-foreground">{tr("profile.emergency")}</span>
             <span className="text-right">
               {data.guardian_name ? `${data.guardian_name} (${data.guardian_relationship || "Guardian"})` : "—"}
               {data.guardian_phone && <div className="text-xs text-muted-foreground">{data.guardian_phone}</div>}
@@ -1955,9 +1954,9 @@ function ProfileView({
       ) : (
         <Card className="border-primary/50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Propose a Correction</CardTitle>
+            <CardTitle className="text-base">{tr("correction.propose")}</CardTitle>
             <CardDescription>
-              Changes are reviewed and confirmed by desk staff before updating your medical record.
+              {tr("correction.reviewed")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -1967,7 +1966,7 @@ function ProfileView({
               </Alert>
             )}
             <div className="space-y-1">
-              <Label>Field to correct</Label>
+              <Label>{tr("correction.field")}</Label>
               <select
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={field}
@@ -1976,39 +1975,39 @@ function ProfileView({
                   setProposedValue("");
                 }}
               >
-                <option value="phone">Phone number</option>
-                <option value="alternate_phone">Alternate phone</option>
-                <option value="email">Email</option>
-                <option value="temporary_address">Current residence / address</option>
-                <option value="tole">Tole / Street</option>
-                <option value="municipality">Municipality</option>
-                <option value="guardian_name">Emergency contact name</option>
-                <option value="guardian_phone">Emergency contact phone</option>
-                <option value="guardian_relationship">Emergency contact relationship</option>
+                <option value="phone">{tr("field.phone")}</option>
+                <option value="alternate_phone">{tr("profile.altPhone")}</option>
+                <option value="email">{tr("profile.email")}</option>
+                <option value="temporary_address">{tr("field.address")}</option>
+                <option value="tole">{tr("field.tole")}</option>
+                <option value="municipality">{tr("field.municipality")}</option>
+                <option value="guardian_name">{tr("field.guardianName")}</option>
+                <option value="guardian_phone">{tr("field.guardianPhone")}</option>
+                <option value="guardian_relationship">{tr("field.guardianRelationship")}</option>
               </select>
             </div>
 
             <div className="rounded border bg-muted/50 p-2.5 text-xs">
-              <span className="text-muted-foreground">Current recorded: </span>
-              <strong>{currentVal || "None on file"}</strong>
+              <span className="text-muted-foreground">{tr("correction.current")}</span>
+              <strong>{currentVal || tr("correction.none")}</strong>
             </div>
 
             <div className="space-y-1">
-              <Label>Proposed new value</Label>
+              <Label>{tr("correction.newValue")}</Label>
               <Input
                 value={proposedValue}
                 onChange={(e) => setProposedValue(e.target.value)}
-                placeholder="Enter new value"
+                placeholder={tr("correction.enterValue")}
               />
             </div>
 
             <div className="space-y-1">
-              <Label>Reason for change</Label>
+              <Label>{tr("correction.reason")}</Label>
               <Textarea
                 rows={2}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Changed phone number, relocated to new residence"
+                placeholder={tr("correction.reasonHint")}
               />
             </div>
 

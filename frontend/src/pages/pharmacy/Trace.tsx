@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/primitives";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 interface BatchHit {
   uuid: string;
@@ -93,9 +94,9 @@ interface Trace {
 
 const qty = (value: string) => Number(value).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const day = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  formatDate(iso);
 const stamp = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  formatDateTime(iso);
 
 export function TracePanel() {
   const [term, setTerm] = useState("");

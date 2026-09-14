@@ -65,6 +65,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { formatDate, formatTime } from "@/lib/dates";
 
 type Tab = "profile" | "time" | "swaps" | "leave" | "pay" | "manager";
 
@@ -627,7 +628,7 @@ export default function SelfServicePage() {
                       {corrections.map((c) => (
                         <TableRow key={c.uuid}>
                           <TableCell className="text-xs text-muted-foreground">
-                            {new Date(c.created_at).toLocaleDateString()}
+                            {formatDate(c.created_at)}
                           </TableCell>
                           <TableCell className="text-xs font-mono">
                             {Object.entries(c.fields_payload).map(([k, v]) => (
@@ -753,8 +754,8 @@ export default function SelfServicePage() {
                     attendanceRecords.map((rec) => (
                       <TableRow key={rec.uuid}>
                         <TableCell className="font-medium">{rec.date}</TableCell>
-                        <TableCell>{rec.checked_in_at ? new Date(rec.checked_in_at).toLocaleTimeString() : "—"}</TableCell>
-                        <TableCell>{rec.checked_out_at ? new Date(rec.checked_out_at).toLocaleTimeString() : "—"}</TableCell>
+                        <TableCell>{rec.checked_in_at ? formatTime(rec.checked_in_at) : "—"}</TableCell>
+                        <TableCell>{rec.checked_out_at ? formatTime(rec.checked_out_at) : "—"}</TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -1129,7 +1130,7 @@ export default function SelfServicePage() {
                         </TableCell>
                         <TableCell className="text-xs max-w-[200px] truncate">{item.reason}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {new Date(item.submitted_at).toLocaleDateString()}
+                          {formatDate(item.submitted_at)}
                         </TableCell>
                         <TableCell className="text-right space-x-1.5">
                           <Button size="sm" variant="default" onClick={() => handleManagerAction(item, true)}>

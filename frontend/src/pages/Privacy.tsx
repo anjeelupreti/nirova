@@ -59,6 +59,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 type Outcome = "appropriate" | "queried" | "escalated";
 
@@ -74,7 +75,7 @@ function when(value: string): string {
   if (minutes < 60) return `${Math.max(minutes, 0)} min ago`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
-  return then.toLocaleDateString();
+  return formatDate(then);
 }
 
 function remaining(value: string): string {

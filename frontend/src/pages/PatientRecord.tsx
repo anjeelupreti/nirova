@@ -54,6 +54,7 @@ import {
   WorkspacePanel,
 } from "@/components/workspace/WorkspaceFrame";
 import type { ClinicalSummary, PatientAccount, PatientDetail } from "@/types";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Shapes the API returns that had no type yet                                 */
@@ -376,11 +377,7 @@ function OverviewTab({
       <WorkspacePanel title="Registration" icon="patientSingle" span={1}>
         <dl className="space-y-2 text-sm">
           <Row label="Registered">
-            {new Date(patient.registered_on).toLocaleDateString(undefined, {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+            {formatDate(patient.registered_on)}
           </Row>
           <Row label="Address">
             {[patient.tole, patient.ward, patient.municipality, patient.district]
@@ -426,7 +423,7 @@ function OverviewTab({
                 </div>
               ) : null}
               <p className="type-caption">
-                Recorded {new Date(vitals.recorded_at).toLocaleString()}
+                Recorded {formatDateTime(vitals.recorded_at)}
               </p>
             </div>
           )}
@@ -615,11 +612,7 @@ function TimelineTab({ summary }: { summary: ReturnType<typeof useResource<Clini
                   <StatusBadge status={encounter.status} />
                 </span>
               }
-              time={new Date(encounter.started_at).toLocaleDateString(undefined, {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              })}
+              time={formatDate(encounter.started_at)}
               description={
                 <div className="space-y-1">
                   <p>
@@ -760,7 +753,7 @@ function ResultsTab({ results }: { results: ReturnType<typeof useResource<Result
               </div>
               <p className="type-caption">
                 <span className="type-code">{order.reference}</span> ·{" "}
-                {new Date(order.released_at).toLocaleString()}
+                {formatDateTime(order.released_at)}
                 {order.turnaround_minutes != null
                   ? ` · ${formatValue(order.turnaround_minutes, "duration")} turnaround`
                   : ""}
@@ -894,7 +887,7 @@ function MedicationsTab({
                     <StatusBadge status="pending" label="review due" />
                   ) : medication.end_date ? (
                     <span className="tabular-nums">
-                      {new Date(medication.end_date).toLocaleDateString()}
+                      {formatDate(medication.end_date)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">ongoing</span>
@@ -965,7 +958,7 @@ function AccountTab({ account }: { account: ReturnType<typeof useResource<Patien
                     ) : null}
                   </td>
                   <td className="row-density tabular-nums">
-                    {invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString() : "—"}
+                    {invoice.issued_at ? formatDate(invoice.issued_at) : "—"}
                   </td>
                   <td className="row-density text-right tabular-nums">
                     {formatValue(Number(invoice.total), "money")}

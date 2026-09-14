@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { Paginated } from "@/types";
 import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select } from "@/components/ui/primitives";
 import { EmptyState, Skeleton } from "@/components/ui/feedback";
+import { formatDayMonth } from "@/lib/dates";
 
 interface Registration {
   uuid: string;
@@ -128,7 +129,7 @@ export function Registrations() {
                       {STATUS[row.status].label}
                     </span>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(row.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      {formatDayMonth(row.created_at)}
                     </p>
                   </div>
                 </button>

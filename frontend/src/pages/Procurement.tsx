@@ -77,6 +77,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 type Tab = "queue" | "requisitions" | "orders" | "receipts" | "suppliers";
 
@@ -623,7 +624,7 @@ function RequisitionDetail({
           <CardTitle className="text-base">{requisition.reference}</CardTitle>
           <CardDescription>
             {requisition.requested_by_name} ·{" "}
-            {new Date(requisition.created_at).toLocaleDateString()}
+            {formatDate(requisition.created_at)}
             {requisition.required_by && ` · needed by ${requisition.required_by}`}
           </CardDescription>
         </CardHeader>
@@ -1088,7 +1089,7 @@ function Orders({ facility }: { facility: string }) {
               <p className="text-xs text-muted-foreground">
                 Approved by {open.approved_by_name}
                 {open.approved_at &&
-                  ` on ${new Date(open.approved_at).toLocaleDateString()}`}
+                  ` on ${formatDate(open.approved_at)}`}
               </p>
             )}
           </CardContent>
@@ -1387,7 +1388,7 @@ function Receipts({ facility }: { facility: string }) {
                 <AlertDescription>
                   Posted to {open.location_code}
                   {open.posted_at &&
-                    ` on ${new Date(open.posted_at).toLocaleDateString()}`}
+                    ` on ${formatDate(open.posted_at)}`}
                   .
                 </AlertDescription>
               </Alert>

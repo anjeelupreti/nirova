@@ -87,6 +87,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 type Tab = "board" | "patients" | "census" | "setup";
 
@@ -611,7 +612,7 @@ function Patients({
                     )}
                   </TableCell>
                   <TableCell className="text-xs">
-                    {new Date(row.admitted_at).toLocaleDateString()}
+                    {formatDate(row.admitted_at)}
                     {row.expected_discharge && (
                       <span
                         className={cn(
@@ -803,7 +804,7 @@ function AdmissionDetail({
           <AlertDescription>
             {admission.mlc_number && `MLC ${admission.mlc_number}. `}
             {admission.police_informed_at
-              ? `Police informed ${new Date(admission.police_informed_at).toLocaleString()}.`
+              ? `Police informed ${formatDateTime(admission.police_informed_at)}.`
               : "The police have not been recorded as informed."}
           </AlertDescription>
         </Alert>
@@ -873,9 +874,9 @@ function AdmissionDetail({
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(row.occupied_at).toLocaleString()} →{" "}
+                      {formatDateTime(row.occupied_at)} →{" "}
                       {row.vacated_at
-                        ? new Date(row.vacated_at).toLocaleString()
+                        ? formatDateTime(row.vacated_at)
                         : "still there"}
                     </p>
                     {row.reason && (
@@ -987,7 +988,7 @@ function AdmissionDetail({
                       {row.shift || "round"}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(row.recorded_at).toLocaleString()} ·{" "}
+                      {formatDateTime(row.recorded_at)} ·{" "}
                       {row.nurse_name}
                     </span>
                     {row.escalated && (
@@ -1092,7 +1093,7 @@ function AdmissionDetail({
               <CardTitle className="text-base">Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <Field label="Admitted" value={new Date(admission.admitted_at).toLocaleString()} />
+              <Field label="Admitted" value={formatDateTime(admission.admitted_at)} />
               <Field label="From" value={humanise(admission.source)} />
               <Field
                 label="Diagnosis"
@@ -1112,7 +1113,7 @@ function AdmissionDetail({
                 <>
                   <Field
                     label="Discharged"
-                    value={new Date(admission.discharged_at).toLocaleString()}
+                    value={formatDateTime(admission.discharged_at)}
                   />
                   <Field
                     label="Final diagnosis"

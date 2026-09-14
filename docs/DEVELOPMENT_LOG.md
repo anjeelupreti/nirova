@@ -12357,3 +12357,56 @@ The console's own language, against the conventions the audience already knows
 
 Nepali on the remaining portal screens; BS dates in the staff console; a
 gateway for IME Pay and Fonepay; a dunning reminder for unpaid invoices.
+
+
+## 281 - The console was in the wrong calendar
+
+*12 September 2026.*
+
+Nepal runs on Bikram Sambat. A patient asks for an appointment in Ashoj; a
+ward sister writes the round in BS in the paper register beside the screen; a
+return to the ministry is filed in BS. The console showed Gregorian dates
+everywhere — and until log 279 its own sign-in page claimed otherwise, which
+was the first thing that had to be made true rather than louder.
+
+**A preference, not a locale.** English with Bikram Sambat dates is the
+ordinary combination here: most hospital staff read English and write dates in
+BS. So the calendar sits beside theme and density in My account, independent
+of language, and defaults to Gregorian — nothing changes for anybody who does
+not ask.
+
+**One place formats dates.** `lib/dates.ts` is what the console calls;
+`usePreferences` writes the choice onto `<html data-calendar>` and that module
+reads it from the document rather than from React, because a date inside a
+chart tooltip, a printable document or an Excel export has no component to
+take context from. A hundred and twenty-four call sites moved onto it.
+
+**What does not convert.** Times of day, durations, and anything a machine
+reads back: an ISO string in a query, the value of a `type="date"` input. A BS
+string in a date control would be rejected by the browser and sent to the API
+as a date fifty-seven years out.
+
+**What carries both.** Anything that leaves the building — an invoice, a
+laboratory report, a discharge summary — prints `२७ भाद्र २०८३ (12 Sept 2026)`.
+An insurer's clerk and a tax inspector read different calendars from the same
+sheet, and a page carrying one of them makes somebody convert by hand, which
+is where transcription errors come from.
+
+**Bikram Sambat comes from a maintained library**, the same one the patient
+app uses and checked the same way. BS month lengths are not computable; they
+are published year by year, and a date outside the library's tables returns
+nothing rather than a guess — the Gregorian date is shown instead.
+
+### A defect the first attempt introduced
+
+The mechanical pass rewrote `Number(value).toLocaleString("en-IN", {…})` — a
+*money* formatter — into a date. `toLocaleString` belongs to numbers as much
+as to dates, and a codemod that does not know which it is looking at will turn
+`Rs 1,400.00` into a date on a ward screen. The pass now converts the
+unambiguous methods outright and the ambiguous one only where the receiver is
+plainly a date; the rest were left alone and checked by hand.
+
+### Not yet
+
+A Bikram Sambat date *picker*: filters still take Gregorian through the
+browser's own control, which works and reads oddly next to a BS column.

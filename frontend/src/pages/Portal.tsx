@@ -79,6 +79,7 @@ import {
   useRecordPanel,
 } from "@/components/RecordPanel";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 type Tab = "accounts" | "proxies" | "messages" | "corrections" | "adoption";
 
@@ -94,11 +95,7 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const day = (value: string | null) =>
   value
-    ? new Date(value).toLocaleDateString([], {
-        day: "2-digit",
-        month: "short",
-        year: "2-digit",
-      })
+    ? formatDate(value)
     : "—";
 
 export default function PortalPage() {

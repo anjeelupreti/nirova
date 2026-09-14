@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/primitives";
 import api, { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/dates";
+import { formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* The spec                                                                   */
@@ -88,25 +90,13 @@ export function date(value: string | null | undefined): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
     ? ""
-    : parsed.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
+    : formatDate(parsed);
 }
 
 export function dateTime(value: string | null | undefined): string {
   if (!value) return "";
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? ""
-    : parsed.toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  return Number.isNaN(parsed.getTime()) ? "" : formatDateTime(parsed);
 }
 
 /**

@@ -36,6 +36,7 @@ import { CardSkeleton } from "@/components/ui/feedback";
 import { Page, PageHeader, Section } from "@/components/ui/layout";
 import { usePreferences, type Preferences } from "@/hooks/usePreferences";
 import api, { ApiError, tokenStore } from "@/lib/api";
+import { formatDate } from "@/lib/dates";
 
 interface PreferenceChoice {
   value: string;
@@ -74,11 +75,7 @@ function when(value: string | null): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
     ? "never"
-    : parsed.toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
+    : formatDate(parsed);
 }
 
 export default function AccountPage() {

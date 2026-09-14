@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { Registrations } from "@/pages/platform/Registrations";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 type Tab = "overview" | "registrations" | "customers" | "subscriptions" | "plans";
 
@@ -391,9 +392,9 @@ function Overview() {
                     </TableCell>
                     <TableCell className="text-xs">
                       {row.trial_ends_at
-                        ? new Date(row.trial_ends_at).toLocaleDateString()
+                        ? formatDate(row.trial_ends_at)
                         : row.grace_ends_at
-                          ? new Date(row.grace_ends_at).toLocaleDateString()
+                          ? formatDate(row.grace_ends_at)
                           : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -496,7 +497,7 @@ function Overview() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Generated {new Date(data.generated_at).toLocaleString()} — one endpoint,
+        Generated {formatDateTime(data.generated_at)} — one endpoint,
         one moment in time. A dashboard assembled from a dozen calls shows a
         dozen different moments, which is how "our numbers don't tie up"
         starts.
@@ -682,7 +683,7 @@ function Subscriptions() {
                     </TableCell>
                     <TableCell className="text-xs">
                       {row.current_period_end
-                        ? new Date(row.current_period_end).toLocaleDateString()
+                        ? formatDate(row.current_period_end)
                         : "—"}
                       {row.cancel_at_period_end && (
                         <span className="block text-destructive">
@@ -748,10 +749,10 @@ function Subscriptions() {
                         {rupees(addon.unit_price)}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {new Date(addon.effective_from).toLocaleDateString()}
+                        {formatDate(addon.effective_from)}
                         {addon.effective_to && (
                           <span className="block text-muted-foreground">
-                            to {new Date(addon.effective_to).toLocaleDateString()}
+                            to {formatDate(addon.effective_to)}
                           </span>
                         )}
                       </TableCell>

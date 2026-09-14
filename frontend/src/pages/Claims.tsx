@@ -73,6 +73,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate } from "@/lib/dates";
 
 type Tab = "claims" | "preauth" | "payers" | "analysis";
 
@@ -110,11 +111,7 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const day = (value: string | null) =>
   value
-    ? new Date(value).toLocaleDateString([], {
-        day: "2-digit",
-        month: "short",
-        year: "2-digit",
-      })
+    ? formatDate(value)
     : "—";
 
 export default function ClaimsPage() {

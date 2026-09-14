@@ -58,6 +58,7 @@ import {
   TableRow,
   Textarea,
 } from "@/components/ui/primitives";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
@@ -513,7 +514,7 @@ export function CountPanel({
                     </TableCell>
                     <TableCell>{count.location_code}</TableCell>
                     <TableCell>
-                      {new Date(count.started_at).toLocaleDateString()}
+                      {formatDate(count.started_at)}
                     </TableCell>
                     <TableCell className="tabular-nums">
                       {count.lines.length}
@@ -849,7 +850,7 @@ export function LedgerPanel({ locationUuid }: { locationUuid: string }) {
                 {entries.map((entry) => (
                   <TableRow key={entry.uuid}>
                     <TableCell className="whitespace-nowrap text-xs">
-                      {new Date(entry.created_at).toLocaleString()}
+                      {formatDateTime(entry.created_at)}
                     </TableCell>
                     <TableCell className="capitalize">
                       {entry.movement_type.replace(/_/g, " ")}

@@ -61,6 +61,7 @@ import type {
   ProcurementDashboard,
   SalesSummary,
 } from "@/types";
+import { formatWeekday } from "@/lib/dates";
 
 const PERSONA_KEY = "nirova.persona";
 
@@ -164,11 +165,7 @@ export default function DashboardPage() {
         name={firstName || undefined}
         context={
           <>
-            {new Date().toLocaleDateString(undefined, {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
+            {formatWeekday(new Date())}
             {session?.organization ? ` · ${session.organization.display_name}` : ""}
           </>
         }

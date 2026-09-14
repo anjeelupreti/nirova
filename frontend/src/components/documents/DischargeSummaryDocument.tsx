@@ -25,6 +25,7 @@ import api, { ApiError } from "@/lib/api";
 import { PrintableDocument, SignatureBlock } from "@/components/ui/export";
 import { DocumentPreview } from "@/components/documents/DocumentPreview";
 import type { Admission } from "@/types";
+import { formatDate } from "@/lib/dates";
 
 interface Medication {
   uuid: string;
@@ -60,7 +61,7 @@ async function load<T>(path: string): Promise<Loaded<T>> {
 
 const day = (iso: string | null | undefined) =>
   iso
-    ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    ? formatDate(iso)
     : "—";
 
 const FLAG: Record<string, string> = {

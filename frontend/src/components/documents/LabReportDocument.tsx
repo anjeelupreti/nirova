@@ -18,6 +18,7 @@
 import { cn } from "@/lib/utils";
 import { PrintableDocument, SignatureBlock } from "@/components/ui/export";
 import type { DiagnosticOrderDetail } from "@/types";
+import { formatDateTime } from "@/lib/dates";
 
 const FLAG_TEXT: Record<string, string> = {
   low: "L",
@@ -29,13 +30,7 @@ const FLAG_TEXT: Record<string, string> = {
 
 const when = (iso: string | null | undefined) =>
   iso
-    ? new Date(iso).toLocaleString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+    ? formatDateTime(iso)
     : "—";
 
 export function LabReportDocument({

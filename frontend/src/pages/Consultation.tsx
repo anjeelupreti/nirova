@@ -55,6 +55,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatTime } from "@/lib/dates";
 
 const SEVERITY_STYLE: Record<string, string> = {
   critical: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -180,7 +181,7 @@ function VitalsPanel({
         {latest && (
           <div className="rounded-md border bg-muted/30 p-3">
             <p className="mb-2 text-xs text-muted-foreground">
-              Last recorded {new Date(latest.recorded_at).toLocaleTimeString()}
+              Last recorded {formatTime(latest.recorded_at)}
             </p>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {latest.temperature_c && <span>{latest.temperature_c} °C</span>}

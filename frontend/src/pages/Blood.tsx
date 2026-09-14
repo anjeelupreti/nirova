@@ -77,6 +77,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDate, formatDateTime } from "@/lib/dates";
 
 type Tab = "shelf" | "processing" | "requests" | "donors" | "safety";
 
@@ -102,11 +103,7 @@ const humanise = (value: string) => value.replace(/_/g, " ");
 
 const day = (value: string | null) =>
   value
-    ? new Date(value).toLocaleDateString([], {
-        day: "2-digit",
-        month: "short",
-        year: "2-digit",
-      })
+    ? formatDate(value)
     : "—";
 
 export default function BloodPage() {
@@ -499,7 +496,7 @@ function UnitDialog({
             {unit.left_storage_at && (
               <Field
                 label="Out of storage since"
-                value={new Date(unit.left_storage_at).toLocaleString()}
+                value={formatDateTime(unit.left_storage_at)}
               />
             )}
           </div>

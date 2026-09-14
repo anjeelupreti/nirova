@@ -1106,8 +1106,11 @@ results.*
       पटक"); counts in Devanagari, hospital numbers and money left 0–9
 - [ ] Nepali on the remaining screens — bills, referrals, messages, sessions,
       profile corrections, the access log
-- [ ] Bikram Sambat dates in the staff console (the login page now claims only
-      what is true: BS fiscal years and payroll months)
+- [x] **Bikram Sambat dates in the staff console** (log 281): a calendar
+      preference beside theme and density, independent of language; one module
+      formats every date and reads the choice from the document, so charts,
+      printables and exports follow it; times, ISO values and date inputs stay
+      Gregorian; anything that leaves the building prints both
 - [x] **Paying a bill in the app** (log 280): eSewa and Khalti, with the
       confirmation asked of the provider server to server rather than read off
       the redirect back
@@ -1192,6 +1195,8 @@ headings and the navigation were not up to an international standard.*
 - [x] "What needs you" is **My workspace**, in the rail and on the page
 - [x] Page descriptions say what the screen is for in one line
 - [ ] The same pass over badges, buttons and empty states
+- [ ] A Bikram Sambat date picker; filters still take Gregorian through the
+      browser's own control (log 281)
 
 ## Standing guards
 

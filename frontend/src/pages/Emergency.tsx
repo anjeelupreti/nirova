@@ -71,6 +71,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import { formatDateTime, formatTime } from "@/lib/dates";
 
 type Tab = "board" | "performance";
 
@@ -818,7 +819,7 @@ function ArrivalDetail({
           <AlertTitle>Medico-legal case</AlertTitle>
           <AlertDescription>
             {arrival.police_informed_at
-              ? `Police informed ${new Date(arrival.police_informed_at).toLocaleString()}.`
+              ? `Police informed ${formatDateTime(arrival.police_informed_at)}.`
               : "The police have not been recorded as informed."}
           </AlertDescription>
         </Alert>
@@ -891,7 +892,7 @@ function ArrivalDetail({
                         </Badge>
                       )}
                       <span className="text-xs text-muted-foreground">
-                        {new Date(row.assessed_at).toLocaleTimeString()} ·{" "}
+                        {formatTime(row.assessed_at)} ·{" "}
                         {row.assessed_by_name}
                       </span>
                     </div>
@@ -1030,7 +1031,7 @@ function ArrivalDetail({
             <CardContent className="space-y-2 text-sm">
               <Field
                 label="Arrived"
-                value={new Date(arrival.arrived_at).toLocaleString()}
+                value={formatDateTime(arrival.arrived_at)}
               />
               <Field label="Complaint" value={arrival.presenting_complaint} />
               {arrival.brought_by && (
@@ -1049,7 +1050,7 @@ function ArrivalDetail({
               {arrival.disposition_at && (
                 <Field
                   label="Left"
-                  value={`${humanise(arrival.disposition)} at ${new Date(arrival.disposition_at).toLocaleTimeString()}`}
+                  value={`${humanise(arrival.disposition)} at ${formatTime(arrival.disposition_at)}`}
                 />
               )}
               {arrival.referred_to && (
