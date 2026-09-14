@@ -81,9 +81,10 @@ def test_without_permission_a_block_is_absent_not_zero(tenant):
     from apps.organization.today import organization_today
 
     body = organization_today(_Nothing(), _Plan())
-    assert set(body) == {"as_of", "facility"}, (
+    assert set(body) == {"as_of", "facility", "previous"}, (
         "a block was reported to somebody who may not read what it counts"
     )
+    assert body["previous"]["blocks"] == {}, "yesterday leaked a block today withheld"
 
 
 def test_a_module_outside_the_plan_is_absent(tenant):
@@ -98,3 +99,51 @@ def test_a_module_outside_the_plan_is_absent(tenant):
 def test_somebody_without_analytics_is_refused(tenant):
     response = _client(tenant, "doctor@manakamana.test").get("/api/org/today/")
     assert response.status_code == 403
+
+
+def test_events_are_compared_with_this_time_yesterday(tenant):
+    """Yesterday is counted up to the same clock time, and levels are not
+    recounted: without a snapshot, occupancy has no yesterday at all."""
+    from apps.organization.models import DailySnapshot
+    from apps.organization.today import organization_today
+
+    DailySnapshot.objects.all().delete()
+    body = organization_today(_Everything(), _Plan())
+    previous = body["previous"]["blocks"]
+
+    assert body["previous"]["label"] == "this time yesterday"
+    assert "seen" in previous["outpatients"]
+    assert "collected" in previous["billing"]
+    assert "occupied" not in previous.get("inpatients", {}), (
+        "a level was recounted for yesterday from records that say what is true now"
+    )
+
+
+def test_levels_come_from_last_nights_snapshot(tenant):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.organization.models import DailySnapshot
+    from apps.organization.today import organization_today
+
+    DailySnapshot.objects.update_or_create(
+        date=timezone.localdate() - timedelta(days=1), facility=None,
+        defaults={"figures": {"inpatients": {"occupied": 12, "beds": 60, "occupancy_percent": 20.0}}},
+    )
+    previous = organization_today(_Everything(), _Plan())["previous"]
+    assert previous["blocks"]["inpatients"]["occupied"] == 12
+    assert previous["snapshot_date"] is not None
+
+
+def test_the_nightly_snapshot_is_one_row_per_day_and_facility(tenant):
+    from django.utils import timezone
+
+    from apps.organization.models import DailySnapshot, Facility
+    from apps.organization.today import take_snapshot
+
+    take_snapshot(_Plan())
+    take_snapshot(_Plan())
+    today = timezone.localdate()
+    assert DailySnapshot.objects.filter(date=today, facility__isnull=True).count() == 1
+    assert DailySnapshot.objects.filter(date=today).count() == Facility.objects.count() + 1

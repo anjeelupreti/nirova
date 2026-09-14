@@ -13094,3 +13094,38 @@ table view, so the exact figure is always available.
 
 Not captured on screen: the front desk donut, because no demo account holds
 the front desk board by default. Checked by type.
+
+## 296 - Compared with what?
+
+A figure on its own cannot say whether a day is going well. The references put
+"12% from yesterday" under every number, and ours had nothing to compare with,
+so this is the backend that makes the comparison honest before the pill that
+shows it.
+
+**Two kinds of figure, two answers** (`apps/organization/today.py`).
+
+*Events* -- patients seen, emergency arrivals, admissions and discharges,
+results released, money collected, pharmacy takings -- are recounted for
+yesterday from the records, **up to the same time of day**. Compared with
+yesterday's whole day, every figure would read as a collapse at nine in the
+morning. Every date filter became a window, `[start, until)`, so today and
+yesterday are one function called twice.
+
+*Levels* -- beds occupied, money owed, work outstanding, patients waiting --
+cannot be recounted: the records say what is true now, not what was true last
+night. So they are kept. `DailySnapshot` stores the day's figures for the
+organization and for each facility, one row per day and facility, replaced
+rather than added on a second run; `organization.snapshot_day` takes it at
+23:55 for every live tenant. Where no snapshot exists there is no comparison
+rather than a guess, and a snapshot never shows a viewer a block they were not
+shown today.
+
+**The pill.** The dashboard band shows "↑ 12%" under each figure, coloured by
+what the movement means rather than by its direction -- money collected rising
+is good, money owed rising is not, beds filling is neither -- with "Compared
+with this time yesterday" or "last night" on hover. Two zeros show nothing;
+"0%" beside nothing is noise.
+
+The demo tenant's first snapshot was taken on 15 September, so comparisons for
+levels begin the next day. At the time of checking (01:41) today and yesterday
+were both zero for every event, so the band correctly showed no pills.

@@ -64,6 +64,8 @@ export function WorkspaceHero({
     to?: string;
     /** Shown in a tinted tile beside the figure. */
     icon?: IconName;
+    /** Which way it is going, and whether that is good. */
+    delta?: { text: string; intent: "good" | "bad" | "neutral"; title?: string };
   }[];
 }) {
   const accent = personaAccent(persona);
@@ -164,6 +166,19 @@ export function WorkspaceHero({
                   >
                     {stat.value}
                   </p>
+                  {stat.delta ? (
+                    <span
+                      title={stat.delta.title}
+                      className={cn(
+                        "mt-1 inline-flex items-center rounded-full px-1.5 py-px text-[0.6875rem] font-medium tabular-nums",
+                        stat.delta.intent === "good" && "bg-good-subtle text-good-subtle-foreground",
+                        stat.delta.intent === "bad" && "bg-critical-subtle text-critical-subtle-foreground",
+                        stat.delta.intent === "neutral" && "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {stat.delta.text}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             );

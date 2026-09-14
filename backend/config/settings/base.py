@@ -341,6 +341,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "notifications.remind_patients",
         "schedule": crontab(hour=18, minute=0),
     },
+    # Keep the day's figures before midnight, so tomorrow's dashboard can
+    # compare beds and money owed with tonight (apps/organization/today.py).
+    "organization-snapshot-day": {
+        "task": "organization.snapshot_day",
+        "schedule": crontab(hour=23, minute=55),
+    },
 }
 if NIROVA_DEMO_DAY_SLUG:
     CELERY_BEAT_SCHEDULE["demo-advance-day"] = {

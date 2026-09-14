@@ -80,6 +80,15 @@ interface OrganizationToday {
   laboratory?: { outstanding: number; critical_open: number; released: number };
   billing?: { collected: string; outstanding: string; overdue_invoices: number };
   pharmacy?: { takings: string; sales: number };
+  /**
+   * The same blocks for comparison: events up to this time yesterday, levels
+   * from last night's snapshot. A figure with no yesterday has no delta.
+   */
+  previous?: {
+    label: string;
+    snapshot_date: string | null;
+    blocks: Record<string, Record<string, number | string | null> | undefined>;
+  };
 }
 
 /** The selector's value for "every facility", which no facility uuid can collide with. */
@@ -327,6 +336,40 @@ function heroStats(data: MyWorkspace | null) {
 }
 
 /**
+ * How a figure moved since yesterday, and whether that is good.
+ *
+ * `better` is the caller's judgement: money collected rising is good, money
+ * owed rising is not, beds filling is neither. Nothing is shown when there is
+ * no yesterday, or when both days are zero -- "0%" beside two zeros is noise.
+ */
+function change(
+  now: number | string | null | undefined,
+  before: number | string | null | undefined,
+  better: "up" | "down" | "none",
+  label = "this time yesterday",
+) {
+  if (before === undefined || before === null || now === undefined || now === null) return undefined;
+  const current = Number(now);
+  const previous = Number(before);
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return undefined;
+  if (current === 0 && previous === 0) return undefined;
+  const difference = current - previous;
+  const text =
+    difference === 0
+      ? "same"
+      : previous === 0
+        ? `${difference > 0 ? "↑" : "↓"} new`
+        : `${difference > 0 ? "↑" : "↓"} ${Math.abs(Math.round((difference / previous) * 100))}%`;
+  const intent: "good" | "bad" | "neutral" =
+    difference === 0 || better === "none"
+      ? "neutral"
+      : (difference > 0) === (better === "up")
+        ? "good"
+        : "bad";
+  return { text, intent, title: `Compared with ${label}` };
+}
+
+/**
  * The organization's four figures, each a door to its list. `undefined` until
  * at least two can be shown, so the band falls back rather than half-empties.
  */
@@ -338,12 +381,16 @@ function organizationStats(data: OrganizationToday | null) {
     tone?: "good" | "warning" | "critical";
     to?: string;
     icon?: IconName;
+    delta?: { text: string; intent: "good" | "bad" | "neutral"; title?: string };
   }[] = [];
+  const before = data.previous?.blocks ?? {};
+  const label = data.previous?.label;
 
   if (data.outpatients) {
     figures.push({
       label: "Seen in outpatients",
       icon: "patient",
+      delta: change(data.outpatients.seen, before.outpatients?.seen, "up", label),
       value: data.outpatients.seen,
       to: "/queue",
     });
@@ -353,6 +400,7 @@ function organizationStats(data: OrganizationToday | null) {
     figures.push({
       label: data.facility ? "Beds occupied" : "Beds occupied, all sites",
       icon: "ward",
+      delta: change(data.inpatients.occupied, before.inpatients?.occupied, "none", "last night"),
       value:
         percent === null
           ? `${data.inpatients.occupied}`
@@ -365,12 +413,14 @@ function organizationStats(data: OrganizationToday | null) {
     figures.push({
       label: "Collected today",
       icon: "payment",
+      delta: change(data.billing.collected, before.billing?.collected, "up", label),
       value: formatValue(Number(data.billing.collected), "money"),
       to: "/billing",
     });
     figures.push({
       label: "Still owed",
       icon: "invoice",
+      delta: change(data.billing.outstanding, before.billing?.outstanding, "down", "last night"),
       value: formatValue(Number(data.billing.outstanding), "money"),
       tone: data.billing.overdue_invoices > 0 ? "warning" : undefined,
       to: "/billing",
@@ -380,6 +430,7 @@ function organizationStats(data: OrganizationToday | null) {
     figures.push({
       label: "Pharmacy takings",
       icon: "pharmacy",
+      delta: change(data.pharmacy.takings, before.pharmacy?.takings, "up", label),
       value: formatValue(Number(data.pharmacy.takings), "money"),
       to: "/counter",
     });
@@ -388,6 +439,7 @@ function organizationStats(data: OrganizationToday | null) {
     figures.push({
       label: "Lab work outstanding",
       icon: "laboratory",
+      delta: change(data.laboratory.outstanding, before.laboratory?.outstanding, "down", "last night"),
       value: data.laboratory.outstanding,
       tone: data.laboratory.critical_open > 0 ? "critical" : undefined,
       to: "/diagnostics",

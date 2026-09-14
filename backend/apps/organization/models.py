@@ -249,3 +249,36 @@ class ConfigSetting(BaseModel):
         if self.effective_from > now:
             return False
         return self.effective_to is None or self.effective_to > now
+
+
+class DailySnapshot(BaseModel):
+    """One day's figures, kept so a later day can be compared with it.
+
+    The levels -- beds occupied, money owed, work outstanding -- cannot be
+    recounted for a past day from records that say what is true now. See
+    `apps/organization/today.py`. `facility` empty is the whole organization.
+    """
+
+    date = models.DateField(db_index=True)
+    facility = models.ForeignKey(
+        Facility, null=True, blank=True, on_delete=models.CASCADE,
+        related_name="daily_snapshots",
+    )
+    figures = models.JSONField(default=dict)
+    taken_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "org_daily_snapshot"
+        ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["date", "facility"], name="uniq_snapshot_per_facility_day",
+            ),
+            models.UniqueConstraint(
+                fields=["date"], condition=models.Q(facility__isnull=True),
+                name="uniq_organization_snapshot_per_day",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.date} {self.facility or 'organization'}"
