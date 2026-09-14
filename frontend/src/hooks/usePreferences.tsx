@@ -30,6 +30,7 @@ import {
 } from "react";
 
 import api from "@/lib/api";
+import { BRAND_VARIABLES, brandRamp } from "@/lib/brandRamp";
 
 export type Theme = "system" | "light" | "dark";
 export type Density = "comfortable" | "compact";
@@ -44,9 +45,17 @@ export type Calendar = "gregorian" | "bikram_sambat";
  * commonest way a theme picker ends up with eight options and four of them
  * unreadable.
  */
-export type Palette = "vital" | "meridian" | "command" | "verdant" | "ember";
+export type Palette =
+  | "azure"
+  | "vital"
+  | "meridian"
+  | "command"
+  | "verdant"
+  | "ember"
+  | "custom";
 
 export const PALETTES: { value: Palette; label: string; blurb: string }[] = [
+  { value: "azure", label: "Azure", blurb: "Bright clinical blue, warm amber" },
   { value: "vital", label: "Vital", blurb: "Luminous teal, coral counterpoint" },
   { value: "meridian", label: "Meridian", blurb: "Deep indigo and amber" },
   { value: "command", label: "Command", blurb: "Navy chrome, electric cyan" },
@@ -57,6 +66,8 @@ export const PALETTES: { value: Palette; label: string; blurb: string }[] = [
 export interface Preferences {
   theme: Theme;
   palette: Palette;
+  /** The colour a Custom palette is computed from: `#RRGGBB`, or empty. */
+  brand_color: string;
   density: Density;
   calendar: Calendar;
   landing: string;
@@ -75,7 +86,8 @@ export interface Preferences {
  */
 const FALLBACK: Preferences = {
   theme: "system",
-  palette: "vital",
+  palette: "azure",
+  brand_color: "",
   density: "comfortable",
   calendar: "gregorian",
   landing: "auto",
@@ -126,6 +138,16 @@ function applyToDocument(preferences: Preferences, systemIsDark: boolean) {
   // page rendered before this runs is already complete rather than unstyled —
   // this only switches it.
   root.dataset.palette = preferences.palette;
+
+  // A Custom palette's brand ramp is computed from the chosen colour and set
+  // inline; switching to a built-in palette removes exactly those variables so
+  // the stylesheet's values show through again.
+  const custom =
+    preferences.palette === "custom" ? brandRamp(preferences.brand_color) : null;
+  for (const name of BRAND_VARIABLES) {
+    if (custom) root.style.setProperty(name, custom[name]);
+    else root.style.removeProperty(name);
+  }
 
   root.dataset.density = preferences.density;
   // Read by `lib/dates.ts`, which formats every date in the console and is

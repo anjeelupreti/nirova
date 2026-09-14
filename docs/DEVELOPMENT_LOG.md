@@ -13026,3 +13026,46 @@ half. **Not checked on screen:** the printed discharge summary and the imaging
 report. The automated browser could not reach a discharged stay through the
 ward list, and the demo has no open imaging order to report; both were checked
 by type and by reading the component, not by looking at them.
+
+## 294 - Boring, measured against three references
+
+The user sent three dashboards they would rather be looking at and asked
+whether ours was too boring. Measured against them, it was: a grey-white page
+under white cards with a hairline, so nothing lifted; small figures with no
+icon and no direction; a teal nobody had chosen; and not one drawing. The
+references share a few moves, and this entry takes the ones that change every
+screen at once rather than one page.
+
+**A bright default, and the brand is the user's.** A sixth palette, **Azure**,
+is the default: a strong clinical blue (#356EEB) carrying white text, solved by
+the same generator as the other five (78 contrast checks pass). It is the one
+palette whose button takes white ink by design -- the generator's dark-ink rule
+would have made it a pastel #5784E9, which is exactly the washed-out look being
+answered. Somebody who already chose a palette keeps it.
+
+**Custom colour.** A seventh swatch holds a colour picker. The chosen colour is
+stored as `brand_color` (a six-digit hex or nothing, refused otherwise) and
+`lib/brandRamp.ts` computes the whole brand ramp from it at runtime with the
+same arithmetic: the 600 step solved to 4.6:1 on white, the 400 step to 6.5:1
+on the dark card. The colour picked is the colour shown whenever white or
+near-black text can sit on it at 4.5:1; only a colour that carries neither
+falls back to the solved step. Accent, neutrals, status and chart series do
+not follow it. The picker previews live and saves once the hand stops.
+
+**Surfaces.** The page takes the faintest tint of the brand; cards, the header
+and the sidebar are pure white; the raised shadow is softer and wider; cards
+and panels are rounder (1rem, 1.25rem). The difference between page and card
+is what makes a card read as one without a heavy border.
+
+**Figures with a face.** Stat tiles and the welcome band's figures sit beside a
+tinted icon tile, and a delta is a pill in the colour of what it means. The
+welcome band draws a small illustration -- a monitor with a heartbeat, a heart,
+a capsule, a stethoscope -- from semantic tokens only, so it is the
+organization's colour in either mode with no image file. The band itself now
+follows the brand rather than a per-persona chart slot, which had kept it teal
+on a blue product.
+
+Not yet taken from the references, and next: charts where the data is a share
+(the queue as a donut with the total in the middle), avatars in people lists,
+status pills on rows, and trend deltas against yesterday, which need the
+figures to be kept by day first.

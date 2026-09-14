@@ -29,7 +29,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 
 import { useCan } from "@/components/ui/can";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { Page } from "@/components/ui/layout";
 import { useSession } from "@/hooks/useSession";
 import { Chart, formatValue } from "@/components/charts";
@@ -300,6 +300,7 @@ function heroStats(data: MyWorkspace | null) {
   return [
     {
       label: "Waiting on you",
+      icon: "workspace" as IconName,
       value: data.approvals_total,
       tone:
         data.approvals_total > 8
@@ -310,13 +311,15 @@ function heroStats(data: MyWorkspace | null) {
     },
     {
       label: "Unread",
+      icon: "notification" as IconName,
       // `null` when the notification source itself failed. An em dash is
       // honest; a zero would claim there is nothing unread.
       value: data.notifications.unread ?? "—",
     },
-    { label: "Queues", value: data.approvals.length },
+    { label: "Queues", icon: "queue" as IconName, value: data.approvals.length },
     {
       label: "Longest wait",
+      icon: "duration" as IconName,
       value: days === null ? "—" : days === 0 ? "today" : `${days}d`,
       tone: (days ?? 0) > 5 ? ("critical" as const) : undefined,
     },
@@ -334,11 +337,13 @@ function organizationStats(data: OrganizationToday | null) {
     value: React.ReactNode;
     tone?: "good" | "warning" | "critical";
     to?: string;
+    icon?: IconName;
   }[] = [];
 
   if (data.outpatients) {
     figures.push({
       label: "Seen in outpatients",
+      icon: "patient",
       value: data.outpatients.seen,
       to: "/queue",
     });
@@ -347,6 +352,7 @@ function organizationStats(data: OrganizationToday | null) {
     const percent = data.inpatients.occupancy_percent;
     figures.push({
       label: data.facility ? "Beds occupied" : "Beds occupied, all sites",
+      icon: "ward",
       value:
         percent === null
           ? `${data.inpatients.occupied}`
@@ -358,11 +364,13 @@ function organizationStats(data: OrganizationToday | null) {
   if (data.billing) {
     figures.push({
       label: "Collected today",
+      icon: "payment",
       value: formatValue(Number(data.billing.collected), "money"),
       to: "/billing",
     });
     figures.push({
       label: "Still owed",
+      icon: "invoice",
       value: formatValue(Number(data.billing.outstanding), "money"),
       tone: data.billing.overdue_invoices > 0 ? "warning" : undefined,
       to: "/billing",
@@ -371,6 +379,7 @@ function organizationStats(data: OrganizationToday | null) {
   if (figures.length < 4 && data.pharmacy) {
     figures.push({
       label: "Pharmacy takings",
+      icon: "pharmacy",
       value: formatValue(Number(data.pharmacy.takings), "money"),
       to: "/counter",
     });
@@ -378,6 +387,7 @@ function organizationStats(data: OrganizationToday | null) {
   if (figures.length < 4 && data.laboratory) {
     figures.push({
       label: "Lab work outstanding",
+      icon: "laboratory",
       value: data.laboratory.outstanding,
       tone: data.laboratory.critical_open > 0 ? "critical" : undefined,
       to: "/diagnostics",

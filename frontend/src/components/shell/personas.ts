@@ -231,12 +231,14 @@ export function availablePersonas(
 }
 
 /**
- * The CSS colour for a persona's accent.
+ * The CSS colour for a persona's welcome band: the organization's own brand.
  *
- * A series slot rather than a new hue: the eight were validated as a set for
- * colour-vision deficiency, and inventing a ninth for "the pharmacist's green"
- * would break that guarantee for a decorative reason.
+ * It was a chart series slot per persona, so the band stayed teal on a blue
+ * product and ignored a colour somebody had picked for their hospital -- the
+ * one place a chosen colour should show first. Personas are told apart by
+ * their name and icon; the colour now says whose product this is.
+ * (`persona.accent` is kept on the type for anything that wants a series.)
  */
-export function personaAccent(persona: Persona): string {
-  return `hsl(var(--series-${persona.accent}))`;
+export function personaAccent(_persona: Persona): string {
+  return "hsl(var(--primary))";
 }

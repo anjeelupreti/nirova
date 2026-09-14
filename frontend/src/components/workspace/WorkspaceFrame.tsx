@@ -30,6 +30,7 @@ import { Link } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { HeroArt } from "@/components/ui/HeroArt";
 import { Spinner } from "@/components/ui/loader";
 import { Freshness } from "@/components/ui/status";
 import { personaAccent, type Persona } from "@/components/shell/personas";
@@ -60,6 +61,8 @@ export function WorkspaceHero({
     tone?: "good" | "warning" | "critical";
     /** The list behind the figure. A number you cannot open is a poster. */
     to?: string;
+    /** Shown in a tinted tile beside the figure. */
+    icon?: IconName;
   }[];
 }) {
   const accent = personaAccent(persona);
@@ -114,6 +117,8 @@ export function WorkspaceHero({
           </div>
         </div>
 
+        <HeroArt className="hidden shrink-0 self-center lg:block" />
+
         <div className="flex shrink-0 flex-col items-end gap-2">
           {actions ? (
             <div className="flex flex-wrap items-center gap-2">{actions}</div>
@@ -126,22 +131,40 @@ export function WorkspaceHero({
         <div className="relative grid divide-x divide-border border-t sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => {
             const body = (
-              <>
-                <p className="flex items-center gap-1 type-label text-muted-foreground">
-                  {stat.label}
-                  {stat.to ? <Icon name="chevronRight" size="xs" className="opacity-60" /> : null}
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 text-xl font-semibold tabular-nums",
-                    stat.tone === "good" && "text-good",
-                    stat.tone === "warning" && "text-warning",
-                    stat.tone === "critical" && "text-critical",
-                  )}
-                >
-                  {stat.value}
-                </p>
-              </>
+              <div className="flex items-center gap-3">
+                {stat.icon ? (
+                  <span
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                      stat.tone === "critical"
+                        ? "bg-critical-subtle text-critical-subtle-foreground"
+                        : stat.tone === "warning"
+                          ? "bg-warning-subtle text-warning-subtle-foreground"
+                          : stat.tone === "good"
+                            ? "bg-good-subtle text-good-subtle-foreground"
+                            : "bg-primary-subtle text-primary-subtle-foreground",
+                    )}
+                  >
+                    <Icon name={stat.icon} size="md" />
+                  </span>
+                ) : null}
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1 type-label text-muted-foreground">
+                    {stat.label}
+                    {stat.to ? <Icon name="chevronRight" size="xs" className="opacity-60" /> : null}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 text-xl font-semibold tabular-nums",
+                      stat.tone === "good" && "text-good",
+                      stat.tone === "warning" && "text-warning",
+                      stat.tone === "critical" && "text-critical",
+                    )}
+                  >
+                    {stat.value}
+                  </p>
+                </div>
+              </div>
             );
             return stat.to ? (
               <Link
@@ -204,7 +227,7 @@ export function WorkspacePanel({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col rounded-lg border bg-card shadow-raised",
+        "flex min-w-0 flex-col rounded-xl border border-border/60 bg-card shadow-raised",
         span === 2 && "lg:col-span-2",
         span === 3 && "lg:col-span-3",
       )}

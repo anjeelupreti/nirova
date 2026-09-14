@@ -187,6 +187,15 @@ export function AvatarGroup({
  * this component guesses from the sign — a dashboard that paints every
  * decrease red would tell a triage nurse that a shorter queue is a problem.
  */
+const STAT_TONE = {
+  primary: "bg-primary-subtle text-primary-subtle-foreground",
+  accent: "bg-accent-subtle text-accent-subtle-foreground",
+  good: "bg-good-subtle text-good-subtle-foreground",
+  warning: "bg-warning-subtle text-warning-subtle-foreground",
+  critical: "bg-critical-subtle text-critical-subtle-foreground",
+  info: "bg-info-subtle text-info-subtle-foreground",
+} as const;
+
 export function StatTile({
   label,
   value,
@@ -194,6 +203,7 @@ export function StatTile({
   delta,
   intent = "neutral",
   icon,
+  tone = "primary",
   className,
 }: {
   label: string;
@@ -204,39 +214,44 @@ export function StatTile({
   /** What the delta *means*, not which way it points. */
   intent?: "good" | "bad" | "neutral";
   icon?: React.ReactNode;
+  /** The tint of the icon tile. Identity, not judgement: the delta judges. */
+  tone?: keyof typeof STAT_TONE;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card p-4",
-        // A restrained lift on hover. These are often clickable; when they are
-        // not, the movement still tells the eye they are one unit rather than
-        // four numbers sharing a row.
-        "transition-shadow duration-200 hover:shadow-sm",
+        "rounded-xl border border-border/60 bg-card p-4 shadow-raised",
+        "transition-shadow duration-200 hover:shadow-floating",
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        {icon && <span className="text-muted-foreground/60">{icon}</span>}
+      <div className="flex items-start gap-3">
+        {icon ? (
+          <span
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl [&_svg]:h-5 [&_svg]:w-5",
+              STAT_TONE[tone],
+            )}
+          >
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
+        </div>
       </div>
 
-      <p className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
-        {value}
-      </p>
-
       {(delta || hint) && (
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-2 text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {delta && (
             <span
               className={cn(
-                "font-medium",
-                intent === "good" && "text-good",
-                intent === "bad" && "text-destructive",
-                intent === "neutral" && "text-muted-foreground",
+                "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+                intent === "good" && "bg-good-subtle text-good-subtle-foreground",
+                intent === "bad" && "bg-critical-subtle text-critical-subtle-foreground",
+                intent === "neutral" && "bg-muted text-muted-foreground",
               )}
             >
               {delta}

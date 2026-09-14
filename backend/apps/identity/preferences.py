@@ -50,14 +50,29 @@ PREFERENCES = [
             "been checked for contrast in both light and dark."
         ),
         kind="choice",
-        default="vital",
+        # Azure by default: a bright clinical blue on white, which is what
+        # people expect a medical product to look like before they have
+        # chosen anything. "custom" uses `brand_color` below.
+        default="azure",
         choices=[
+            ("azure", "Azure — bright clinical blue"),
             ("vital", "Vital — luminous teal"),
             ("meridian", "Meridian — indigo and amber"),
             ("command", "Command — navy and cyan"),
             ("verdant", "Verdant — green and violet"),
             ("ember", "Ember — rose and teal"),
+            ("custom", "Custom — your own colour"),
         ],
+    ),
+    Preference(
+        key="brand_color",
+        label="Your colour",
+        description=(
+            "Used when the palette is Custom. The rest of the ramp is computed "
+            "from it, and button text is chosen so it stays readable."
+        ),
+        kind="color",
+        default="",
     ),
     Preference(
         key="density",
@@ -173,6 +188,18 @@ def coerce(key: str, raw):
         if str(raw).lower() in {"false", "0", "no", "off"}:
             return False
         raise ValueError(f"{preference.label} is on or off.")
+
+    if preference.kind == "color":
+        # A six-digit hex or nothing. Anything looser -- a named colour, an
+        # rgba() -- would be a value the ramp cannot be computed from.
+        value = str(raw or "").strip()
+        if value == "":
+            return ""
+        if len(value) == 7 and value.startswith("#") and all(
+            ch in "0123456789abcdefABCDEF" for ch in value[1:]
+        ):
+            return value.upper()
+        raise ValueError(f"{preference.label} must be a colour like #2563EB.")
 
     allowed = {value for value, _ in preference.choices}
     if raw not in allowed:

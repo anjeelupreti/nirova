@@ -13,13 +13,16 @@
  * shows approximations is a picker that lies.
  */
 
+import { useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
+import { isHexColour } from "@/lib/brandRamp";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Section } from "@/components/ui/layout";
 import { PALETTES, usePreferences, type Palette } from "@/hooks/usePreferences";
 
 /** The preference keys this card owns, so the generic list does not repeat them. */
-export const APPEARANCE_KEYS = ["theme", "palette", "density"] as const;
+export const APPEARANCE_KEYS = ["theme", "palette", "brand_color", "density"] as const;
 
 export function AppearanceCard() {
   const { preferences, update } = usePreferences();
@@ -30,7 +33,7 @@ export function AppearanceCard() {
       description="Applies immediately, and follows you to any machine you sign in on. Every palette is contrast-checked in light and dark."
     >
       <div className="rounded-lg border bg-card p-4 shadow-raised">
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {PALETTES.map((palette) => (
             <PaletteSwatch
               key={palette.value}
@@ -39,6 +42,7 @@ export function AppearanceCard() {
               onSelect={() => update({ palette: palette.value })}
             />
           ))}
+          <CustomSwatch />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 border-t pt-4">
@@ -150,6 +154,64 @@ export function DensityToggle() {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Your own colour. The picker fires on every movement of the cursor, so the
+ * preview updates live but the preference is saved once the hand stops.
+ */
+function CustomSwatch() {
+  const { preferences, update } = usePreferences();
+  const selected = preferences.palette === "custom";
+  const saved = isHexColour(preferences.brand_color) ? preferences.brand_color : "#2563EB";
+  const [colour, setColour] = useState(saved);
+  const timer = useRef<number | undefined>(undefined);
+
+  useEffect(() => setColour(saved), [saved]);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const choose = (next: string) => {
+    setColour(next);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(
+      () => update({ palette: "custom", brand_color: next.toUpperCase() }),
+      350,
+    );
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2.5 rounded-lg border p-3 text-left transition-all duration-quick ease-smooth",
+        selected ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-border-strong",
+      )}
+    >
+      <label className="relative block h-10 cursor-pointer overflow-hidden rounded-md">
+        <span className="absolute inset-0" style={{ background: colour }} />
+        <input
+          type="color"
+          aria-label="Choose your colour"
+          value={colour}
+          onChange={(event) => choose(event.target.value)}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => update({ palette: "custom", brand_color: colour.toUpperCase() })}
+        aria-pressed={selected}
+        className="min-w-0 text-left"
+      >
+        <span className="flex items-center gap-1.5 text-sm font-medium">
+          Custom
+          {selected ? <Icon name="confirm" size="xs" className="text-primary" /> : null}
+        </span>
+        <span className="mt-0.5 block truncate type-caption">
+          {selected ? colour.toUpperCase() : "Your organization's colour"}
+        </span>
+      </button>
     </div>
   );
 }

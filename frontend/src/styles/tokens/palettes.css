@@ -36,6 +36,114 @@
  * it is in — which is what makes adding a sixth a data change.
  */
 
+/* Azure — Bright clinical blue with a warm amber counterpoint. */
+/*
+ * The resting default since log 294: a strong blue carrying white text on
+ * pure white cards, which is what people expect a medical product to look
+ * like before they have chosen anything. It is also declared on bare
+ * `:root`, so a page rendered before JavaScript runs is complete.
+ *
+ * The one palette whose button takes white ink by design: the generator's
+ * dark-ink rule would have made it a pastel #5784E9, and a clinical blue
+ * that looks washed out is the complaint this palette answers.
+ */
+:root,
+[data-palette="azure"] {
+  --palette-name: "Azure";
+  --brand-primary: 221 82.0% 56.5%; /* #356EEB */
+  --brand-primary-ink: 0 0.0% 100.0%; /* #FFFFFF */
+  --brand-50: 220 33.3% 96.5%; /* #F3F5F9 */
+  --brand-100: 222 37.1% 93.1%; /* #E7EBF4 */
+  --brand-200: 221 49.3% 86.1%; /* #CAD5ED */
+  --brand-300: 222 54.0% 82.9%; /* #BCCAEB */
+  --brand-400: 221 71.1% 68.8%; /* #779AE8 */
+  --brand-500: 222 76.8% 62.7%; /* #5784E9 */
+  --brand-600: 221 82.0% 56.5%; /* #356EEB */
+  --brand-700: 221 80.5% 46.3%; /* #1752D5 */
+  --brand-800: 221 76.8% 37.3%; /* #1644A8 */
+  --brand-900: 221 71.2% 30.0%; /* #163883 */
+  --brand-950: 221 65.0% 20.2%; /* #122755 */
+  --accent-50: 40 33.3% 96.5%; /* #F9F7F3 */
+  --accent-100: 39 38.9% 92.9%; /* #F4EFE6 */
+  --accent-200: 38 49.3% 86.1%; /* #EDE0CA */
+  --accent-300: 38 64.7% 70.0%; /* #E4BF81 */
+  --accent-400: 38 84.3% 50.0%; /* #EB9B14 */
+  --accent-500: 38 84.1% 42.0%; /* #C58211 */
+  --accent-600: 38 83.9% 34.1%; /* #A06A0E */
+  --accent-700: 37 81.8% 28.0%; /* #82560D */
+  --accent-800: 38 77.4% 22.5%; /* #66450D */
+  --accent-900: 38 72.0% 18.2%; /* #50370D */
+  --accent-950: 38 65.1% 12.4%; /* #34250B */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 240 14.3% 98.6%; /* #FBFBFC */
+  --neutral-50: 240 7.7% 97.5%; /* #F8F8F9 */
+  --neutral-100: 240 3.7% 94.7%; /* #F1F1F2 */
+  --neutral-200: 220 5.7% 89.6%; /* #E3E4E6 */
+  --neutral-300: 220 6.5% 82.0%; /* #CED0D4 */
+  --neutral-400: 222 7.5% 66.1%; /* #A2A6AF */
+  --neutral-500: 221 8.8% 51.0%; /* #777E8D */
+  --neutral-600: 221 8.1% 38.8%; /* #5B606B */
+  --neutral-700: 224 7.2% 30.0%; /* #474A52 */
+  --neutral-800: 223 6.4% 21.4%; /* #33353A */
+  --neutral-850: 228 5.9% 16.7%; /* #28292D */
+  --neutral-900: 225 6.3% 12.5%; /* #1E1F22 */
+  --neutral-925: 240 4.0% 9.8%; /* #18181A */
+  --neutral-950: 240 5.0% 7.8%; /* #131315 */
+  --neutral-975: 240 3.7% 5.3%; /* #0D0D0E */
+  --neutral-1000: 240 5.3% 3.7%; /* #09090A */
+}
+
+/* Custom — an organization's own colour. */
+/*
+ * The brand ramp below is Azure's and is only the value before JavaScript
+ * runs: `usePreferences` computes the real ramp from the chosen colour
+ * (`lib/brandRamp.ts`) and sets it inline. Accent and neutrals stay these.
+ */
+[data-palette="custom"] {
+  --palette-name: "Custom";
+  --brand-primary: 221 82.0% 56.5%; /* #356EEB */
+  --brand-primary-ink: 0 0.0% 100.0%; /* #FFFFFF */
+  --brand-50: 220 33.3% 96.5%; /* #F3F5F9 */
+  --brand-100: 222 37.1% 93.1%; /* #E7EBF4 */
+  --brand-200: 221 49.3% 86.1%; /* #CAD5ED */
+  --brand-300: 222 54.0% 82.9%; /* #BCCAEB */
+  --brand-400: 221 71.1% 68.8%; /* #779AE8 */
+  --brand-500: 222 76.8% 62.7%; /* #5784E9 */
+  --brand-600: 221 82.0% 56.5%; /* #356EEB */
+  --brand-700: 221 80.5% 46.3%; /* #1752D5 */
+  --brand-800: 221 76.8% 37.3%; /* #1644A8 */
+  --brand-900: 221 71.2% 30.0%; /* #163883 */
+  --brand-950: 221 65.0% 20.2%; /* #122755 */
+  --accent-50: 40 33.3% 96.5%; /* #F9F7F3 */
+  --accent-100: 39 38.9% 92.9%; /* #F4EFE6 */
+  --accent-200: 38 49.3% 86.1%; /* #EDE0CA */
+  --accent-300: 38 64.7% 70.0%; /* #E4BF81 */
+  --accent-400: 38 84.3% 50.0%; /* #EB9B14 */
+  --accent-500: 38 84.1% 42.0%; /* #C58211 */
+  --accent-600: 38 83.9% 34.1%; /* #A06A0E */
+  --accent-700: 37 81.8% 28.0%; /* #82560D */
+  --accent-800: 38 77.4% 22.5%; /* #66450D */
+  --accent-900: 38 72.0% 18.2%; /* #50370D */
+  --accent-950: 38 65.1% 12.4%; /* #34250B */
+  --neutral-0: 0 0.0% 100.0%; /* #FFFFFF */
+  --neutral-25: 240 14.3% 98.6%; /* #FBFBFC */
+  --neutral-50: 240 7.7% 97.5%; /* #F8F8F9 */
+  --neutral-100: 240 3.7% 94.7%; /* #F1F1F2 */
+  --neutral-200: 220 5.7% 89.6%; /* #E3E4E6 */
+  --neutral-300: 220 6.5% 82.0%; /* #CED0D4 */
+  --neutral-400: 222 7.5% 66.1%; /* #A2A6AF */
+  --neutral-500: 221 8.8% 51.0%; /* #777E8D */
+  --neutral-600: 221 8.1% 38.8%; /* #5B606B */
+  --neutral-700: 224 7.2% 30.0%; /* #474A52 */
+  --neutral-800: 223 6.4% 21.4%; /* #33353A */
+  --neutral-850: 228 5.9% 16.7%; /* #28292D */
+  --neutral-900: 225 6.3% 12.5%; /* #1E1F22 */
+  --neutral-925: 240 4.0% 9.8%; /* #18181A */
+  --neutral-950: 240 5.0% 7.8%; /* #131315 */
+  --neutral-975: 240 3.7% 5.3%; /* #0D0D0E */
+  --neutral-1000: 240 5.3% 3.7%; /* #09090A */
+}
+
 /* Vital — Luminous teal with a coral counterpoint. Clinical, and awake. */
 /*
  * Vital is also the resting default, so a page rendered before JavaScript
@@ -43,7 +151,6 @@
  * than a frame of unstyled browser defaults. `usePreferences` replaces the
  * attribute the moment it reads its cache.
  */
-:root,
 [data-palette="vital"] {
   --palette-name: "Vital";
   --brand-primary: 172 83.9% 39.0%; /* #10B7A0 */

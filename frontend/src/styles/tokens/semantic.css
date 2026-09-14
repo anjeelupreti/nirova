@@ -42,7 +42,10 @@
    * a shadow, which is why the old console looked flat until something
    * hovered.
    */
-  --background: var(--neutral-50);
+  /* The page takes the faintest tint of the brand, and cards are pure white:
+     the difference is what makes a card read as a card without a heavy
+     border. A grey page under white cards was the "boring" in log 294. */
+  --background: var(--brand-50);
   --foreground: var(--neutral-900);
 
   --card: var(--neutral-0);
@@ -124,11 +127,11 @@
    * links floating at the left, which is most of why the navigation "looked
    * like a list of things" rather than like navigation.
    */
-  --shell: var(--neutral-100);
+  --shell: var(--neutral-0);
   --shell-foreground: var(--neutral-700);
   --shell-border: var(--neutral-200);
-  --shell-item-hover: var(--neutral-200);
-  --shell-item-active: var(--neutral-0);
+  --shell-item-hover: var(--neutral-100);
+  --shell-item-active: var(--neutral-100);
   --shell-item-active-foreground: var(--neutral-900);
   --shell-heading: var(--neutral-500);
   /* The active item's tint and spine. Brand, not grey — the one place in the
@@ -196,8 +199,8 @@
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
   --radius: var(--radius-md);
 
   /* -- Elevation --------------------------------------------------------- */
@@ -208,8 +211,8 @@
    * one looks flat.
    */
   --elevation-flat: 0 0 0 1px hsl(var(--border));
-  --elevation-raised: 0 1px 2px -1px hsl(var(--neutral-900) / 0.08),
-                      0 1px 3px 0 hsl(var(--neutral-900) / 0.06);
+  --elevation-raised: 0 1px 2px 0 hsl(var(--neutral-900) / 0.04),
+                      0 6px 18px -6px hsl(var(--neutral-900) / 0.10);
   --elevation-floating: 0 4px 6px -2px hsl(var(--neutral-900) / 0.08),
                         0 12px 20px -4px hsl(var(--neutral-900) / 0.12);
   --elevation-modal: 0 8px 12px -4px hsl(var(--neutral-900) / 0.1),
