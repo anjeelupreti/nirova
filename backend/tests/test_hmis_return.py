@@ -36,6 +36,29 @@ def test_the_return_counts_visits_and_splits_new_from_repeat(tenant):
         assert row["total"] == row["new"] + row["repeat"]
 
 
+def test_a_patient_is_new_once_however_often_they_attend(tenant):
+    """The first version counted every visit of a first-time patient as new,
+    which turned 197 demo visits into 197 new patients."""
+    from django.db.models import Count
+
+    from apps.encounters.models import Encounter
+    from apps.organization.hmis import monthly_return
+
+    body = monthly_return(since=date.today() - timedelta(days=365))
+    seen_more_than_once = (
+        Encounter.objects.values("patient_id").annotate(n=Count("id")).filter(n__gt=1).count()
+    )
+    distinct_patients = Encounter.objects.values("patient_id").distinct().count()
+
+    assert body["new_patients"] <= distinct_patients, (
+        "more new patients than patients: a repeat attendance was counted as new"
+    )
+    if seen_more_than_once:
+        assert body["new_patients"] < body["total_visits"], (
+            "somebody attended twice and both visits were counted as new"
+        )
+
+
 def test_what_cannot_be_counted_is_named_not_zeroed(tenant):
     from apps.organization.hmis import monthly_return
 

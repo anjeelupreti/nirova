@@ -16,8 +16,11 @@ not.** Three rules:
    a zero. A zero filed to a ministry is a claim that nothing happened.
 2. **Age is age at the visit**, not age today. A return filed in Poush about
    Mangsir must band a child by how old they were then.
-3. **New means new to this hospital**, decided by whether the patient had any
-   earlier encounter, not by a flag somebody remembered to tick.
+3. **New means new to this hospital, once.** A patient is new on their first
+   ever encounter here and a repeat attendance on every visit after it --
+   including later visits in the same month. Counting every visit of a
+   first-time patient as "new" turned 197 demo visits into 197 new patients,
+   which is the arithmetic a ministry would query first.
 
 The clerk still reads it, checks it and signs it. This removes the counting,
 not the responsibility.
@@ -95,8 +98,8 @@ def monthly_return(since=None, until=None, facility=None) -> dict:
         .select_related("patient", "department")
     )
 
-    # New to this hospital: no encounter before this period. One query for
-    # every patient seen, rather than one per encounter.
+    # The patient's first ever encounter here. One query for every patient
+    # seen, rather than one per encounter.
     patient_ids = {row.patient_id for row in encounters}
     first_seen = dict(
         Encounter.objects.filter(patient_id__in=patient_ids)
@@ -112,8 +115,11 @@ def monthly_return(since=None, until=None, facility=None) -> dict:
         on = timezone.localtime(encounter.started_at).date()
         band = _band(encounter.patient.date_of_birth, on)
         sex = (encounter.patient.gender or "unknown").lower()
+        # New exactly once: on the encounter that *is* the first one. Every
+        # later visit is a repeat attendance, whether or not it falls in this
+        # period.
         earliest = first_seen.get(encounter.patient_id)
-        is_new = earliest is not None and timezone.localtime(earliest).date() >= start
+        is_new = earliest is not None and earliest == encounter.started_at
 
         row = attendance.setdefault((band, sex), {"age_band": band, "sex": sex, "new": 0, "repeat": 0})
         row["new" if is_new else "repeat"] += 1

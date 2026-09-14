@@ -13217,3 +13217,12 @@ now the argument for them.
 The coded percentage travels with the return, beside the uncoded count, so
 whoever signs it can see how much of the morbidity table is missing before
 they do.
+
+**Running it on the demo data found the arithmetic error immediately**: 197
+visits, 197 new patients. The first rule marked every visit by a patient whose
+first encounter fell inside the period as new, so somebody attending three
+times was three new patients -- the first figure a ministry would query. A
+patient is new on their first ever encounter here and a repeat attendance
+every time after. 197 visits, 133 new, 64 repeat. A test holds it, and the
+lesson is the one this project keeps relearning: a report is not finished when
+its tests pass, it is finished when somebody has read its numbers.
