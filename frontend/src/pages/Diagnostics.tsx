@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { listen } from "@/lib/live";
 import { useSession } from "@/hooks/useSession";
 import { DocumentPreview } from "@/components/documents/DocumentPreview";
 import { LabReportDocument } from "@/components/documents/LabReportDocument";
@@ -623,8 +624,16 @@ export default function DiagnosticsPage() {
   useEffect(() => {
     void load();
     const handle = setInterval(() => void load(), REFRESH_MS);
-    return () => clearInterval(handle);
-  }, [load]);
+    // A new order, an entered result or a critical value reaches the bench
+    // at once rather than on the next tick.
+    const stop = facilityUuid
+      ? listen(`lab.${facilityUuid}`, () => void load())
+      : () => undefined;
+    return () => {
+      clearInterval(handle);
+      stop();
+    };
+  }, [load, facilityUuid]);
 
   async function openOrder(order: DiagnosticOrder) {
     const detail = await api.get<DiagnosticOrderDetail>(

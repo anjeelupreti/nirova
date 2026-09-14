@@ -23,6 +23,11 @@ let socket: WebSocket | null = null;
 let ready = false;
 let retry = 0;
 let reconnectTimer: number | undefined;
+const pending = new Map<string, number>();
+
+/** One save can ring several times (an observation and the alert it raised);
+ * a quarter of a second folds those into a single refetch. */
+const COALESCE_MS = 250;
 
 function url(): string {
   const scheme = window.location.protocol === "https:" ? "wss" : "ws";
@@ -67,7 +72,15 @@ function connect() {
       return;
     }
     if (message.type === "changed" && message.topic) {
-      listeners.get(message.topic)?.forEach((listener) => listener());
+      const topic = message.topic;
+      if (pending.has(topic)) return;
+      pending.set(
+        topic,
+        window.setTimeout(() => {
+          pending.delete(topic);
+          listeners.get(topic)?.forEach((listener) => listener());
+        }, COALESCE_MS),
+      );
     }
   };
 
@@ -89,7 +102,8 @@ function scheduleReconnect() {
 
 /**
  * Hear when `topic` changes. Returns the function that stops listening.
- * Topics: `"notifications"`, `"queue.<facility uuid>"`, `"beds.<facility uuid>"`.
+ * Topics: `"notifications"`; `"queue.<facility>"`, `"beds.<facility>"`,
+ * `"ed.<facility>"`, `"lab.<facility>"` by facility uuid; `"icu.<ward uuid>"`.
  */
 export function listen(topic: string, onChange: Listener): () => void {
   let set = listeners.get(topic);

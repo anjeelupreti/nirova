@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { listen } from "@/lib/live";
 import { cn } from "@/lib/utils";
 import type {
   Arrival,
@@ -235,8 +236,14 @@ function Board({
     // reloads is a wait time nobody believes, and this screen is read from
     // across the room.
     const handle = window.setInterval(() => void load(), REFRESH_MS);
-    return () => window.clearInterval(handle);
-  }, [load]);
+    // An arrival or a triage at the door is on the board at once; the timer
+    // keeps the wait times moving and covers a dropped socket.
+    const stop = facility ? listen(`ed.${facility}`, () => void load()) : () => undefined;
+    return () => {
+      window.clearInterval(handle);
+      stop();
+    };
+  }, [load, facility]);
 
   const breaching = rows.filter((row) => row.is_breaching).length;
   const unnamed = rows.filter((row) => row.is_unidentified).length;

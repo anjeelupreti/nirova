@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
+import { listen } from "@/lib/live";
 import { cn } from "@/lib/utils";
 import type {
   Facility,
@@ -312,8 +313,13 @@ function Board({
     // A board that only updates on reload is a board nobody trusts. Thirty
     // seconds is the rate a nurse walking past would notice a change at.
     const timer = window.setInterval(() => void load(), 30_000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    // A new observation or alert at any bed in the unit, immediately.
+    const stop = ward ? listen(`icu.${ward}`, () => void load()) : () => undefined;
+    return () => {
+      window.clearInterval(timer);
+      stop();
+    };
+  }, [load, ward]);
 
   if (loading && rows.length === 0) {
     return (

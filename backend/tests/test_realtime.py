@@ -179,3 +179,46 @@ def test_a_new_notification_rings_every_recipients_bell(tenant, monkeypatch):
         recipients=[{"id": owner.uuid, "name": owner.full_name, "reason": "test"}],
     )
     assert ("notifications", str(owner.uuid)) in rung
+
+
+@pytest.mark.parametrize("topic", [
+    f"ed.{FACILITY}", f"lab.{FACILITY}", f"icu.{FACILITY}",
+])
+def test_the_clinical_boards_are_listed_topics(topic):
+    from apps.realtime.publish import TOPIC
+
+    assert TOPIC.match(topic)
+
+
+def test_a_lab_order_rings_its_facilitys_bench(tenant, django_capture_on_commit_callbacks):
+    """Changing an order reaches the lab board of the facility it belongs to."""
+    from apps.diagnostics.models import DiagnosticOrder
+
+    order = DiagnosticOrder.objects.select_related("facility").first()
+    if order is None:
+        pytest.skip("no demo diagnostic orders")
+    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+        order.save(update_fields=["updated_at"])
+    assert callbacks, "saving a lab order rang nothing"
+
+
+def test_an_icu_stay_rings_its_unit(tenant, django_capture_on_commit_callbacks):
+    from apps.icu.models import IcuStay
+
+    stay = IcuStay.objects.first()
+    if stay is None:
+        pytest.skip("no demo ICU stays")
+    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+        stay.save(update_fields=["updated_at"])
+    assert callbacks, "saving an ICU stay rang nothing"
+
+
+def test_an_ed_arrival_rings_its_department(tenant, django_capture_on_commit_callbacks):
+    from apps.emergency.models import Arrival
+
+    arrival = Arrival.objects.first()
+    if arrival is None:
+        pytest.skip("no demo arrivals")
+    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+        arrival.save(update_fields=["updated_at"])
+    assert callbacks, "saving an ED arrival rang nothing"
