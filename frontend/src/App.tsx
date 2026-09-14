@@ -45,7 +45,7 @@ import type { MyWorkspace } from "@/types";
 */
 const AccessPage = lazy(() => import("@/pages/Access"));
 const SettingsPage = lazy(() => import("@/pages/Settings"));
-const AccountPage = lazy(() => import("@/pages/Account"));
+const MePage = lazy(() => import("@/pages/Me"));
 const AppointmentsPage = lazy(() => import("@/pages/Appointments"));
 const BillingPage = lazy(() => import("@/pages/Billing"));
 const BloodPage = lazy(() => import("@/pages/Blood"));
@@ -79,7 +79,6 @@ const ProcurementPage = lazy(() => import("@/pages/Procurement"));
 const QueuePage = lazy(() => import("@/pages/Queue"));
 const ReferralsPage = lazy(() => import("@/pages/Referrals"));
 const ReportsPage = lazy(() => import("@/pages/Reports"));
-const SelfServicePage = lazy(() => import("@/pages/SelfService"));
 const ServicesPage = lazy(() => import("@/pages/Services"));
 const StaffPage = lazy(() => import("@/pages/Staff"));
 const TheatrePage = lazy(() => import("@/pages/Theatre"));
@@ -226,10 +225,10 @@ export default function App() {
   const actions: PaletteAction[] = [
     {
       id: "appearance",
-      label: "Change the colour scheme",
+      label: "Change appearance and colours",
       icon: "spark",
       keywords: ["theme", "palette", "colour", "color", "dark", "light", "appearance"],
-      run: () => navigate("/settings"),
+      run: () => navigate("/me?tab=preferences"),
     },
     {
       id: "sign-out",
@@ -332,7 +331,8 @@ export default function App() {
               <Route path="/sales" element={<SalesPage />} />
               <Route path="/billing/online-return" element={<OnlineReturnPage />} />
               <Route path="/procurement" element={<ProcurementPage />} />
-              <Route path="/self-service" element={<SelfServicePage />} />
+              {/* The old address of the employment half of /me. */}
+              <Route path="/self-service" element={<Navigate to="/me" replace />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/reports" element={<ReportsPage />} />
@@ -347,7 +347,8 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage />} />
               {/* Reached from the account menu rather than the sidebar: it is
                   about you, not about the work. */}
-              <Route path="/account" element={<AccountPage />} />
+              <Route path="/account" element={<Navigate to="/me" replace />} />
+              <Route path="/me" element={<MePage />} />
               <Route path="/time" element={<TimePage />} />
               <Route path="/payroll" element={<PayrollPage />} />
               <Route path="/facilities" element={<FacilitiesPage />} />

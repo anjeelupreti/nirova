@@ -1,25 +1,20 @@
 /**
- * My account: who I am, my password, and how I want the interface to behave.
+ * The parts of "me" that belong to the sign-in rather than to employment:
+ * name, password, preferences. Rendered by the profile hub (`pages/Me.tsx`).
  *
- * The screen this product had no equivalent of. Signing in gave you a name in
- * the header and a Sign out button; there was no way to correct your own
- * surname, no way to change your password, and no preferences at all.
- *
- * **Three sections and they are deliberately not one form.** Details are typed
- * and submitted. A password is a different act with a different risk and its
- * own confirmation. Preferences save the moment they are touched, because a
- * theme toggle with a Save button underneath it is a theme toggle nobody
- * believes.
+ * **Separate forms, deliberately.** Details are typed and submitted. A
+ * password is a different act with a different risk and its own confirmation.
+ * Preferences save the moment they are touched, because a toggle with a Save
+ * button underneath it is a toggle nobody believes.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, KeyRound, Loader2, ShieldAlert, UserCog } from "lucide-react";
 
 import {
   Alert,
   AlertDescription,
   AlertTitle,
-  Badge,
   Button,
   Card,
   CardContent,
@@ -30,10 +25,7 @@ import {
   Label,
   Select,
 } from "@/components/ui/primitives";
-import { TwoStepSignIn } from "@/components/account/TwoStepSignIn";
-import { Avatar } from "@/components/ui/data";
-import { CardSkeleton } from "@/components/ui/feedback";
-import { Page, PageHeader, Section } from "@/components/ui/layout";
+import { Section } from "@/components/ui/layout";
 import { usePreferences, type Preferences } from "@/hooks/usePreferences";
 import api, { ApiError, tokenStore } from "@/lib/api";
 import { formatDate } from "@/lib/dates";
@@ -43,7 +35,7 @@ interface PreferenceChoice {
   label: string;
 }
 
-interface PreferenceSpec {
+export interface PreferenceSpec {
   key: keyof Preferences;
   label: string;
   description: string;
@@ -52,7 +44,7 @@ interface PreferenceSpec {
   choices: PreferenceChoice[];
 }
 
-interface Me {
+export interface Me {
   uuid: string;
   email: string;
   full_name: string;
@@ -78,85 +70,11 @@ function when(value: string | null): string {
     : formatDate(parsed);
 }
 
-export default function AccountPage() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setMe(await api.get<Me>("/auth/me/"));
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.message : "Could not load your account.",
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (error) {
-    return (
-      <Page>
-        <PageHeader title="My account" />
-        <Alert variant="warning">
-          <AlertTitle>Not shown</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </Page>
-    );
-  }
-
-  if (!me) {
-    return (
-      <Page>
-        <PageHeader title="My account" />
-        <CardSkeleton count={3} />
-      </Page>
-    );
-  }
-
-  return (
-    <Page>
-      <PageHeader
-        title="My account"
-        description="Profile, password and preferences."
-        actions={
-          me.is_platform_staff ? (
-            <Badge variant="secondary">Platform operator</Badge>
-          ) : undefined
-        }
-      />
-
-      {me.must_change_password && (
-        <Alert variant="warning">
-          <AlertTitle>Your password needs changing</AlertTitle>
-          <AlertDescription>
-            Somebody set this account up for you. Choose a password only you
-            know before doing anything else.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <Details me={me} onSaved={setMe} />
-          <Password me={me} onChanged={load} />
-          <TwoStepSignIn />
-        </div>
-        <PreferencePanel catalogue={me.preference_catalogue} />
-      </div>
-    </Page>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 /* Details                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function Details({ me, onSaved }: { me: Me; onSaved: (me: Me) => void }) {
+export function Details({ me, onSaved }: { me: Me; onSaved: (me: Me) => void }) {
   const [draft, setDraft] = useState({
     full_name: me.full_name,
     preferred_name: me.preferred_name,
@@ -194,11 +112,11 @@ function Details({ me, onSaved }: { me: Me; onSaved: (me: Me) => void }) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-4">
-          <Avatar name={me.full_name} src={me.avatar_url} size="lg" />
+          {/* No avatar here: the profile header already shows one. */}
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-2">
               <UserCog className="h-4 w-4 text-muted-foreground" />
-              Your details
+              Sign-in details
             </CardTitle>
             <CardDescription>{me.email}</CardDescription>
           </div>
@@ -280,7 +198,7 @@ function Details({ me, onSaved }: { me: Me; onSaved: (me: Me) => void }) {
 /* Password                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function Password({ me, onChanged }: { me: Me; onChanged: () => void }) {
+export function Password({ me, onChanged }: { me: Me; onChanged: () => void }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -406,13 +324,21 @@ function Password({ me, onChanged }: { me: Me; onChanged: () => void }) {
 /* Preferences                                                                 */
 /* -------------------------------------------------------------------------- */
 
-function PreferencePanel({ catalogue }: { catalogue: PreferenceSpec[] }) {
+export function PreferencePanel({
+  catalogue,
+  exclude = [],
+}: {
+  catalogue: PreferenceSpec[];
+  /** Keys drawn by a richer control elsewhere on the page. */
+  exclude?: readonly string[];
+}) {
   const { preferences, update } = usePreferences();
+  const shown = catalogue.filter((spec) => !exclude.includes(spec.key));
 
   return (
     <Card className="h-fit">
       <CardHeader>
-        <CardTitle>Preferences</CardTitle>
+        <CardTitle>Working preferences</CardTitle>
         <CardDescription>
           Saved as you change them, and they follow you to any machine you sign
           in on.
@@ -422,7 +348,7 @@ function PreferencePanel({ catalogue }: { catalogue: PreferenceSpec[] }) {
       <CardContent className="space-y-5">
         {/* Rendered from the server's catalogue, so a preference added in
             Python appears here next release with no change to this file. */}
-        {catalogue.map((spec) => (
+        {shown.map((spec) => (
           <Section key={spec.key} className="space-y-1.5">
             <Label htmlFor={`pref-${spec.key}`} className="text-sm font-medium">
               {spec.label}

@@ -30,6 +30,8 @@ import { Avatar } from "@/components/ui/data";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { useCan } from "@/components/ui/can";
 import { usePreferences, type Theme } from "@/hooks/usePreferences";
+import { useSession } from "@/hooks/useSession";
+import { visibleSettingsGroups } from "@/components/shell/settingsMap";
 import { cn } from "@/lib/utils";
 
 const THEMES: { value: Theme; label: string; icon: IconName }[] = [
@@ -52,7 +54,6 @@ const SYSTEM_LINKS: {
   needs?: string;
   scope?: string;
 }[] = [
-  { to: "/settings", label: "Settings", icon: "settings" },
   {
     to: "/staff",
     label: "Staff access",
@@ -107,9 +108,18 @@ export default function UserMenu({
   const { preferences, update } = usePreferences();
   const can = useCan();
 
-  const links = SYSTEM_LINKS.filter(
-    (link) => !link.needs || can(link.needs, link.scope),
-  );
+  const { hasModule } = useSession();
+  // Settings is offered only when it holds something this person may open.
+  // Everything about *you* moved to /me, so for most clinical roles the
+  // organization hub would be an empty page behind a menu item.
+  const settings =
+    visibleSettingsGroups(can).length > 0
+      ? [{ to: "/settings", label: "Settings", icon: "settings" as IconName }]
+      : [];
+  const links = [
+    ...settings,
+    ...SYSTEM_LINKS.filter((link) => !link.needs || can(link.needs, link.scope)),
+  ];
 
   return (
     <DropdownMenu.Root>
@@ -144,29 +154,44 @@ export default function UserMenu({
             "data-[side=bottom]:slide-in-from-top-1",
           )}
         >
-          <div className="flex items-center gap-2.5 px-2 py-2">
-            <Avatar name={name || email || "?"} size="md" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{name}</p>
-              <p className="truncate text-xs text-muted-foreground">{email}</p>
-              {role ? (
-                <p className="mt-0.5 truncate text-xs text-primary-ink">{role}</p>
-              ) : null}
-            </div>
-          </div>
+          {/* The identity block is itself the way to the profile: it is
+              what people click first, in every product they already use. */}
+          <DropdownMenu.Item asChild>
+            <Link
+              to="/me"
+              className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 outline-none focus:bg-accent"
+            >
+              <Avatar name={name || email || "?"} size="md" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{name}</p>
+                <p className="truncate text-xs text-muted-foreground">{email}</p>
+                {role ? (
+                  <p className="mt-0.5 truncate text-xs text-primary-ink">{role}</p>
+                ) : null}
+              </div>
+            </Link>
+          </DropdownMenu.Item>
 
           <DropdownMenu.Separator className="my-1.5 h-px bg-border" />
 
           <DropdownMenu.Item asChild>
-            <Link to="/account" className={ITEM}>
+            <Link to="/me" className={ITEM}>
               <Icon name="patientSingle" size="md" className="text-muted-foreground" />
               My profile
             </Link>
           </DropdownMenu.Item>
+          {hasModule("hrms") ? (
+            <DropdownMenu.Item asChild>
+              <Link to="/me?tab=leave" className={ITEM}>
+                <Icon name="appointment" size="md" className="text-muted-foreground" />
+                Leave &amp; payslips
+              </Link>
+            </DropdownMenu.Item>
+          ) : null}
           <DropdownMenu.Item asChild>
-            <Link to="/self-service" className={ITEM}>
-              <Icon name="verifiedPerson" size="md" className="text-muted-foreground" />
-              Payslips &amp; leave
+            <Link to="/me?tab=security" className={ITEM}>
+              <Icon name="access" size="md" className="text-muted-foreground" />
+              Password &amp; sign-in
             </Link>
           </DropdownMenu.Item>
 
@@ -218,9 +243,9 @@ export default function UserMenu({
           ))}
 
           <DropdownMenu.Item asChild>
-            <Link to="/settings" className={cn(ITEM, "text-muted-foreground")}>
+            <Link to="/me?tab=preferences" className={cn(ITEM, "text-muted-foreground")}>
               <Icon name="spark" size="md" />
-              Change the colour scheme…
+              Colours and preferences…
             </Link>
           </DropdownMenu.Item>
 

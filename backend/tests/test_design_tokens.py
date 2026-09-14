@@ -403,7 +403,7 @@ def test_no_component_reads_a_primitive_token_directly():
         # five times over -- a picker that lies about what it is offering. Each
         # swatch carries its own `data-palette`, so these resolve to the
         # palette being previewed rather than the one applied.
-        "pages/Settings.tsx",
+        "components/me/Appearance.tsx",
     }
 
     primitive = re.compile(r"var\(--(?:brand|accent|neutral)-\d+\)")

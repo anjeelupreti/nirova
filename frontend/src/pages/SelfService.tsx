@@ -1,13 +1,13 @@
 /**
- * Self-Service Workspace for hospital employees and managers.
+ * The employment half of "me": attendance, shifts, leave, pay, and a
+ * manager's team requests. Rendered as sections of the profile hub
+ * (`pages/Me.tsx`) rather than as a screen of its own.
  *
- * Phase 5 §95:
- * - My Profile: credentials tracking, contact info, bank details, change requests
- * - My Time: punch in/out, monthly attendance ledger, clock regularisation
- * - Shift Swaps: propose a swap, colleague accept/decline, manager sign-off
- * - My Leave: ledger-derived balances, holiday-aware applications, cancel/amend
- * - My Pay: approved payslips, line items, tax workings, printable export
- * - Manager Hub: unified approval queue for leave, regularisations, swaps, and profile updates
+ * **It was a second profile.** This screen had its own banner, its own tab
+ * strip and its own "My Profile", while My account had another -- two places
+ * called "profile", styled nothing alike, and check-in, the one thing done
+ * every day, three clicks deep. The hub owns the header, the tabs and the
+ * check-in now; this file owns only what each section shows and does.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -15,18 +15,11 @@ import {
   AlertCircle,
   ArrowRightLeft,
   CheckCircle2,
-  Clock,
   FileCheck,
-  Loader2,
-  LogIn,
-  LogOut,
   Plane,
   Printer,
   ShieldAlert,
-  UserCheck,
   UserCog,
-  Users,
-  Wallet,
 } from "lucide-react";
 
 import api, { ApiError } from "@/lib/api";
@@ -66,13 +59,22 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/dates";
+import { ATTENDANCE_CHANGED } from "@/components/me/staff";
 
-type Tab = "profile" | "time" | "swaps" | "leave" | "pay" | "manager";
+export type SelfServiceTab = "profile" | "time" | "swaps" | "leave" | "pay" | "manager";
+type Tab = SelfServiceTab;
 
-export default function SelfServicePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("profile");
-  const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<ESSMeSummary | null>(null);
+export function SelfServiceSection({
+  section,
+  summary,
+  onSummaryChanged,
+}: {
+  section: SelfServiceTab;
+  summary: ESSMeSummary;
+  /** Ask the hub to re-read the summary it shares with its header. */
+  onSummaryChanged: () => void;
+}) {
+  const activeTab: Tab = section;
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -86,7 +88,6 @@ export default function SelfServicePage() {
   const [managerQueue, setManagerQueue] = useState<ManagerQueueResponse | null>(null);
 
   // Dialog / action states
-  const [clocking, setClocking] = useState(false);
   const [correctionModal, setCorrectionModal] = useState(false);
   const [swapModal, setSwapModal] = useState(false);
   const [leaveModal, setLeaveModal] = useState(false);
@@ -118,31 +119,18 @@ export default function SelfServicePage() {
   const [regOutTime, setRegOutTime] = useState("");
   const [regReason, setRegReason] = useState("");
 
-  // Load primary summary
-  const loadSummary = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await api.get<ESSMeSummary>("/hr/me/summary/");
-      setSummary(res);
+  const loadSummary = onSummaryChanged;
 
-      if (res?.employee) {
-        setCorrPhone(res.employee.phone || "");
-        setCorrEmail(res.employee.personal_email || "");
-        setCorrAddress(res.employee.address || "");
-        setCorrBankName(res.employee.bank_name || "");
-        setCorrAccountNo(res.employee.bank_account_number || "");
-      }
-    } catch (err: any) {
-      if (err?.status === 204) {
-        setError("Your account is not linked to an employee record in this facility.");
-      } else {
-        setError(err instanceof ApiError ? err.message : "Failed to load summary.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // The correction form starts from what HR holds now.
+  useEffect(() => {
+    const employee = summary.employee;
+    if (!employee) return;
+    setCorrPhone(employee.phone || "");
+    setCorrEmail(employee.personal_email || "");
+    setCorrAddress(employee.address || "");
+    setCorrBankName(employee.bank_name || "");
+    setCorrAccountNo(employee.bank_account_number || "");
+  }, [summary]);
 
   // Load secondary tab data
   const loadTabData = useCallback(async (tab: Tab) => {
@@ -183,31 +171,12 @@ export default function SelfServicePage() {
   }, []);
 
   useEffect(() => {
-    loadSummary();
-  }, [loadSummary]);
-
-  useEffect(() => {
-    if (summary) {
-      loadTabData(activeTab);
-    }
-  }, [activeTab, summary, loadTabData]);
-
-  // Handle punch in/out
-  const handlePunch = async (action: "in" | "out") => {
-    try {
-      setClocking(true);
-      setError(null);
-      const url = action === "in" ? "/hr/attendance/check-in/" : "/hr/attendance/check-out/";
-      await api.post(url, { source: "web" });
-      setSuccess(`Successfully marked attendance: checked ${action}.`);
-      await loadSummary();
-      loadTabData("time");
-    } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : `Failed to check ${action}.`);
-    } finally {
-      setClocking(false);
-    }
-  };
+    void loadTabData(activeTab);
+    // Checking in from the header or from My day changes today's row here.
+    const refresh = () => void loadTabData(activeTab);
+    window.addEventListener(ATTENDANCE_CHANGED, refresh);
+    return () => window.removeEventListener(ATTENDANCE_CHANGED, refresh);
+  }, [activeTab, loadTabData]);
 
   // Submit Profile Correction
   const handleCorrectionSubmit = async (e: React.FormEvent) => {
@@ -351,106 +320,10 @@ export default function SelfServicePage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (error && !summary) {
-    return (
-      <div className="p-8 max-w-4xl mx-auto space-y-4">
-        <Alert variant="destructive">
-          <AlertCircle className="h-5 w-5" />
-          <AlertTitle>Self-Service Unavailable</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   const emp = summary?.employee;
-  const todayAtt = summary?.attendance_today;
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      {/*
-        The banner was `from-blue-700 via-indigo-700 to-slate-800` with
-        hardcoded white ink: three literal hues that ignored the palette, had
-        no dark form, and forced every label on top to be hardcoded too. On
-        `hero` tokens it follows whichever palette is selected and the ink
-        comes with the surface.
-      */}
-      <div className="rounded-xl bg-gradient-to-r from-hero via-hero-2 to-hero p-6 text-hero-foreground shadow-raised">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center rounded-md bg-hero-foreground/15 px-2 py-0.5 text-xs font-semibold text-hero-foreground ring-1 ring-inset ring-hero-foreground/25">
-                {/* Was "Staff Portal · §95". A specification section number
-                    on a screen a ward attendant opens every morning means
-                    nothing to them and tells them the product is unfinished.
-                    The only one that had reached the interface. */}
-                Staff portal
-              </span>
-              {emp?.department && (
-                <span className="text-xs text-info-subtle-foreground">· {emp.department}</span>
-              )}
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight mt-1">{emp?.full_name}</h1>
-            <p className="text-sm text-hero-muted">
-              {emp?.position || "Staff"} ({emp?.code}) · Reports to {emp?.reports_to || "Medical Admin"}
-            </p>
-          </div>
-
-          {/* Quick Punch Action Card */}
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm p-3 rounded-lg border border-white/20">
-            <div className="text-right">
-              <div className="text-xs text-info-subtle-foreground">Today's Attendance</div>
-              <div className="font-semibold capitalize text-sm">
-                {todayAtt ? (
-                  <span className="flex items-center gap-1.5 justify-end">
-                    <span className="h-2 w-2 rounded-full bg-good animate-pulse" />
-                    {todayAtt.status} ({todayAtt.worked_hours}h)
-                  </span>
-                ) : (
-                  <span className="text-warning-subtle-foreground">Not checked in</span>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {!todayAtt?.checked_in_at ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={clocking}
-                  onClick={() => handlePunch("in")}
-                  className="bg-good hover:bg-good text-white font-medium"
-                >
-                  <LogIn className="h-4 w-4 mr-1.5" /> Check In
-                </Button>
-              ) : !todayAtt.checked_out_at ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={clocking}
-                  onClick={() => handlePunch("out")}
-                  className="bg-warning hover:bg-warning text-white font-medium"
-                >
-                  <LogOut className="h-4 w-4 mr-1.5" /> Check Out
-                </Button>
-              ) : (
-                <Badge variant="outline" className="border-good/40 text-good-subtle-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-good-subtle-foreground" /> Completed
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       {/* Notifications / Feedback */}
       {error && (
         <Alert variant="destructive">
@@ -467,89 +340,6 @@ export default function SelfServicePage() {
         </Alert>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-border overflow-x-auto gap-2 text-sm font-medium">
-        <button
-          onClick={() => setActiveTab("profile")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap",
-            activeTab === "profile"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <UserCheck className="h-4 w-4" /> My Profile
-        </button>
-        <button
-          onClick={() => setActiveTab("time")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap",
-            activeTab === "time"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Clock className="h-4 w-4" /> My Time
-        </button>
-        <button
-          onClick={() => setActiveTab("swaps")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap relative",
-            activeTab === "swaps"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <ArrowRightLeft className="h-4 w-4" /> Shift Swaps
-          {(summary?.pending_incoming_swaps ?? 0) > 0 && (
-            <span className="ml-1 rounded-full bg-warning text-white text-xs px-1.5 py-0.2">
-              {summary?.pending_incoming_swaps}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("leave")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap",
-            activeTab === "leave"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Plane className="h-4 w-4" /> My Leave
-        </button>
-        <button
-          onClick={() => setActiveTab("pay")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap",
-            activeTab === "pay"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Wallet className="h-4 w-4" /> My Pay
-        </button>
-
-        {summary?.is_manager && (
-          <button
-            onClick={() => setActiveTab("manager")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 border-b-2 transition-colors whitespace-nowrap text-info",
-              activeTab === "manager"
-                ? "border-info/40 text-info font-semibold"
-                : "border-transparent hover:text-info"
-            )}
-          >
-            <Users className="h-4 w-4" /> Team Approvals
-            {(managerQueue?.summary.pending_total ?? 0) > 0 && (
-              <span className="ml-1 rounded-full bg-info text-white text-xs px-1.5 py-0.2">
-                {managerQueue?.summary.pending_total}
-              </span>
-            )}
-          </button>
-        )}
-      </div>
-
       {/* 1. My Profile Tab */}
       {activeTab === "profile" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -558,42 +348,42 @@ export default function SelfServicePage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div>
-                  <CardTitle>Personal & Employment Details</CardTitle>
-                  <CardDescription>Verified staff record on file with HR</CardDescription>
+                  <CardTitle>Employment record</CardTitle>
+                  <CardDescription>What HR holds for you. Changes go through HR, because payroll and tax read it.</CardDescription>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setCorrectionModal(true)}>
-                  <UserCog className="h-4 w-4 mr-1.5" /> Request Changes
+                  <UserCog className="h-4 w-4 mr-1.5" /> Request a change
                 </Button>
               </CardHeader>
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-muted-foreground">Phone Number</div>
+                  <div className="text-muted-foreground">Phone</div>
                   <div className="font-medium">{emp?.phone || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Personal Email</div>
+                  <div className="text-muted-foreground">Personal email</div>
                   <div className="font-medium">{emp?.personal_email || "—"}</div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Residential Address</div>
+                  <div className="text-muted-foreground">Address</div>
                   <div className="font-medium">
                     {emp?.address ? `${emp.address}, ${emp.municipality || ""}, ${emp.district || ""}` : "—"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Citizenship & PAN</div>
+                  <div className="text-muted-foreground">Citizenship and PAN</div>
                   <div className="font-medium">
-                    Citizenship: {emp?.citizenship_number || "—"} | PAN: {emp?.pan_number || "—"}
+                    {emp?.citizenship_number || "—"} · PAN {emp?.pan_number || "—"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Bank Account for Salary</div>
+                  <div className="text-muted-foreground">Salary account</div>
                   <div className="font-medium">
                     {emp?.bank_name ? `${emp.bank_name} (${emp.bank_account_number})` : "None configured"}
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Emergency Contact</div>
+                  <div className="text-muted-foreground">Emergency contact</div>
                   <div className="font-medium">
                     {emp?.emergency_contact_name
                       ? `${emp.emergency_contact_name} (${emp.emergency_contact_relation}) - ${emp.emergency_contact_phone}`
@@ -606,9 +396,9 @@ export default function SelfServicePage() {
             {/* Profile Change Requests History */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Pending & Past Profile Correction Requests</CardTitle>
+                <CardTitle className="text-base">Change requests</CardTitle>
                 <CardDescription>
-                  Address, telephone, and bank details require HR review before updating payroll and tax records
+                  Address, telephone and bank details are reviewed by HR before payroll uses them.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -646,7 +436,7 @@ export default function SelfServicePage() {
                                   : "destructive"
                               }
                             >
-                              {c.status}
+                              <span className="capitalize">{c.status.replace("_", " ")}</span>
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -663,9 +453,9 @@ export default function SelfServicePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <FileCheck className="h-4 w-4 text-primary" /> Professional Licences & Council Registrations
+                  <FileCheck className="h-4 w-4 text-primary" /> Licences and registrations
                 </CardTitle>
-                <CardDescription>Lapsed licences immediately block prescribing and clinical practice</CardDescription>
+                <CardDescription>A lapsed licence blocks prescribing until it is renewed.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {summary?.credentials && summary.credentials.length > 0 ? (
@@ -724,9 +514,9 @@ export default function SelfServicePage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Attendance Log</CardTitle>
+                <CardTitle>Attendance</CardTitle>
                 <CardDescription>
-                  Recorded clock events. If a mark was missed, raise a regularisation with your manager.
+                  Your check-ins this month. Missed one? Ask your manager to correct it.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -766,7 +556,7 @@ export default function SelfServicePage() {
                                 : "destructive"
                             }
                           >
-                            {rec.status}
+                            <span className="capitalize">{rec.status.replace("_", " ")}</span>
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -799,7 +589,7 @@ export default function SelfServicePage() {
           {/* Upcoming Published Shifts */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Upcoming Roster Schedule (Next 14 Days)</CardTitle>
+              <CardTitle className="text-base">Your shifts, next 14 days</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -829,13 +619,13 @@ export default function SelfServicePage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Colleague Shift Swaps</CardTitle>
+                <CardTitle>Shift swaps</CardTitle>
                 <CardDescription>
-                  Mutual swaps require colleague acceptance first, followed by department manager sign-off.
+                  Your colleague accepts first, then your manager signs it off.
                 </CardDescription>
               </div>
               <Button onClick={() => setSwapModal(true)}>
-                <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Propose Swap
+                <ArrowRightLeft className="h-4 w-4 mr-1.5" /> Propose a swap
               </Button>
             </CardHeader>
             <CardContent>
@@ -928,14 +718,14 @@ export default function SelfServicePage() {
           {/* Balance Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {summary?.leave_balances.map((b) => (
-              <Card key={b.code} className="border-t-4" style={{ borderTopColor: b.colour || "#3b82f6" }}>
+              <Card key={b.code} className="border-t-4" style={b.colour ? { borderTopColor: b.colour } : undefined}>
                 <CardHeader className="p-4 pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">{b.name}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <div className="text-2xl font-bold">{b.balance} <span className="text-xs text-muted-foreground font-normal">days</span></div>
+                  <div className="text-2xl font-bold tabular-nums">{Number(b.balance)} <span className="text-xs text-muted-foreground font-normal">days left</span></div>
                   <div className="text-[11px] text-muted-foreground mt-1">
-                    Annual entitlement: {b.annual_entitlement} days
+                    of {Number(b.annual_entitlement)} a year
                   </div>
                 </CardContent>
               </Card>
@@ -945,11 +735,11 @@ export default function SelfServicePage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>My Leave History</CardTitle>
-                <CardDescription>Applications, working days calculated against holidays, and approval status.</CardDescription>
+                <CardTitle>Leave applications</CardTitle>
+                <CardDescription>Working days are counted against public holidays.</CardDescription>
               </div>
               <Button onClick={() => setLeaveModal(true)}>
-                <Plane className="h-4 w-4 mr-1.5" /> Apply for Leave
+                <Plane className="h-4 w-4 mr-1.5" /> Apply for leave
               </Button>
             </CardHeader>
             <CardContent>
@@ -989,7 +779,7 @@ export default function SelfServicePage() {
                                 : "destructive"
                             }
                           >
-                            {l.status}
+                            <span className="capitalize">{l.status.replace("_", " ")}</span>
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -1007,9 +797,9 @@ export default function SelfServicePage() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Approved Salary Payslips</CardTitle>
+              <CardTitle>Payslips</CardTitle>
               <CardDescription>
-                Only finalized and approved pay runs are visible here. Click any payslip to view line items or generate a printable document.
+                Approved pay runs only. Open one to see every line, or print it.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1043,7 +833,7 @@ export default function SelfServicePage() {
                         <TableCell className="text-xs font-bold text-primary">NPR {p.net}</TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="outline" onClick={() => viewPayslip(p.reference)}>
-                            <Printer className="h-3.5 w-3.5 mr-1" /> View / Print
+                            <Printer className="h-3.5 w-3.5 mr-1" /> View
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -1090,16 +880,16 @@ export default function SelfServicePage() {
           {/* Unified Worklist */}
           <Card>
             <CardHeader>
-              <CardTitle>Team Requests Worklist</CardTitle>
+              <CardTitle>Team requests</CardTitle>
               <CardDescription>
-                One central queue holding every request from your team members rather than four separate screens.
+                Leave, corrections, shift swaps and attendance fixes from your team, in one list.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {managerQueue?.items.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle2 className="h-8 w-8 mx-auto text-good mb-2" />
-                  All team requests cleared. Nothing pending review!
+                  Nothing from your team is waiting on you.
                 </div>
               ) : (
                 <Table>
@@ -1155,7 +945,7 @@ export default function SelfServicePage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <Card className="w-full max-w-lg bg-card p-6 space-y-4">
             <CardHeader className="p-0">
-              <CardTitle>Request Profile / Bank Account Correction</CardTitle>
+              <CardTitle>Request a change to your record</CardTitle>
               <CardDescription>
                 Updates to bank details, phone, or address require verification before taking effect.
               </CardDescription>
@@ -1208,7 +998,7 @@ export default function SelfServicePage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <Card className="w-full max-w-lg bg-card p-6 space-y-4">
             <CardHeader className="p-0">
-              <CardTitle>Propose Shift Swap</CardTitle>
+              <CardTitle>Propose a shift swap</CardTitle>
               <CardDescription>
                 Select a published shift of yours and a target colleague to cover or swap.
               </CardDescription>
@@ -1263,7 +1053,7 @@ export default function SelfServicePage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <Card className="w-full max-w-lg bg-card p-6 space-y-4">
             <CardHeader className="p-0">
-              <CardTitle>Apply for Leave</CardTitle>
+              <CardTitle>Apply for leave</CardTitle>
               <CardDescription>Working days are automatically computed factoring in Nepal's holidays.</CardDescription>
             </CardHeader>
             <form onSubmit={handleLeaveSubmit} className="space-y-3">
@@ -1313,7 +1103,7 @@ export default function SelfServicePage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md bg-card p-6 space-y-4">
             <CardHeader className="p-0">
-              <CardTitle>Request Clock Regularisation</CardTitle>
+              <CardTitle>Correct an attendance record</CardTitle>
               <CardDescription>Provide corrected timestamps and an explanation for missed punches.</CardDescription>
             </CardHeader>
             <form onSubmit={handleRegularise} className="space-y-3">

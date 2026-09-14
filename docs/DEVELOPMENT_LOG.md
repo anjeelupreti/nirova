@@ -12806,3 +12806,75 @@ the signal the bell relied on never fired for a new notification. `notify()`
 now rings each recipient after the insert (on commit, like every ring), and a
 test holds it. Measured through nginx and daphne afterwards, the doorbell
 reached the browser 335 ms after the announcement was posted.
+
+## 288 - The emergency board heard about an arrival on the next tick
+
+Log 287 made the queue, the bed board and the bell immediate. The emergency
+department, the intensive care unit and the laboratory bench still waited for
+their timers: an arrival at the door took up to a refresh interval to reach
+the board read from across the room, and a critical potassium waited for the
+bench's next poll.
+
+The same doorbell, three more topics, each keyed the way its board is chosen
+on screen. `ed.<facility>` rings on an arrival, a triage decision, a pathway
+alert or a resuscitation entry; `lab.<facility>` on an order, a result or a
+critical-value alert; `icu.<ward>` -- by ward, because the ICU board is
+opened on a unit, not a building -- on the stay and on everything recorded
+against it: observations, fluids, infusions and their rates, ventilation,
+devices, rounds, SOFA scores, alerts and thresholds.
+
+One save can ring more than once (an observation, and the alert it raised),
+so the browser folds rings for a topic into one refetch a quarter of a second
+later. The server stays simple and the board does not fetch twice.
+
+Checked for the trap log 287 fell into: none of these writes goes through
+`bulk_create`, and the one queryset `update()` in the three apps -- marking a
+verified order's results -- is followed by a save of the order, which rings.
+
+## 289 - Two profiles, three colour pickers, and a check-in nobody could find
+
+Somebody on a ward opening "their" part of the product found four doors:
+**My account** (name, password, preferences), **Self service** (a second
+profile under its own banner, check-in, leave, swaps, payslips, and a manager
+tab), **Settings** (the colours again, plus a "You" group linking back to the
+first two), and the account menu, which linked to all three and offered the
+colours a third time. Payslips lived under one profile and the password under
+the other, and nothing said which.
+
+**One place: `/me`, "My profile".** One header -- your name, your position,
+department and facility, and the check-in button -- and one row of tabs held
+in the address, so "my leave" is a link somebody can be sent: Profile,
+Attendance & shifts, Leave, Payslips, Shift swaps, Team requests, Password &
+sign-in, Preferences. The employment tabs come first because they are opened
+weekly; the password is changed twice a year. A tab that does not apply --
+no employee record, no HR module in the plan, nobody reporting to you -- is
+not shown, rather than shown empty. `/account` and `/self-service` redirect,
+so bookmarks still land.
+
+**Check-in moved to where the day starts.** It was inside the self-service
+banner, in ink that barely showed against it. It is now a one-line card at
+the top of My day -- status, today's shift from the rota, the button -- and
+the same button in the profile header. Both read one summary and announce a
+change to each other, so they cannot disagree about whether you are in.
+
+**Appearance is one control.** The palette, mode and row height live on the
+Preferences tab; the generic preference list no longer repeats them as
+drop-downs. The account menu keeps only the light/dark switch, because that
+one is changed because of the room somebody is in.
+
+**Settings is the organization only.** People and access, structure, prices,
+the plan. The map it is drawn from moved to `components/shell/settingsMap.ts`
+so the account menu asks the same question the hub does, and offers Settings
+only when there is something in it this person may open -- for most clinical
+roles there is not, and the link led to an empty page. Anybody who arrives
+anyway is pointed at their profile.
+
+The account menu itself: the name block opens the profile, then My profile,
+Leave & payslips (with the HR module), Password & sign-in, the organization's
+system links, the mode switch, and sign out. The unread badge on My day went
+too; the bell in the header already says it, and it said it twice.
+
+Titles on the employment sections were Title Case specification headings
+("Pending & Past Profile Correction Requests", "Upcoming Roster Schedule (Next
+14 Days)"). They are sentence case and say what the section is for the person
+reading it: "Change requests", "Your shifts, next 14 days".

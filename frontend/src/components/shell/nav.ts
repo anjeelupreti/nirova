@@ -136,12 +136,18 @@ export const NAV_GROUPS: NavGroup[] = [
       // Notifications are the bell in the top bar, as in every product people
       // already use; the full page is reached from its "View all".
       // Moved out of People, which is where somebody looks for *other* people.
+      // One place for everything about you: sign-in details, password,
+      // appearance, and -- with an employee record -- attendance, leave,
+      // payslips and shift swaps. It was two screens, both called "profile".
       {
-        to: "/self-service",
-        module: "hrms",
-        label: "Self service",
+        to: "/me",
+        label: "My profile",
         icon: "verifiedPerson",
-        keywords: ["payslip", "my leave", "my attendance", "ess"],
+        keywords: [
+          "profile", "account", "password", "two-step", "appearance", "theme",
+          "colour", "dark mode", "preferences", "payslip", "my leave",
+          "attendance", "check in", "shift swap", "self service", "ess",
+        ],
       },
     ],
   },
@@ -499,7 +505,7 @@ export const SYSTEM_ITEMS: NavItem[] = [
     to: "/settings",
     label: "Settings",
     icon: "settings",
-    keywords: ["preferences", "appearance", "colour", "theme", "admin", "system"],
+    keywords: ["organization", "admin", "system", "configuration"],
   },
   // `subscription.read`, not `facility.read`: this screen is what the
   // hospital's *plan* allows and how much of it is spent — commercial

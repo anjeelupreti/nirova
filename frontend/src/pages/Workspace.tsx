@@ -29,7 +29,6 @@ import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
-  Bell,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -51,6 +50,7 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { PersonaHome } from "@/components/workspace/PersonaHome";
+import { TodayAtWork, useStaffSummary } from "@/components/me/staff";
 import { useResource } from "@/components/workspace/useResource";
 import { availablePersonas, resolvePersona, type PersonaId } from "@/components/shell/personas";
 import { useSession } from "@/hooks/useSession";
@@ -72,7 +72,7 @@ const BOARD_KEY = "nirova.board";
 
 export default function WorkspacePage() {
   const can = useCan();
-  const { session } = useSession();
+  const { session, hasModule } = useSession();
   const [board, setBoard] = useState<PersonaId | "auto">(() => {
     try {
       return (window.localStorage.getItem(BOARD_KEY) as PersonaId) ?? "auto";
@@ -134,6 +134,11 @@ export default function WorkspacePage() {
     ?? null;
   // The same answer the board needs, read once here and handed down.
   const workspace = useResource<MyWorkspace>("/me/workspace/");
+  // Check-in, on the screen people open at the start of a shift rather than
+  // three clicks into their profile.
+  const staff = useStaffSummary(
+    hasModule("hrms") && Boolean(data?.today.has_employee_record),
+  );
 
   const chooseBoard = (next: PersonaId | "auto") => {
     setBoard(next);
@@ -185,14 +190,6 @@ export default function WorkspacePage() {
                   </select>
                 </label>
               ) : null}
-              {data?.notifications.unread ? (
-                <Link to="/notifications">
-                  <Badge variant="outline" className="gap-1">
-                    <Bell className="h-3 w-3" />
-                    {data.notifications.unread} unread
-                  </Badge>
-                </Link>
-              ) : null}
               <Button variant="outline" size="sm" onClick={() => void load()}>
                 <RefreshCw
                   className={cn("mr-1.5 h-3.5 w-3.5", loading && "animate-spin")}
@@ -226,6 +223,8 @@ export default function WorkspacePage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {staff.summary ? <TodayAtWork summary={staff.summary} /> : null}
 
       <PersonaHome persona={persona} workspace={workspace} oneFacility={oneFacility} />
 

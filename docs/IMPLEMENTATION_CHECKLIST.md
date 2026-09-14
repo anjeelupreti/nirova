@@ -1326,9 +1326,26 @@ never built.*
       refetch through the authorised API
 - [x] Authenticated by first message, never the URL; organization checked
       against live memberships; topics from a fixed list; origin checked
-- [ ] Live updates for the emergency department, ICU and laboratory worklist
-      (they still poll)
+- [x] Live updates for the emergency department, ICU (by unit) and laboratory
+      bench (log 288), with rings from one save folded into one refetch
 - [ ] Messaging between staff about a patient
+
+## §146 One profile `[x]`
+
+*New on 14 September 2026 (log 289). "Various pages have contents that can come
+in one place — self service, my day, my workspace, the profile drop-down."*
+
+- [x] Everything about a person is one page, `/me`, with the tab in the address
+- [x] Employment tabs (attendance and shifts, leave, payslips, swaps, team
+      requests) appear only with an employee record, the HR module and — for
+      team requests — somebody reporting to you
+- [x] `/account` and `/self-service` redirect rather than 404
+- [x] Check-in is on My day and in the profile header, from one summary
+- [x] Appearance is one control; the preference list does not repeat it
+- [x] Settings is the organization only, and the account menu offers it only
+      when it holds something this person may open
+- [x] The account menu: profile, leave and payslips, password, system, mode,
+      sign out — each once
 
 ## Standing guards
 

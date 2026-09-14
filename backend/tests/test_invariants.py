@@ -2589,6 +2589,9 @@ def test_every_console_route_has_a_way_to_reach_it():
         # "Oversight" -- among screens about other people, which is the wrong
         # place for the one screen that is about you.
         "/account",
+        # Both old addresses of what is now `/me`, kept as redirects so a
+        # bookmark or an emailed link still lands on the profile.
+        "/self-service",
         # One patient's full record. Opened from a patient -- the search panel,
         # the command palette, a worklist row -- for the same reason the
         # consultation is: a sidebar link to "the patient" would have to

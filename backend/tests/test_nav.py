@@ -73,7 +73,10 @@ PROBE = {
     "/services": "/api/billing/services/",
     "/workspace": "/api/me/workspace/",
     "/notifications": "/api/notifications/summary/",
-    "/self-service": "/api/hr/me/summary/",
+    # Your profile: sign-in details for everybody, employment sections for
+    # anybody with an employee record. `/auth/me/` is what every signed-in
+    # person can read, and it is what the page loads first.
+    "/me": "/api/auth/me/",
     # The dashboard is deliberately not probed. It has no endpoint of its own:
     # it is composed of panels that each read a summary the viewer may or may
     # not be entitled to, and each panel declares its permission and is not
