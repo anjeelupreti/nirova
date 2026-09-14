@@ -65,7 +65,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { formatDate } from "@/lib/dates";
 import { AnnouncementComposer } from "@/components/AnnouncementComposer";
 import { useCan } from "@/components/ui/can";
@@ -140,7 +140,12 @@ function when(value: string): string {
 
 export default function Notifications() {
   const can = useCan();
-  const [tab, setTab] = useState<Tab>("waiting");
+  // `?tab=` so Settings can open "What I am told about" directly.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = searchParams.get("tab");
+    return asked === "all" || asked === "preferences" ? asked : "waiting";
+  });
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [summary, setSummary] = useState<NotificationSummary | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreference[]>([]);

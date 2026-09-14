@@ -12923,3 +12923,31 @@ stage name can never be pushed out.
 Also checked and found correct rather than wrong: the band's 44 occupied beds
 against the Inpatients panel's 41. The band is every site (41 at the hospital,
 3 at the clinic) and the panel one hospital; the band now says "all sites".
+
+## 291 - Profile behind the avatar, settings in one place
+
+Corrected by the user, and rightly: "My profile" in the sidebar sat among the
+screens about the work and said the same thing as the avatar beside it; and
+settings, configuration and preferences were spread across the sidebar, the
+account menu and a tab of the profile.
+
+**The sidebar is the work.** My profile, Facilities, the price list and
+Privacy left it. They stay routed and in the command palette
+(`SYSTEM_ITEMS`), so one keystroke still reaches each.
+
+**The avatar is you: My profile, Settings, Sign out.** The menu had grown to
+fourteen rows -- leave, password, five administrative links, three appearance
+switches and a colour-scheme link -- most of them also somewhere else. The
+light/dark switch in the header stays for the room-by-room change.
+
+**Settings is one page with its sections down the side**, the section in the
+address (`/settings?section=people`). *You*: Preferences (palette, mode, row
+height and the working preferences), Password & sign-in, Notifications (which
+opens "What I am told about" directly -- Notifications now reads `?tab=`).
+*Organization*: People and access, Organization, Plan and data, each shown
+only to somebody who may open something in it. On a narrow screen the section
+list becomes a row that scrolls.
+
+**My profile is details and employment**: sign-in details, employment record
+and licences, attendance and shifts, leave, payslips, shift swaps, team
+requests. A password that must be changed links to Settings.

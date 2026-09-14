@@ -23,6 +23,9 @@ export interface SettingsLink {
 }
 
 export interface SettingsGroup {
+  /** The section's address on the Settings page: `?section=`. */
+  id: string;
+  icon: IconName;
   label: string;
   description: string;
   items: SettingsLink[];
@@ -30,6 +33,8 @@ export interface SettingsGroup {
 
 export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
+    id: "people",
+    icon: "access",
     label: "People and access",
     description:
       "Who can sign in, what each role carries, and how far it reaches.",
@@ -73,6 +78,8 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ],
   },
   {
+    id: "organization",
+    icon: "organization",
     label: "Organization",
     description: "The shape of the business: buildings, departments, reference data.",
     items: [
@@ -113,6 +120,8 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     ],
   },
   {
+    id: "plan",
+    icon: "capacity",
     label: "Plan and data",
     description: "What the subscription allows, and getting records in and out.",
     items: [

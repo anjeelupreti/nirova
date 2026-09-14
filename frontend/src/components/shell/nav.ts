@@ -136,19 +136,6 @@ export const NAV_GROUPS: NavGroup[] = [
       // Notifications are the bell in the top bar, as in every product people
       // already use; the full page is reached from its "View all".
       // Moved out of People, which is where somebody looks for *other* people.
-      // One place for everything about you: sign-in details, password,
-      // appearance, and -- with an employee record -- attendance, leave,
-      // payslips and shift swaps. It was two screens, both called "profile".
-      {
-        to: "/me",
-        label: "My profile",
-        icon: "verifiedPerson",
-        keywords: [
-          "profile", "account", "password", "two-step", "appearance", "theme",
-          "colour", "dark mode", "preferences", "payslip", "my leave",
-          "attendance", "check in", "shift swap", "self service", "ess",
-        ],
-      },
     ],
   },
   {
@@ -364,17 +351,6 @@ export const NAV_GROUPS: NavGroup[] = [
         scope: "facility",
         keywords: ["ledger", "trial balance", "p&l", "bank", "vat"],
       },
-      // What things cost, beside the screens that charge for them. Reading is
-      // `invoice.read` because anybody raising an invoice needs to see prices;
-      // changing them is a different permission the screen checks itself.
-      {
-        to: "/services",
-        label: "Price list",
-        icon: "price",
-        needs: "invoice.read",
-        scope: "facility",
-        keywords: ["tariff", "price list", "charge master", "services", "prices", "tariff"],
-      },
     ],
   },
   {
@@ -426,44 +402,6 @@ export const NAV_GROUPS: NavGroup[] = [
         scope: "own",
         keywords: ["export", "analytics", "statement"],
       },
-      {
-        to: "/privacy",
-        label: "Privacy",
-        icon: "privacy",
-        needs: "privacy.review",
-        scope: "facility",
-        keywords: ["break glass", "access review", "audit"],
-      },
-    ],
-  },
-  /*
-   * **This group used to be eight items and is now two.**
-   *
-   * Configuration, Staff access, Roles, Plan and usage, Import records and
-   * Change requests all moved behind the avatar (`UserMenu.tsx`, `/settings`).
-   * They are things somebody opens twice a year, and they were sitting in the
-   * rail at the same weight as the queue somebody opens forty times a day —
-   * which is most of why a list of forty could not be scanned.
-   *
-   * What stayed is what a clinician or a manager genuinely reaches for during
-   * the working day: which buildings exist, and which departments are in them.
-   * The rest is administration, and administration is not the work.
-   *
-   * They are still routed and still in the command palette, so anybody who
-   * knows the name reaches them in one keystroke from anywhere.
-   */
-  {
-    label: "Organization",
-    icon: "organization",
-    items: [
-      {
-        to: "/facilities",
-        label: "Facilities",
-        icon: "facility",
-        needs: "facility.read",
-        scope: "facility",
-        keywords: ["hospital", "clinic", "branch", "department"],
-      },
     ],
   },
   {
@@ -501,11 +439,55 @@ export const NAV_GROUPS: NavGroup[] = [
  * around — which is three ways in for screens that previously had one.
  */
 export const SYSTEM_ITEMS: NavItem[] = [
+  // Reached from the avatar, as in every product people already use. A
+  // sidebar entry for "me" sat among the screens about the work and said
+  // the same thing as the avatar beside it.
+  {
+    to: "/me",
+    label: "My profile",
+    icon: "verifiedPerson",
+    keywords: [
+      "profile", "account", "payslip", "my leave", "attendance", "check in",
+      "shift swap", "self service", "ess",
+    ],
+  },
   {
     to: "/settings",
     label: "Settings",
     icon: "settings",
-    keywords: ["organization", "admin", "system", "configuration"],
+    keywords: [
+      "organization", "admin", "system", "configuration", "preferences",
+      "appearance", "theme", "colour", "dark mode", "password", "two-step",
+    ],
+  },
+  // Facilities, the price list and privacy review left the rail with the rest
+  // of the configuration: they are opened to set something up or to review
+  // it, not to do the day's work. The Settings page lists them.
+  {
+    to: "/facilities",
+    label: "Facilities",
+    icon: "facility",
+    needs: "facility.read",
+    scope: "facility",
+    keywords: ["hospital", "clinic", "branch", "department"],
+  },
+  // Reading is `invoice.read` because anybody raising an invoice needs to see
+  // prices; changing them is a different permission the screen checks itself.
+  {
+    to: "/services",
+    label: "Services and prices",
+    icon: "price",
+    needs: "invoice.read",
+    scope: "facility",
+    keywords: ["tariff", "price list", "charge master", "services", "prices"],
+  },
+  {
+    to: "/privacy",
+    label: "Privacy",
+    icon: "privacy",
+    needs: "privacy.review",
+    scope: "facility",
+    keywords: ["break glass", "access review", "audit"],
   },
   // `subscription.read`, not `facility.read`: this screen is what the
   // hospital's *plan* allows and how much of it is spent — commercial

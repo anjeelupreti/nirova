@@ -1344,8 +1344,9 @@ in one place — self service, my day, my workspace, the profile drop-down."*
 - [x] Appearance is one control; the preference list does not repeat it
 - [x] Settings is the organization only, and the account menu offers it only
       when it holds something this person may open
-- [x] The account menu: profile, leave and payslips, password, system, mode,
-      sign out — each once
+- [x] The account menu is you: profile, settings, sign out (log 291)
+- [x] The sidebar is the work; profile and configuration are not in it
+- [x] Settings is one page, sections down the side and in the address
 
 ## §147 The owner's day `[~]`
 

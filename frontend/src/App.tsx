@@ -228,7 +228,7 @@ export default function App() {
       label: "Change appearance and colours",
       icon: "spark",
       keywords: ["theme", "palette", "colour", "color", "dark", "light", "appearance"],
-      run: () => navigate("/me?tab=preferences"),
+      run: () => navigate("/settings?section=preferences"),
     },
     {
       id: "sign-out",

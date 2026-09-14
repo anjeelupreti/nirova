@@ -20,14 +20,7 @@ import { Link } from "react-router-dom";
 
 import api, { ApiError } from "@/lib/api";
 import { useSession } from "@/hooks/useSession";
-import { TwoStepSignIn } from "@/components/account/TwoStepSignIn";
-import {
-  Details,
-  Password,
-  PreferencePanel,
-  type Me,
-} from "@/components/me/AccountForms";
-import { APPEARANCE_KEYS, AppearanceCard } from "@/components/me/Appearance";
+import { Details, type Me } from "@/components/me/AccountForms";
 import { CheckInButton, useStaffSummary } from "@/components/me/staff";
 import { Avatar } from "@/components/ui/data";
 import { CardSkeleton } from "@/components/ui/feedback";
@@ -115,7 +108,7 @@ export default function MePage() {
           <AlertTitle>Your password needs changing</AlertTitle>
           <AlertDescription>
             Somebody set this account up for you.{" "}
-            <Link to="/me?tab=security" className="font-medium underline">
+            <Link to="/settings?section=security" className="font-medium underline">
               Choose a password only you know
             </Link>{" "}
             before doing anything else.
@@ -137,8 +130,6 @@ export default function MePage() {
             count: summary?.pending_incoming_swaps || null,
           },
           { id: "team", label: "Team requests", icon: "staff", hidden: !summary?.is_manager },
-          { id: "security", label: "Password & sign-in", icon: "access" },
-          { id: "preferences", label: "Preferences", icon: "settings" },
         ]}
       >
         {{
@@ -170,20 +161,6 @@ export default function MePage() {
           team: summary ? (
             <SelfServiceSection section="manager" summary={summary} onSummaryChanged={reload} />
           ) : null,
-          security: (
-            <div className="max-w-3xl space-y-6">
-              <Password me={me} onChanged={() => void load()} />
-              <TwoStepSignIn />
-            </div>
-          ),
-          preferences: (
-            <div className="space-y-6">
-              <AppearanceCard />
-              <div className="max-w-2xl">
-                <PreferencePanel catalogue={me.preference_catalogue} exclude={APPEARANCE_KEYS} />
-              </div>
-            </div>
-          ),
         }}
       </TabbedSection>
     </Page>
