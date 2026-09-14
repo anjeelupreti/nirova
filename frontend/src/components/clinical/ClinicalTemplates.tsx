@@ -1,5 +1,5 @@
 /**
- * Templates, where the prescribing happens.
+ * Templates: one presentation, set up once.
  *
  * A clinic doctor writes "Amoxicillin 500 mg, 1 capsule three times daily for
  * five days, after food" forty times in a morning. Forty chances to type 5 mg
@@ -11,6 +11,11 @@
  * typed, and the prescriber signs. A template that wrote a prescription would
  * be a prescription nobody read — which is the whole risk of templates in a
  * clinical system and the reason this one stops short of it.
+ *
+ * **Medicines, investigations and the note together.** "Chest pain, low risk"
+ * is an ECG, a troponin, an aspirin and a paragraph about what was excluded.
+ * A template carrying only the medicines leaves the ordering half to memory,
+ * which is the half that matters when it is forgotten.
  *
  * **Mine and ours.** Everybody sees the organization's list and their own;
  * saving into the organization's needs `catalog.manage`, because it changes
@@ -38,6 +43,20 @@ export interface TemplateLine extends PrescriptionLineInput {
   frequency_label?: string;
 }
 
+export interface TemplateInvestigation {
+  test_code: string;
+  test_name: string;
+  priority: string;
+  clinical_indication: string;
+}
+
+export interface TemplateNote {
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
+}
+
 export interface Template {
   uuid: string;
   name: string;
@@ -46,17 +65,27 @@ export interface Template {
   owner_name: string;
   tags: string[];
   patient_instructions: string;
+  note: TemplateNote;
   times_used: number;
   lines: TemplateLine[];
+  investigations: TemplateInvestigation[];
 }
 
-export function PrescriptionTemplates({
+/** What applying a template put on the screen. Nothing is saved or ordered. */
+export interface AppliedTemplate {
+  lines: PrescriptionLineInput[];
+  investigations: TemplateInvestigation[];
+  note: TemplateNote;
+  patient_instructions: string;
+}
+
+export function ClinicalTemplates({
   lines,
   onApply,
 }: {
   /** What is on the form now, for "save these as a template". */
   lines: PrescriptionLineInput[];
-  onApply: (lines: PrescriptionLineInput[], patientInstructions: string) => void;
+  onApply: (applied: AppliedTemplate) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -92,8 +121,8 @@ export function PrescriptionTemplates({
     setProblem(null);
     try {
       const body = await api.post<Template>(`/clinical/prescription-templates/${template.uuid}/`);
-      onApply(
-        body.lines.map((line) => ({
+      onApply({
+        lines: body.lines.map((line) => ({
           generic_name: line.generic_name,
           brand_name: line.brand_name ?? "",
           strength: line.strength,
@@ -105,8 +134,10 @@ export function PrescriptionTemplates({
           prn_indication: line.prn_indication,
           instructions: line.instructions,
         })),
-        body.patient_instructions,
-      );
+        investigations: body.investigations ?? [],
+        note: body.note ?? { subjective: "", objective: "", assessment: "", plan: "" },
+        patient_instructions: body.patient_instructions,
+      });
       setOpen(false);
       void load();
     } catch (err) {
@@ -229,13 +260,16 @@ export function PrescriptionTemplates({
                     ) : null}
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {template.lines
-                      .map((line) =>
+                    {[
+                      ...template.lines.map((line) =>
                         [line.generic_name, line.strength, line.frequency_label ?? line.frequency]
                           .filter(Boolean)
                           .join(" "),
-                      )
-                      .join(" · ")}
+                      ),
+                      ...(template.investigations ?? []).map(
+                        (row) => row.test_name || row.test_code,
+                      ),
+                    ].join(" · ")}
                   </span>
                 </button>
                 <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">

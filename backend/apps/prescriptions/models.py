@@ -393,6 +393,7 @@ class PrescriptionPresentation(BaseModel):
 
 # Prescription templates live beside the prescription they produce.
 from apps.prescriptions.templates_models import (  # noqa: E402,F401
+    ClinicalTemplateInvestigation,
     PrescriptionTemplate,
     PrescriptionTemplateLine,
 )

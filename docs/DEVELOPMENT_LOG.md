@@ -12612,3 +12612,28 @@ the moment a doctor applied it: a template that cannot be prescribed from,
 which is worse than no template. The vocabulary is now checked where the row
 is made, and a test applies a template and posts the result to the real
 preview endpoint — the only version of this test that would have caught it.
+
+### One template, the whole consultation
+
+A day later the same template carries the **investigations and the note**, not
+only the medicines — because that is what a presentation is. "Fever, adult,
+first visit" is a blood count and a blood sugar, a paracetamol, and a note
+skeleton with the questions a clinician asks in that order. A template that
+carried only the medicines would leave the *ordering* half to memory, which is
+the half that matters when it is forgotten. Other systems call this an order
+set; here it is one thing, because a clinician thinks of it as one thing.
+
+Two rules keep it from becoming a prescription nobody read:
+
+- **The investigations are staged, not ordered.** They appear under
+  "suggested by the template — not ordered yet", with a button. A template
+  that placed orders on being chosen would have a clinician answering for
+  investigations they never read. When the button is pressed they go through
+  the ordinary ordering endpoint, one at a time, so the indication rule and
+  the entitlement check stay in one place.
+- **The note skeleton fills only empty fields.** Somebody who has started
+  typing must not have their words replaced by a template applied afterwards.
+
+An urgent investigation on a template has to say what is being looked for —
+the same rule the ordering form applies — or the template is one that cannot
+be ordered from.

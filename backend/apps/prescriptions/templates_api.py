@@ -60,6 +60,8 @@ class PrescriptionTemplateView(APIView):
             tags=request.data.get("tags") or [],
             patient_instructions=request.data.get("patient_instructions", ""),
             lines=request.data.get("lines") or [],
+            investigations=request.data.get("investigations") or [],
+            note=request.data.get("note") or {},
             may_curate=_may_curate(request),
         )
         return Response(

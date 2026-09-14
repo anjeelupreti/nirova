@@ -56,7 +56,12 @@ import {
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
 import { formatTime } from "@/lib/dates";
-import { PrescriptionTemplates } from "@/components/clinical/PrescriptionTemplates";
+import {
+  ClinicalTemplates,
+  type AppliedTemplate,
+  type TemplateInvestigation,
+  type TemplateNote,
+} from "@/components/clinical/ClinicalTemplates";
 
 const SEVERITY_STYLE: Record<string, string> = {
   critical: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -256,9 +261,12 @@ const SOAP_FIELDS = [
 
 function NotePanel({
   encounter,
+  prefill,
   onSaved,
 }: {
   encounter: EncounterDetail;
+  /** The skeleton a template offers. Filled in, never saved unedited. */
+  prefill: TemplateNote | null;
   onSaved: () => void;
 }) {
   const [note, setNote] = useState({
@@ -269,6 +277,19 @@ function NotePanel({
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // A template's skeleton goes in only where the clinician has written
+  // nothing: somebody who has started typing must not have it overwritten by
+  // a template applied afterwards.
+  useEffect(() => {
+    if (!prefill) return;
+    setNote((current) => ({
+      subjective: current.subjective || prefill.subjective,
+      objective: current.objective || prefill.objective,
+      assessment: current.assessment || prefill.assessment,
+      plan: current.plan || prefill.plan,
+    }));
+  }, [prefill]);
 
   const hasContent = Object.values(note).some((v) => v.trim());
 
@@ -384,13 +405,28 @@ function NotePanel({
 function PrescribePanel({
   encounter,
   facilityUuid,
+  prefillLines,
+  patientAdvice,
   onSaved,
 }: {
   encounter: EncounterDetail;
   facilityUuid: string;
+  /** Lines a template put on the screen. Editable, unsigned, unsaved. */
+  prefillLines: PrescriptionLineInput[] | null;
+  patientAdvice: string;
   onSaved: () => void;
 }) {
   const [lines, setLines] = useState<PrescriptionLineInput[]>([{ ...EMPTY_LINE }]);
+
+  // A template landing: replace what is on the form, and say what the patient
+  // is to be told. Deliberately a replacement rather than an append — a
+  // template is the shape of the whole prescription, and merging two would
+  // produce a list nobody chose.
+  useEffect(() => {
+    if (!prefillLines || prefillLines.length === 0) return;
+    setLines(prefillLines.map((line) => ({ ...line })));
+    if (patientAdvice) setNotice(patientAdvice);
+  }, [prefillLines, patientAdvice]);
   const [safety, setSafety] = useState<SafetyReport | null>(null);
   const [overrideReason, setOverrideReason] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -595,19 +631,7 @@ function PrescribePanel({
           </Button>
         </div>
 
-        {/*
-          The scripts this prescriber already agreed with themselves. Applying
-          one fills the lines above; the safety checks then run on them exactly
-          as they do on anything typed, and nothing is prescribed until it is
-          signed.
-        */}
-        <PrescriptionTemplates
-          lines={lines}
-          onApply={(applied, patientInstructions) => {
-            setLines(applied.length > 0 ? applied : [{ ...EMPTY_LINE }]);
-            if (patientInstructions) setNotice(patientInstructions);
-          }}
-        />
+
 
         {/* Warnings, most severe first. */}
         {safety && safety.warnings.length > 0 && (
@@ -706,17 +730,25 @@ const PRIORITY_OPTIONS = [
 function InvestigationsPanel({
   encounter,
   facilityUuid,
+  staged,
 }: {
   encounter: EncounterDetail;
   facilityUuid: string;
+  /** What a template suggests ordering. Nothing is ordered until asked. */
+  staged: TemplateInvestigation[];
 }) {
   const [tests, setTests] = useState<TestDefinition[]>([]);
   const [testUuid, setTestUuid] = useState("");
   const [priority, setPriority] = useState("routine");
   const [indication, setIndication] = useState("");
   const [orders, setOrders] = useState<DiagnosticOrder[]>([]);
+  const [pending, setPending] = useState<TemplateInvestigation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (staged.length > 0) setPending(staged);
+  }, [staged]);
 
   const loadOrders = useCallback(async () => {
     const page = await api.get<Paginated<DiagnosticOrder>>(
@@ -743,6 +775,48 @@ function InvestigationsPanel({
   // A non-routine request must say what is being looked for. Mirrored from
   // the server so the button explains itself rather than failing on submit.
   const needsIndication = priority !== "routine" && !indication.trim();
+
+  /**
+   * Place the staged investigations, through the same endpoint and the same
+   * rules as one ordered by hand. One request each rather than a bulk route:
+   * the ordering endpoint is where the indication rule and the entitlement
+   * check live, and a second path into it would be a second place for them to
+   * be forgotten.
+   */
+  async function orderStaged() {
+    setError(null);
+    setBusy(true);
+    const failed: string[] = [];
+    for (const row of pending) {
+      const test = tests.find(
+        (entry) => entry.code === row.test_code || entry.uuid === row.test_code,
+      );
+      if (!test) {
+        failed.push(`${row.test_name || row.test_code} is not in this catalogue`);
+        continue;
+      }
+      try {
+        await api.post("/diagnostics/orders/", {
+          patient_uuid: encounter.patient,
+          facility_uuid: facilityUuid,
+          encounter_uuid: encounter.uuid,
+          test_uuid: test.uuid,
+          priority: row.priority,
+          clinical_indication: row.clinical_indication,
+        });
+      } catch (err) {
+        failed.push(
+          `${row.test_name || row.test_code}: ${
+            err instanceof ApiError ? err.message : "could not be ordered"
+          }`,
+        );
+      }
+    }
+    setPending([]);
+    if (failed.length > 0) setError(failed.join("; "));
+    await loadOrders();
+    setBusy(false);
+  }
 
   async function order() {
     setError(null);
@@ -781,6 +855,48 @@ function InvestigationsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/*
+          What a template suggests, staged. Ordering is still a decision: a
+          template that placed orders on being chosen would have a clinician
+          answering for investigations they never read.
+        */}
+        {pending.length > 0 && (
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Suggested by the template — not ordered yet
+            </p>
+            {pending.map((row) => (
+              <div
+                key={row.test_code}
+                className="flex items-center justify-between gap-2 text-sm"
+              >
+                <span>
+                  {row.test_name || row.test_code}
+                  {row.priority !== "routine" ? (
+                    <Badge variant="warning" className="ml-2">
+                      {row.priority}
+                    </Badge>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() =>
+                    setPending((current) =>
+                      current.filter((entry) => entry.test_code !== row.test_code),
+                    )
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <Button size="sm" disabled={busy} onClick={() => void orderStaged()}>
+              Order {pending.length === 1 ? "it" : `all ${pending.length}`}
+            </Button>
+          </div>
+        )}
+
         {orders.length > 0 && (
           <div className="space-y-1.5">
             {orders.map((existing) => (
@@ -870,6 +986,10 @@ function InvestigationsPanel({
 /* -------------------------------------------------------------------------- */
 
 export default function ConsultationPage() {
+  // What a template put on the screen, if one was applied. Held here because
+  // a template sets up three panels at once and each of them owns its own
+  // draft; this is the only thing they share.
+  const [applied, setApplied] = useState<AppliedTemplate | null>(null);
   const { uuid } = useParams<{ uuid: string }>();
   const [encounter, setEncounter] = useState<EncounterDetail | null>(null);
   const [summary, setSummary] = useState<ClinicalSummary | null>(null);
@@ -947,21 +1067,39 @@ export default function ConsultationPage() {
         </Card>
       )}
 
+      {/*
+        One template sets up the whole consultation — the medicines, the
+        investigations and the skeleton of the note — because that is what a
+        presentation is. It fills the three panels below and orders nothing:
+        the clinician still writes, checks and signs.
+      */}
+      <ClinicalTemplates
+        lines={applied?.lines ?? []}
+        onApply={setApplied}
+      />
+
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-5">
           <VitalsPanel encounter={encounter} onSaved={() => void load()} />
-          <NotePanel encounter={encounter} onSaved={() => void load()} />
+          <NotePanel
+            encounter={encounter}
+            prefill={applied?.note ?? null}
+            onSaved={() => void load()}
+          />
         </div>
         <div className="space-y-5">
           <PrescribePanel
             encounter={encounter}
             facilityUuid={encounter.facility ?? ""}
+            prefillLines={applied?.lines ?? null}
+            patientAdvice={applied?.patient_instructions ?? ""}
             onSaved={() => void load()}
           />
 
           <InvestigationsPanel
             encounter={encounter}
             facilityUuid={encounter.facility ?? ""}
+            staged={applied?.investigations ?? []}
           />
 
           {summary.conditions.length > 0 && (

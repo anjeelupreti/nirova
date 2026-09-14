@@ -28,6 +28,7 @@ from apps.audit.services import record
 from apps.common.exceptions import DomainError
 from apps.prescriptions.models import DoseRoute, Frequency
 from apps.prescriptions.templates_models import (
+    ClinicalTemplateInvestigation,
     PrescriptionTemplate,
     PrescriptionTemplateLine,
 )
@@ -42,7 +43,7 @@ def visible_to(user) -> QuerySet:
     return (
         PrescriptionTemplate.objects.filter(is_active=True)
         .filter(Q(owner_id__isnull=True) | Q(owner_id=getattr(user, "uuid", None)))
-        .prefetch_related("lines")
+        .prefetch_related("lines", "investigations")
     )
 
 
@@ -56,6 +57,12 @@ def describe(template: PrescriptionTemplate) -> dict:
         "department": template.department.name if template.department_id else "",
         "tags": template.tags or [],
         "patient_instructions": template.patient_instructions,
+        "note": {
+            "subjective": template.note_subjective,
+            "objective": template.note_objective,
+            "assessment": template.note_assessment,
+            "plan": template.note_plan,
+        },
         "times_used": template.times_used,
         "lines": [
             {
@@ -81,12 +88,22 @@ def describe(template: PrescriptionTemplate) -> dict:
             }
             for line in template.lines.all()
         ],
+        "investigations": [
+            {
+                "test_code": row.test_code,
+                "test_name": row.test_name,
+                "priority": row.priority,
+                "clinical_indication": row.clinical_indication,
+            }
+            for row in template.investigations.all()
+        ],
     }
 
 
 @transaction.atomic
 def save_template(*, user, name: str, lines: list, uuid=None, shared: bool = False,
                   description: str = "", tags=None, patient_instructions: str = "",
+                  investigations=None, note=None,
                   may_curate: bool = False) -> PrescriptionTemplate:
     """Create or replace a template, lines and all.
 
@@ -97,8 +114,11 @@ def save_template(*, user, name: str, lines: list, uuid=None, shared: bool = Fal
     name = (name or "").strip()
     if not name:
         raise TemplateError("A template needs a name.")
-    if not lines:
-        raise TemplateError("A template with no medicines in it is not a template.")
+    if not lines and not investigations:
+        raise TemplateError(
+            "A template with no medicines and no investigations in it is not a "
+            "template.",
+        )
     if shared and not may_curate:
         raise TemplateError(
             "Shared templates are the organization's formulary. Save this as "
@@ -118,6 +138,11 @@ def save_template(*, user, name: str, lines: list, uuid=None, shared: bool = Fal
     template.description = description.strip()
     template.tags = list(tags or [])
     template.patient_instructions = patient_instructions.strip()
+    note = note or {}
+    template.note_subjective = str(note.get("subjective", "")).strip()
+    template.note_objective = str(note.get("objective", "")).strip()
+    template.note_assessment = str(note.get("assessment", "")).strip()
+    template.note_plan = str(note.get("plan", "")).strip()
     template.owner_id = None if shared else getattr(user, "uuid", None)
     template.owner_name = "" if shared else (getattr(user, "full_name", "") or "")
     template.save()
@@ -155,12 +180,35 @@ def save_template(*, user, name: str, lines: list, uuid=None, shared: bool = Fal
             ) from invalid
         line.save()
 
+    template.investigations.all().delete()
+    for position, row in enumerate(investigations or []):
+        investigation = ClinicalTemplateInvestigation(
+            template=template,
+            test_code=str(row.get("test_code", "")).strip(),
+            test_name=str(row.get("test_name", "")).strip(),
+            priority=row.get("priority") or "routine",
+            clinical_indication=str(row.get("clinical_indication", "")).strip(),
+            display_order=position,
+        )
+        try:
+            investigation.clean()
+        except Exception as invalid:  # noqa: BLE001 — surfaced as a domain error
+            raise TemplateError(
+                f"{investigation.test_code or 'An investigation'}: "
+                + "; ".join(
+                    message
+                    for messages in getattr(invalid, "message_dict", {}).values()
+                    for message in messages
+                ) or str(invalid),
+            ) from invalid
+        investigation.save()
+
     record(
         AuditAction.UPDATE if uuid else AuditAction.CREATE,
         entity_type="prescriptions.PrescriptionTemplate",
         entity_id=template.uuid,
         entity_label=f"{template.name} ({'shared' if template.is_shared else 'personal'})",
-        metadata={"lines": len(lines)},
+        metadata={"lines": len(lines), "investigations": len(investigations or [])},
     )
     return template
 

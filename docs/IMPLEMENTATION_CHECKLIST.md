@@ -1288,10 +1288,13 @@ patients to understand and for our record keeping."*
 - [x] The route and frequency vocabularies are validated where the row is
       made — a template saved with `route="oral"` was refused by the
       prescribing form at the moment a doctor tried to use it
+- [x] **Order sets**: one template carries the medicines, the investigations
+      and the note skeleton — the investigations *staged* with a button, never
+      ordered by choosing a template
+- [x] Clinical note skeletons fill only the fields nobody has typed in
+- [x] An urgent investigation on a template must say what is being looked for
 - [ ] Report templates (laboratory panels, radiology reports, discharge
       summaries)
-- [ ] Clinical note templates for the consultation screen
-- [ ] Order sets: investigations and medicines together
 
 ## Standing guards
 

@@ -237,3 +237,73 @@ def test_a_route_that_is_not_a_route_is_refused(doctor):
     }), content_type="application/json")
     assert refused.status_code == 400
     assert "route" in json.loads(refused.content)["error"]["message"].lower()
+
+
+CHEST_PAIN = {
+    "name": "Chest pain, low risk",
+    "description": "Typical workup before discharge",
+    "note": {
+        "subjective": "Central chest discomfort. Onset, duration, radiation, exertion:",
+        "objective": "Observations stable. Chest clear. Heart sounds normal.",
+        "assessment": "Low-risk chest pain. Acute coronary syndrome not excluded on one troponin.",
+        "plan": "Repeat troponin at three hours. Discharge advice given if both negative.",
+    },
+    "lines": [{
+        "generic_name": "Aspirin", "strength": "300 mg", "dose": "1 tablet",
+        "route": "PO", "frequency": "STAT", "duration_days": 1, "quantity": "1",
+    }],
+    "investigations": [
+        {"test_code": "ECG", "test_name": "Electrocardiogram", "priority": "urgent",
+         "clinical_indication": "Chest pain"},
+        {"test_code": "CBC", "test_name": "Complete blood count", "priority": "routine"},
+    ],
+}
+
+
+def test_a_template_carries_investigations_and_the_note(doctor):
+    """An order set: what a presentation is worked up with, not only what it
+    is treated with. A template carrying only the medicines leaves the
+    ordering half to memory."""
+    client, _ = doctor
+    saved = client.post(URL, data=json.dumps(CHEST_PAIN), content_type="application/json")
+    assert saved.status_code == 201, saved.content[:300]
+    body = json.loads(saved.content)
+
+    assert [row["test_code"] for row in body["investigations"]] == ["ECG", "CBC"]
+    assert body["investigations"][0]["priority"] == "urgent"
+    assert "Repeat troponin" in body["note"]["plan"]
+
+    applied = json.loads(client.post(f"{URL}{body['uuid']}/").content)
+    assert len(applied["investigations"]) == 2
+    assert applied["note"]["subjective"].startswith("Central chest")
+
+
+def test_an_urgent_investigation_must_say_what_is_being_looked_for(doctor):
+    """The same rule the ordering form applies, applied where the template is
+    written — otherwise the template is one that cannot be ordered from."""
+    client, _ = doctor
+    refused = client.post(URL, data=json.dumps({
+        "name": "Urgent, no reason",
+        "investigations": [{"test_code": "ECG", "priority": "urgent"}],
+    }), content_type="application/json")
+    assert refused.status_code == 400
+    assert "looked for" in json.loads(refused.content)["error"]["message"]
+
+
+def test_a_template_of_investigations_alone_is_a_template(doctor):
+    """A workup with no medicines in it is an ordinary thing: "pre-operative
+    bloods" prescribes nothing."""
+    client, _ = doctor
+    saved = client.post(URL, data=json.dumps({
+        "name": "Pre-operative bloods",
+        "investigations": [{"test_code": "CBC", "test_name": "Complete blood count"}],
+    }), content_type="application/json")
+    assert saved.status_code == 201, saved.content[:300]
+    assert json.loads(saved.content)["lines"] == []
+
+
+def test_an_empty_template_is_refused(doctor):
+    client, _ = doctor
+    refused = client.post(URL, data=json.dumps({"name": "Nothing"}),
+                          content_type="application/json")
+    assert refused.status_code == 400

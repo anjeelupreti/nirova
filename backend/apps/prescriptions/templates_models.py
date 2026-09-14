@@ -1,4 +1,4 @@
-"""Prescription templates: the same script, written once.
+"""Clinical templates: the same consultation, set up once.
 
 A doctor in an outpatient clinic writes "Amoxicillin 500 mg, 1 capsule three
 times daily for five days, after food" perhaps forty times in a morning, and
@@ -22,6 +22,14 @@ articulate.
 arithmetic a person should not be repeating, and `DOSES_PER_DAY` already
 carries the frequencies it can be computed for. For PRN and "other", where it
 cannot be, the template carries the number somebody decided.
+
+**Medicines, investigations and the note together**, because that is what a
+presentation actually is. "Chest pain, low risk" is an ECG and a troponin and
+an aspirin and a paragraph about what was excluded; a template that carried
+only the medicines would leave the clinician doing two thirds of the typing
+and, worse, would let the *ordering* half be forgotten. This is what other
+systems call an order set; here it is one thing, because a clinician thinks of
+it as one thing.
 """
 
 from decimal import Decimal
@@ -55,6 +63,15 @@ class PrescriptionTemplate(BaseModel):
     tags = models.JSONField(default=list, blank=True)
     #: Advice printed for the patient with anything this template produces.
     patient_instructions = models.TextField(blank=True)
+
+    #: The note this presentation usually produces, as a starting skeleton.
+    #: Filled into the consultation's own fields, where the clinician edits
+    #: it — never saved as a note on its own. A note nobody edited is a note
+    #: nobody wrote, and these four fields are where that would hide.
+    note_subjective = models.TextField(blank=True)
+    note_objective = models.TextField(blank=True)
+    note_assessment = models.TextField(blank=True)
+    note_plan = models.TextField(blank=True)
 
     #: Counted, not guessed: the list is ordered by what people actually use,
     #: which after a fortnight is a better ranking than any curation.
@@ -172,3 +189,43 @@ class PrescriptionTemplateLine(BaseModel):
             return None
         units = Decimal(match.group(1)) * Decimal(str(per_day)) * self.duration_days
         return units.quantize(Decimal("0.01"))
+
+
+class ClinicalTemplateInvestigation(models.Model):
+    """A test this presentation is usually worked up with.
+
+    The test is named by its **code**, not by a foreign key: a template
+    written in one facility is used in another, catalogues are edited, and a
+    test that is retired should make the line unavailable rather than delete
+    the template that mentions it. The order is placed through the ordinary
+    endpoint, with the same indication rules, when the clinician applies it.
+    """
+
+    template = models.ForeignKey(
+        PrescriptionTemplate, on_delete=models.CASCADE, related_name="investigations",
+    )
+    test_code = models.CharField(max_length=32, db_index=True)
+    test_name = models.CharField(max_length=255, blank=True)
+    priority = models.CharField(max_length=16, default="routine")
+    #: Why it is being asked for. A non-routine request needs one, and having
+    #: it on the template is how the template stays usable for an urgent set.
+    clinical_indication = models.CharField(max_length=255, blank=True)
+    display_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "clinical_template_investigation"
+        ordering = ["display_order", "id"]
+
+    def __str__(self):
+        return f"{self.test_code} ({self.priority})"
+
+    def clean(self):
+        if not self.test_code.strip():
+            raise ValidationError({"test_code": "An investigation needs a test."})
+        if self.priority != "routine" and not self.clinical_indication.strip():
+            raise ValidationError({
+                "clinical_indication": (
+                    "An urgent request has to say what is being looked for — "
+                    "the same rule the ordering form applies."
+                ),
+            })
