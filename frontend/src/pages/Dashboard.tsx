@@ -26,6 +26,7 @@
  */
 
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { useCan } from "@/components/ui/can";
 import { Icon } from "@/components/ui/icon";
@@ -60,8 +61,37 @@ import { formatWeekday } from "@/lib/dates";
 
 const PERSONA_KEY = "nirova.persona";
 
+/**
+ * The organization's day, from `/org/today/`. A block is absent when the
+ * viewer may not see it or the plan does not include it -- never zero.
+ */
+interface OrganizationToday {
+  as_of: string;
+  facility: string | null;
+  outpatients?: { seen: number; waiting: number; appointments: number; no_shows: number };
+  emergency?: { arrivals: number; in_department: number };
+  inpatients?: {
+    occupied: number;
+    beds: number;
+    occupancy_percent: number | null;
+    admitted: number;
+    discharged: number;
+  };
+  laboratory?: { outstanding: number; critical_open: number; released: number };
+  billing?: { collected: string; outstanding: string; overdue_invoices: number };
+  pharmacy?: { takings: string; sales: number };
+}
+
 /** The selector's value for "every facility", which no facility uuid can collide with. */
 const ALL_FACILITIES = "all";
+
+/** Today as `YYYY-MM-DD` in the browser's own timezone. */
+function localIsoDate(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
 /** The first facility of the first matching type, in the order the types are given. */
 function pickFacility(list: Facility[], types: string[]): Facility | undefined {
@@ -148,6 +178,19 @@ export default function DashboardPage() {
      same answer is the busiest endpoint in the product for no clinical reason. */
   const workspace = useResource<MyWorkspace>("/me/workspace/");
 
+  /*
+    For whoever runs the place, the band at the top is the organization's day
+    -- patients seen, beds, money -- rather than their own inbox, which is
+    what My day is for. Each figure opens the list it counts.
+  */
+  const today = useResource<OrganizationToday>(
+    wholeOrganization && facility
+      ? `/org/today/${facility === ALL_FACILITIES ? "" : `?facility=${facility}`}`
+      : null,
+    can("analytics.read", "facility"),
+  );
+  const organizationFigures = wholeOrganization ? organizationStats(today.data) : undefined;
+
   const firstName = (session?.user.display_name ?? "").split(/\s+/)[0];
 
   return (
@@ -161,8 +204,8 @@ export default function DashboardPage() {
             {session?.organization ? ` · ${session.organization.display_name}` : ""}
           </>
         }
-        asOf={workspace.at}
-        stats={heroStats(workspace.data)}
+        asOf={wholeOrganization ? today.at : workspace.at}
+        stats={organizationFigures ?? heroStats(workspace.data)}
         actions={
           <>
             {facilityList.length > 1 ? (
@@ -220,7 +263,12 @@ export default function DashboardPage() {
         knows where to start in.
       */}
       {persona.id === "leadership" || persona.id === "finance" ? (
-        <LeadershipHome workspace={workspace} facility={facility} facilities={facilityList} />
+        <LeadershipHome
+          workspace={workspace}
+          today={today}
+          facility={facility}
+          facilities={facilityList}
+        />
       ) : (
         <GeneralHome workspace={workspace} />
       )}
@@ -275,6 +323,69 @@ function heroStats(data: MyWorkspace | null) {
   ];
 }
 
+/**
+ * The organization's four figures, each a door to its list. `undefined` until
+ * at least two can be shown, so the band falls back rather than half-empties.
+ */
+function organizationStats(data: OrganizationToday | null) {
+  if (!data) return undefined;
+  const figures: {
+    label: string;
+    value: React.ReactNode;
+    tone?: "good" | "warning" | "critical";
+    to?: string;
+  }[] = [];
+
+  if (data.outpatients) {
+    figures.push({
+      label: "Seen in outpatients",
+      value: data.outpatients.seen,
+      to: "/queue",
+    });
+  }
+  if (data.inpatients) {
+    const percent = data.inpatients.occupancy_percent;
+    figures.push({
+      label: data.facility ? "Beds occupied" : "Beds occupied, all sites",
+      value:
+        percent === null
+          ? `${data.inpatients.occupied}`
+          : `${data.inpatients.occupied}/${data.inpatients.beds} · ${Math.round(percent)}%`,
+      tone: percent !== null && percent >= 90 ? "warning" : undefined,
+      to: "/wards",
+    });
+  }
+  if (data.billing) {
+    figures.push({
+      label: "Collected today",
+      value: formatValue(Number(data.billing.collected), "money"),
+      to: "/billing",
+    });
+    figures.push({
+      label: "Still owed",
+      value: formatValue(Number(data.billing.outstanding), "money"),
+      tone: data.billing.overdue_invoices > 0 ? "warning" : undefined,
+      to: "/billing",
+    });
+  }
+  if (figures.length < 4 && data.pharmacy) {
+    figures.push({
+      label: "Pharmacy takings",
+      value: formatValue(Number(data.pharmacy.takings), "money"),
+      to: "/counter",
+    });
+  }
+  if (figures.length < 4 && data.laboratory) {
+    figures.push({
+      label: "Lab work outstanding",
+      value: data.laboratory.outstanding,
+      tone: data.laboratory.critical_open > 0 ? "critical" : undefined,
+      to: "/diagnostics",
+    });
+  }
+  return figures.length >= 2 ? figures.slice(0, 4) : undefined;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Leadership                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -302,10 +413,12 @@ function heroStats(data: MyWorkspace | null) {
  */
 function LeadershipHome({
   workspace,
+  today,
   facility,
   facilities,
 }: {
   workspace: ReturnType<typeof useResource<MyWorkspace>>;
+  today: ReturnType<typeof useResource<OrganizationToday>>;
   facility: string | null;
   facilities: Facility[];
 }) {
@@ -328,9 +441,20 @@ function LeadershipHome({
   const mayWards = can("patient.clinical.read", "facility");
   const maySales = can("sale.read", "facility");
   const maySupply = can("purchase.read", "facility");
+  const mayMoney = can("invoice.read", "facility");
+  const mayLab = can("encounter.read", "own");
+  const scopeLabel = whole
+    ? "Whole organization"
+    : facilities.find((row) => row.uuid === facility)?.name ?? "";
 
+  /*
+    `since` today, explicitly. The summary's own default is the last seven
+    days, so this panel -- labelled "since midnight" -- said "96 arrived
+    today" two minutes after midnight.
+  */
+  const sinceMidnight = localIsoDate();
   const ed = useResource<DepartmentSummary>(
-    edAt ? `/ed/summary/?facility=${edAt.uuid}` : null,
+    edAt ? `/ed/summary/?facility=${edAt.uuid}&since=${sinceMidnight}` : null,
     mayEd,
   );
   const ward = useResource<NurseWorkspaceSummary>(
@@ -465,22 +589,117 @@ function LeadershipHome({
           ) : !supply.data ? (
             <PanelEmpty message="Choose a facility to see its supply pipeline." icon="facility" />
           ) : (
-            <Chart.Funnel
-              stages={[
-                { name: "Requisitions waiting", value: supply.data.requisitions_awaiting_approval },
-                { name: "Approved, not ordered", value: supply.data.requisitions_approved_unordered },
-                { name: "Orders waiting", value: supply.data.orders_awaiting_approval },
-                { name: "Receipts to check", value: supply.data.receipts_awaiting_check },
-              ]}
-              height={170}
-              asOf={supply.at}
-            />
+            <SupplyQueues data={supply.data} />
           )}
+        </WorkspacePanel>
+      ) : null}
+
+      {mayMoney ? (
+        <WorkspacePanel
+          title="Money"
+          description={scopeLabel ? `${scopeLabel} · today` : "today"}
+          icon="billing"
+          to="/billing"
+        >
+          {today.loading ? (
+            <PanelLoading height={120} />
+          ) : today.error ? (
+            <PanelProblem error={today.error} />
+          ) : !today.data?.billing ? (
+            <PanelEmpty message="Billing is not part of this view." icon="billing" />
+          ) : (
+            <div className="space-y-3">
+              <Chart.Hero
+                value={Number(today.data.billing.collected)}
+                format="money"
+                label="Collected today"
+                footnote={`${formatValue(Number(today.data.billing.outstanding), "money")} still owed`}
+              />
+              {today.data.billing.overdue_invoices > 0 ? (
+                <Link
+                  to="/billing"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-critical hover:underline"
+                >
+                  {today.data.billing.overdue_invoices} invoice
+                  {today.data.billing.overdue_invoices === 1 ? "" : "s"} past due
+                  <Icon name="chevronRight" size="xs" />
+                </Link>
+              ) : (
+                <p className="type-caption">Nothing past its due date.</p>
+              )}
+            </div>
+          )}
+        </WorkspacePanel>
+      ) : null}
+
+      {mayLab && today.data?.laboratory ? (
+        <WorkspacePanel
+          title="Laboratory"
+          description={scopeLabel ? `${scopeLabel} · now` : "now"}
+          icon="laboratory"
+          to="/diagnostics"
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Figure label="Outstanding" value={today.data.laboratory.outstanding} />
+            <Figure
+              label="Critical, open"
+              value={today.data.laboratory.critical_open}
+              tone={today.data.laboratory.critical_open > 0 ? "critical" : undefined}
+            />
+            <Figure label="Released today" value={today.data.laboratory.released} />
+          </div>
         </WorkspacePanel>
       ) : null}
 
       <ApprovalsPanel workspace={workspace} />
     </div>
+  );
+}
+
+/**
+ * The supply pipeline as the queues it is.
+ *
+ * **It was drawn as a funnel, and it is not one.** A funnel is stages that
+ * only shrink; these are independent queues, each waiting on a different
+ * person. With one requisition waiting and one delivery to check, the funnel
+ * drew "-1 (100%)" between them and pushed the first label off the panel.
+ * Each row opens the tab that does the work.
+ */
+function SupplyQueues({ data }: { data: ProcurementDashboard }) {
+  const rows = [
+    { label: "Requisitions to approve", value: data.requisitions_awaiting_approval, tab: "requisitions", critical: false },
+    { label: "Approved, not yet ordered", value: data.requisitions_approved_unordered, tab: "requisitions", critical: false },
+    { label: "Orders to approve", value: data.orders_awaiting_approval, tab: "orders", critical: false },
+    { label: "Deliveries to check", value: data.receipts_awaiting_check, tab: "receipts", critical: false },
+    { label: "Orders overdue", value: data.orders_overdue, tab: "orders", critical: true },
+  ];
+
+  return (
+    <ul className="-mx-2 divide-y divide-border">
+      {rows.map((row) => (
+        <li key={row.label}>
+          <Link
+            to={`/procurement?tab=${row.tab}`}
+            className="flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm transition-colors duration-quick hover:bg-accent/40"
+          >
+            <span className={row.value === 0 ? "text-muted-foreground" : undefined}>
+              {row.label}
+            </span>
+            <span
+              className={
+                row.value === 0
+                  ? "tabular-nums text-muted-foreground"
+                  : row.critical
+                    ? "font-semibold tabular-nums text-critical"
+                    : "font-semibold tabular-nums"
+              }
+            >
+              {row.value}
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

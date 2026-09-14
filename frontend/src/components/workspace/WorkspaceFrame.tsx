@@ -54,7 +54,13 @@ export function WorkspaceHero({
   asOf?: Date | null;
   actions?: React.ReactNode;
   /** Two to four figures that belong to the *day*, not to a panel. */
-  stats?: { label: string; value: React.ReactNode; tone?: "good" | "warning" | "critical" }[];
+  stats?: {
+    label: string;
+    value: React.ReactNode;
+    tone?: "good" | "warning" | "critical";
+    /** The list behind the figure. A number you cannot open is a poster. */
+    to?: string;
+  }[];
 }) {
   const accent = personaAccent(persona);
 
@@ -118,21 +124,39 @@ export function WorkspaceHero({
 
       {stats && stats.length > 0 ? (
         <div className="relative grid divide-x divide-border border-t sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="px-5 py-3">
-              <p className="type-label text-muted-foreground">{stat.label}</p>
-              <p
-                className={cn(
-                  "mt-1 text-xl font-semibold tabular-nums",
-                  stat.tone === "good" && "text-good",
-                  stat.tone === "warning" && "text-warning",
-                  stat.tone === "critical" && "text-critical",
-                )}
+          {stats.map((stat) => {
+            const body = (
+              <>
+                <p className="flex items-center gap-1 type-label text-muted-foreground">
+                  {stat.label}
+                  {stat.to ? <Icon name="chevronRight" size="xs" className="opacity-60" /> : null}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-xl font-semibold tabular-nums",
+                    stat.tone === "good" && "text-good",
+                    stat.tone === "warning" && "text-warning",
+                    stat.tone === "critical" && "text-critical",
+                  )}
+                >
+                  {stat.value}
+                </p>
+              </>
+            );
+            return stat.to ? (
+              <Link
+                key={stat.label}
+                to={stat.to}
+                className="block px-5 py-3 transition-colors duration-quick hover:bg-accent/40"
               >
-                {stat.value}
-              </p>
-            </div>
-          ))}
+                {body}
+              </Link>
+            ) : (
+              <div key={stat.label} className="px-5 py-3">
+                {body}
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </header>

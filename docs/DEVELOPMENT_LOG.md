@@ -12878,3 +12878,48 @@ Titles on the employment sections were Title Case specification headings
 ("Pending & Past Profile Correction Requests", "Upcoming Roster Schedule (Next
 14 Days)"). They are sentence case and say what the section is for the person
 reading it: "Change requests", "Your shifts, next 14 days".
+
+## 290 - The owner's dashboard said the hospital owed itself money
+
+Looked at as the person who pays for the product, the dashboard had four
+problems, and three of them were figures that were wrong rather than ugly.
+
+**The top band was the owner's inbox.** "Waiting on you, Unread, Queues,
+Longest wait" -- what My day is for. Nothing said how many patients had been
+seen, how full the beds were, or what had been collected. There was no
+endpoint that could say it: every panel read one department at one facility.
+`/api/org/today/` (`apps/organization/today.py`) now answers the
+organization's day in one call -- outpatients seen and waiting, emergency
+arrivals, beds occupied, admissions and discharges, laboratory work
+outstanding and critical values open, money collected and still owed, and
+pharmacy takings. Each block is included only when the viewer may read what
+it counts **and** the plan includes its module; a block left out is absent,
+never zero. The whole organization needs `analytics.read` at organization
+scope, and anybody narrower asks about a facility.
+
+The band shows four of those, each opening the list it counts. The dashboard
+gained a Money panel (collected today, still owed, invoices past due) and a
+Laboratory panel.
+
+**"Still owed: -NPR 8,800."** The first version summed every issued invoice's
+balance, and the demo tenant has five issued credit notes -- invoices with
+negative totals. They are not debts. They are excluded, and an overpaid
+invoice counts as owing nothing rather than a negative amount. A test holds
+that the figure is never negative.
+
+**"96 arrived today", two minutes after midnight.** The emergency panel is
+labelled "since midnight", but the summary it reads defaults to the last seven
+days. The dashboard now passes `since` as today.
+
+**The supply "funnel" drew -1 (100%).** Requisitions waiting, approved
+requisitions, orders to approve and deliveries to check are four queues
+waiting on four different people, not stages that shrink, so a funnel of
+"1, 0, 0, 1" drew a loss between the last two and pushed the first label out
+of the panel. It is a list of queues now, each row opening the procurement tab
+that does the work (`/procurement?tab=orders` -- Procurement reads `?tab=`).
+The funnel itself was fixed too: its bar is capped at 60% of the row, so a
+stage name can never be pushed out.
+
+Also checked and found correct rather than wrong: the band's 44 occupied beds
+against the Inpatients panel's 41. The band is every site (41 at the hospital,
+3 at the clinic) and the panel one hospital; the band now says "all sites".

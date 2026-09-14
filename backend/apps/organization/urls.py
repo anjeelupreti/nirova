@@ -5,6 +5,7 @@ from apps.organization.settings_api import SettingsView
 from apps.organization.views import (
     DepartmentViewSet,
     EntitlementView,
+    OrganizationTodayView,
     PlanView,
     FacilityChangeRequestViewSet,
     FacilityViewSet,
@@ -21,6 +22,8 @@ urlpatterns = [
     path("entitlements/", EntitlementView.as_view(), name="entitlements"),
     # What we bought, what else exists, and how close we are to a limit.
     path("plan/", PlanView.as_view(), name="plan"),
+    # The organization's day, for the owner's dashboard.
+    path("today/", OrganizationTodayView.as_view(), name="organization-today"),
     # Before the router, so "settings" cannot be shadowed by a viewset that
     # later registers the same prefix.
     path("settings/", SettingsView.as_view(), name="settings"),

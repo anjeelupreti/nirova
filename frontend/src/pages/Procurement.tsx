@@ -20,6 +20,7 @@
  * buyer discover the rule by being rejected.
  */
 
+import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import {
   ShieldCheck,
@@ -115,7 +116,12 @@ const STATUS_TONE: Record<string, "default" | "secondary" | "destructive" | "out
 const label = (status: string) => status.replace(/_/g, " ");
 
 export default function ProcurementPage() {
-  const [tab, setTab] = useState<Tab>("queue");
+  // `?tab=` so a dashboard row ("Orders to approve") opens the list it counts.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = searchParams.get("tab");
+    return TABS.some((entry) => entry.id === asked) ? (asked as Tab) : "queue";
+  });
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facility, setFacility] = useState("");
   const [error, setError] = useState<string | null>(null);

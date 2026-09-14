@@ -255,7 +255,10 @@ export function FunnelChart({
               </div>
             ) : null}
             <div className="flex items-center gap-3">
-              <div className="h-8 min-w-[2%] shrink-0 grow-0 basis-auto" style={{ width: `${Math.max(stage.conversion, 4)}%` }}>
+              {/* At most 60% of the row: a first stage at 100% used to take all of it
+                  and push its own name out of the panel. Clamped, too, for a
+                  later stage that is larger than the first. */}
+              <div className="h-8 min-w-[2%] shrink-0 grow-0 basis-auto" style={{ width: `${Math.min(100, Math.max(stage.conversion, 4)) * 0.6}%` }}>
                 <div
                   className="flex h-full items-center rounded-sm px-2.5"
                   style={{ background: stage.fill }}

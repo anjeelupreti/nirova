@@ -1347,6 +1347,22 @@ in one place — self service, my day, my workspace, the profile drop-down."*
 - [x] The account menu: profile, leave and payslips, password, system, mode,
       sign out — each once
 
+## §147 The owner's day `[~]`
+
+*New on 15 September 2026 (log 290). "What an owner wants to see and manage."*
+
+- [x] One answer for the organization's day: patients seen, beds, laboratory,
+      money collected and owed, pharmacy takings (`/api/org/today/`)
+- [x] A block is absent when the viewer may not read it or the plan lacks its
+      module -- never zero
+- [x] Every figure in the band opens the list it counts
+- [x] Credit notes are not debts; money owed is never negative
+- [x] "Since midnight" means since midnight
+- [x] Queues are shown as queues; a funnel is only for stages that shrink
+- [ ] Trends against yesterday and last week, not only today's figure
+- [ ] Revenue by department and payer, with drill-through to the invoices
+- [ ] A board for the laboratory and for accounts in My day
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something

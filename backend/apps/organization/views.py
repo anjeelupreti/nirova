@@ -319,3 +319,37 @@ class PlanView(APIView):
         from apps.entitlements.services import plan_summary
 
         return Response(plan_summary(request.organization))
+
+
+class OrganizationTodayView(APIView):
+    """The organization's day: patients seen, beds, laboratory, money.
+
+    `analytics.read` because it is the view of whoever oversees the place.
+    Without `?facility=` it is the whole organization, which needs that
+    permission at organization scope; somebody who runs one building asks
+    about that building.
+    """
+
+    permission_classes = [IsAuthenticated, HasPermission.of("analytics.read", scope=Scope.FACILITY)]
+
+    def get(self, request):
+        from django.shortcuts import get_object_or_404
+        from rest_framework.exceptions import ValidationError
+
+        from apps.organization.today import organization_today
+
+        authorization = get_authorization(request)
+        facility = None
+        wanted = request.query_params.get("facility")
+        if wanted:
+            facility = get_object_or_404(Facility, uuid=wanted)
+        elif not authorization.has("analytics.read", Scope.ORGANIZATION):
+            raise ValidationError(
+                {"facility": "Choose a facility: your access does not reach the whole organization."},
+                code="facility_required",
+            )
+        return Response(
+            organization_today(
+                authorization, resolve_entitlements(request.organization), facility=facility,
+            )
+        )
