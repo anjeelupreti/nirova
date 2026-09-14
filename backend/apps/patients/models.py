@@ -524,3 +524,7 @@ class PatientMergeLog(BaseModel):
 
     def __str__(self):
         return f"{self.merged_patient_id} → {self.surviving_patient_id}"
+
+
+# The discussion about a patient lives in its own module, registered here.
+from apps.patients.care_models import CareMessage  # noqa: E402,F401

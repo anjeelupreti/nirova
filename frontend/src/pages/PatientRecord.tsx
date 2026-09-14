@@ -54,6 +54,7 @@ import {
   WorkspacePanel,
 } from "@/components/workspace/WorkspaceFrame";
 import type { ClinicalSummary, PatientAccount, PatientDetail } from "@/types";
+import { CareDiscussion } from "@/components/clinical/CareDiscussion";
 
 /** One message the hospital sent — or tried to, or was told not to. */
 interface PatientOutreach {
@@ -225,6 +226,12 @@ export default function PatientRecordPage() {
             hidden: !mayBilling,
           },
           {
+            id: "discussion",
+            label: "Discussion",
+            icon: "staff",
+            hidden: !mayClinical,
+          },
+          {
             id: "messages",
             label: "Messages",
             icon: "notification",
@@ -249,6 +256,7 @@ export default function PatientRecordPage() {
           medications: <MedicationsTab medications={medications} />,
           billing: <AccountTab account={account} />,
           messages: <MessagesTab messages={messages} />,
+          discussion: <CareDiscussion patientUuid={record.uuid} />,
         }}
       </TabbedSection>
     </Page>

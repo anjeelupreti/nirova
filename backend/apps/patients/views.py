@@ -6,7 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.common.permissions import HasPermission, get_authorization
+from apps.common.permissions import HasClinicalAccess, HasPermission, get_authorization
 from apps.organization.models import Facility
 from apps.patients.models import Patient, PatientStatus
 from apps.patients.serializers import (
@@ -171,6 +171,18 @@ class PatientViewSet(viewsets.ModelViewSet):
         authorization = get_authorization(request)
         authorization.require("patient.update", Scope.OWN)
         return super().partial_update(request, *args, **kwargs)
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="discussion",
+        permission_classes=[IsAuthenticated, HasClinicalAccess],
+    )
+    def discussion(self, request, uuid=None):
+        """Staff talking to staff about this patient. See `apps/patients/discussion.py`."""
+        from apps.patients.discussion import discussion_response
+
+        return discussion_response(self, request)
 
     @action(detail=True, methods=["get"], url_path="messages")
     def messages(self, request, uuid=None):

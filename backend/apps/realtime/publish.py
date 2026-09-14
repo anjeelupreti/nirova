@@ -31,7 +31,7 @@ from django.db import transaction
 logger = logging.getLogger("nirova.realtime")
 
 #: What may be subscribed to. Anything else is refused at the socket.
-TOPIC = re.compile(r"^(notifications|(queue|beds|ed|lab|icu)\.[0-9a-f-]{36})$")
+TOPIC = re.compile(r"^(notifications|(queue|beds|ed|lab|icu|patient)\.[0-9a-f-]{36})$")
 
 
 def group_for(organization_slug: str, topic: str, user_uuid: str = "") -> str:
