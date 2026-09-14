@@ -1379,6 +1379,24 @@ keeping as well."*
 - [ ] Lab panel reports with a plain-language line per abnormal result
 - [ ] The printed summary and imaging report checked on screen
 
+## §149 Health OS: standards and the single point `[ ]`
+
+*New on 15 September 2026. The audit and plan are in [HEALTHOS.md](HEALTHOS.md).*
+
+- [ ] ICD-10 reference table, search, and an "uncoded" queue
+- [ ] HMIS monthly returns as reports and exports
+- [ ] Health Insurance Board claim export in their format
+- [ ] ISMS pack: policies, risk log, incident and breach runbooks
+- [ ] A restore drill, recorded — per-tenant backup proven, not assumed
+- [ ] Follow-up register: due, overdue, recall, reported
+- [ ] Referral in and out as journeys, with a packaged record
+- [ ] Dispense against a prescription at the counter
+- [ ] Escalation ladder on critical notifications
+- [ ] Nightly fact tables; trends over weeks; drill-through from charts
+- [ ] Workflow rules per organization (clearances, sign-off, expiry windows)
+- [ ] Read-only FHIR R4 facade; LOINC on tests; HL7 v2 ingest; PACS link-out
+- [ ] Vendor desk: help desk, tickets, targeted broadcast, usage analytics
+
 ## Standing guards
 
 *Not a specification section. The general checks that have each caught something
