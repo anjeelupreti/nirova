@@ -95,6 +95,7 @@ TENANT_APPS = [
     "apps.documents",
     "apps.reporting",
     "apps.search",
+    "apps.terminology",
     "apps.workspace",
     # Data import lives in the tenant database because an import batch is one
     # customer's migration: their file, their column mapping, their duplicate
