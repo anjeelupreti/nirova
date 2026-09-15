@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/primitives";
 import { formatDate, formatTime } from "@/lib/dates";
 import { ATTENDANCE_CHANGED } from "@/components/me/staff";
+import { Modal, ModalColumns } from "@/components/ui/modal";
 
 export type SelfServiceTab = "profile" | "time" | "swaps" | "leave" | "pay" | "manager";
 type Tab = SelfServiceTab;
@@ -942,36 +943,45 @@ export function SelfServiceSection({
 
       {/* Modal: Request Profile Correction */}
       {correctionModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-card p-6 space-y-4">
-            <CardHeader className="p-0">
-              <CardTitle>Request a change to your record</CardTitle>
-              <CardDescription>
-                Updates to bank details, phone, or address require verification before taking effect.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleCorrectionSubmit} className="space-y-3">
-              <div>
-                <Label>Phone Number</Label>
-                <Input value={corrPhone} onChange={(e) => setCorrPhone(e.target.value)} required />
-              </div>
-              <div>
-                <Label>Personal Email</Label>
-                <Input value={corrEmail} onChange={(e) => setCorrEmail(e.target.value)} />
-              </div>
-              <div>
-                <Label>Residential Address</Label>
-                <Input value={corrAddress} onChange={(e) => setCorrAddress(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+        <Modal
+          open
+          onClose={() => setCorrectionModal(false)}
+          size="lg"
+          title="Request a change to your record"
+          description="Address, telephone and bank details are checked by HR before payroll uses them."
+          footer={
+            <>
+              <Button type="button" variant="outline" onClick={() => setCorrectionModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="correction-form">
+                Submit request
+              </Button>
+            </>
+          }
+        >
+            <form id="correction-form" onSubmit={handleCorrectionSubmit} className="space-y-3">
+              <ModalColumns>
                 <div>
-                  <Label>Bank Name</Label>
+                  <Label>Phone</Label>
+                  <Input value={corrPhone} onChange={(e) => setCorrPhone(e.target.value)} required />
+                </div>
+                <div>
+                  <Label>Personal email</Label>
+                  <Input value={corrEmail} onChange={(e) => setCorrEmail(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Bank name</Label>
                   <Input value={corrBankName} onChange={(e) => setCorrBankName(e.target.value)} />
                 </div>
                 <div>
-                  <Label>Bank Account Number</Label>
+                  <Label>Bank account number</Label>
                   <Input value={corrAccountNo} onChange={(e) => setCorrAccountNo(e.target.value)} />
                 </div>
+              </ModalColumns>
+              <div>
+                <Label>Address</Label>
+                <Input value={corrAddress} onChange={(e) => setCorrAddress(e.target.value)} />
               </div>
               <div>
                 <Label>Reason for Update</Label>
@@ -982,28 +992,30 @@ export function SelfServiceSection({
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setCorrectionModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Submit Request</Button>
-              </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Modal: Propose Shift Swap */}
       {swapModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-card p-6 space-y-4">
-            <CardHeader className="p-0">
-              <CardTitle>Propose a shift swap</CardTitle>
-              <CardDescription>
-                Select a published shift of yours and a target colleague to cover or swap.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleSwapSubmit} className="space-y-3">
+        <Modal
+          open
+          onClose={() => setSwapModal(false)}
+          size="lg"
+          title="Propose a shift swap"
+          description="Your colleague accepts first, then your manager signs it off."
+          footer={
+            <>
+              <Button type="button" variant="outline" onClick={() => setSwapModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="swap-form">
+                Send proposal
+              </Button>
+            </>
+          }
+        >
+            <form id="swap-form" onSubmit={handleSwapSubmit} className="space-y-3">
               <div>
                 <Label>Your Shift to Swap</Label>
                 <Select value={swapEntry} onChange={(e) => setSwapEntry(e.target.value)} required>
@@ -1037,26 +1049,30 @@ export function SelfServiceSection({
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setSwapModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Send Proposal</Button>
-              </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Modal: Apply Leave */}
       {leaveModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-lg bg-card p-6 space-y-4">
-            <CardHeader className="p-0">
-              <CardTitle>Apply for leave</CardTitle>
-              <CardDescription>Working days are automatically computed factoring in Nepal's holidays.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleLeaveSubmit} className="space-y-3">
+        <Modal
+          open
+          onClose={() => setLeaveModal(false)}
+          size="lg"
+          title="Apply for leave"
+          description="Working days are counted against public holidays."
+          footer={
+            <>
+              <Button type="button" variant="outline" onClick={() => setLeaveModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="leave-form">
+                Submit application
+              </Button>
+            </>
+          }
+        >
+            <form id="leave-form" onSubmit={handleLeaveSubmit} className="space-y-3">
               <div>
                 <Label>Leave Type</Label>
                 <Select value={leaveType} onChange={(e) => setLeaveType(e.target.value)} required>
@@ -1068,16 +1084,16 @@ export function SelfServiceSection({
                   ))}
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <ModalColumns>
                 <div>
-                  <Label>Start Date</Label>
+                  <Label>Start date</Label>
                   <Input type="date" value={leaveStarts} onChange={(e) => setLeaveStarts(e.target.value)} required />
                 </div>
                 <div>
-                  <Label>End Date</Label>
+                  <Label>End date</Label>
                   <Input type="date" value={leaveEnds} onChange={(e) => setLeaveEnds(e.target.value)} required />
                 </div>
-              </div>
+              </ModalColumns>
               <div>
                 <Label>Reason</Label>
                 <Textarea
@@ -1087,42 +1103,48 @@ export function SelfServiceSection({
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setLeaveModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Submit Application</Button>
-              </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Modal: Regularise Attendance */}
       {regModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-md bg-card p-6 space-y-4">
-            <CardHeader className="p-0">
-              <CardTitle>Correct an attendance record</CardTitle>
-              <CardDescription>Provide corrected timestamps and an explanation for missed punches.</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleRegularise} className="space-y-3">
-              <div>
-                <Label>Checked In At</Label>
-                <Input
-                  type="datetime-local"
-                  value={regInTime ? regInTime.slice(0, 16) : ""}
-                  onChange={(e) => setRegInTime(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Checked Out At</Label>
-                <Input
-                  type="datetime-local"
-                  value={regOutTime ? regOutTime.slice(0, 16) : ""}
-                  onChange={(e) => setRegOutTime(e.target.value)}
-                />
-              </div>
+        <Modal
+          open
+          onClose={() => setRegModal(null)}
+          size="lg"
+          title="Correct an attendance record"
+          description="The corrected times and why the mark was missed. Your manager approves it."
+          footer={
+            <>
+              <Button type="button" variant="outline" onClick={() => setRegModal(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="regularise-form">
+                Submit correction
+              </Button>
+            </>
+          }
+        >
+            <form id="regularise-form" onSubmit={handleRegularise} className="space-y-3">
+              <ModalColumns>
+                <div>
+                  <Label>Checked in at</Label>
+                  <Input
+                    type="datetime-local"
+                    value={regInTime ? regInTime.slice(0, 16) : ""}
+                    onChange={(e) => setRegInTime(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Checked out at</Label>
+                  <Input
+                    type="datetime-local"
+                    value={regOutTime ? regOutTime.slice(0, 16) : ""}
+                    onChange={(e) => setRegOutTime(e.target.value)}
+                  />
+                </div>
+              </ModalColumns>
               <div>
                 <Label>Reason</Label>
                 <Textarea
@@ -1132,15 +1154,8 @@ export function SelfServiceSection({
                   required
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setRegModal(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit">Submit Regularisation</Button>
-              </div>
             </form>
-          </Card>
-        </div>
+        </Modal>
       )}
 
       {/* Modal: Printable Payslip Document */}

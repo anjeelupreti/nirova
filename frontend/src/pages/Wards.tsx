@@ -47,6 +47,7 @@ import {
 import WardSetup from "@/pages/wards/Setup";
 import { DischargeSummaryPreview } from "@/components/documents/DischargeSummaryDocument";
 import { DischargeTemplates, type AppliedDischarge } from "@/components/clinical/DischargeTemplates";
+import { Modal } from "@/components/ui/modal";
 import { useSession } from "@/hooks/useSession";
 import { WardBoard } from "@/pages/wards/Board";
 import api, { ApiError } from "@/lib/api";
@@ -1354,16 +1355,34 @@ function DischargeDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
-      <Card className="my-8 w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle>Discharge {admission.patient_name}</CardTitle>
-          <CardDescription>
-            {admission.length_of_stay_days} nights. The bed goes to cleaning,
-            not straight back to available.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={`Discharge ${admission.patient_name}`}
+      description={`${admission.length_of_stay_days} nights. The bed goes to cleaning, not straight back to available.`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={
+              busy || (needsOverride && form.override_reason.trim().length < 10)
+            }
+            onClick={() => void submit()}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
+            Discharge
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
           {problem && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -1550,29 +1569,8 @@ function DischargeDialog({
             />
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              className="flex-1"
-              disabled={
-                busy ||
-                (needsOverride && form.override_reason.trim().length < 10)
-              }
-              onClick={() => void submit()}
-            >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LogOut className="h-4 w-4" />
-              )}
-              Discharge
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      </div>
+    </Modal>
   );
 }
 
