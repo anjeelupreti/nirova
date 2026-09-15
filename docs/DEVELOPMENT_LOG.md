@@ -13226,3 +13226,34 @@ patient is new on their first ever encounter here and a repeat attendance
 every time after. 197 visits, 133 new, 64 repeat. A test holds it, and the
 lesson is the one this project keeps relearning: a report is not finished when
 its tests pass, it is finished when somebody has read its numbers.
+
+## 300 - A backup nobody has restored is a rumour
+
+[HEALTHOS.md](HEALTHOS.md) called the unproven restore the largest operational
+risk in the product, and it was the honest reading: a database per customer
+makes a restore *specific*, backups were a plan, and nobody had ever put one
+back. Now somebody has.
+
+`backend/scripts/backup.py` dumps the control plane and every tenant database,
+one custom-format file each, with a manifest recording the size and SHA-256 of
+every dump. Deliberately not a management command: the day this matters is the
+day Django does not start, and a backup tool that needs the application is
+missing when it is needed.
+
+`backend/scripts/restore_drill.py` is the proof. It restores a dump into a
+scratch database *beside* the live one, counts every table in both with
+`count(*)` -- the planner's estimate is fine for a plan and useless for a
+proof -- reports anything missing, unexpected or different, drops the scratch
+copy, and exits non-zero on any difference.
+
+**First drill, 15 September 2026: 180 tables, 7,779 rows, identical. PASSED.**
+Recorded in [RUNBOOK_BACKUP.md](RUNBOOK_BACKUP.md), which also carries the
+schedule, the retention, the restore procedure -- restore *beside* the live
+database and rename, never over it -- and what is still missing: point-in-time
+recovery, an off-site copy and a drill from it, documents and secrets.
+
+Two things the drill itself found, which is the argument for drills: the
+backup was sweeping up `_drill` scratch databases and filing 907 bytes of
+nothing as though it were a customer, and `docker exec` starts as root and
+inherits nothing, so the Postgres tools were connecting as a role that does
+not exist.

@@ -1383,11 +1383,11 @@ keeping as well."*
 
 *New on 15 September 2026. The audit and plan are in [HEALTHOS.md](HEALTHOS.md).*
 
-- [ ] ICD-10 reference table, search, and an "uncoded" queue
-- [ ] HMIS monthly returns as reports and exports
+- [x] ICD-10 reference table, search, and an "uncoded" report (log 298)
+- [x] HMIS monthly return as a report, naming what it cannot count (log 299)
 - [ ] Health Insurance Board claim export in their format
 - [ ] ISMS pack: policies, risk log, incident and breach runbooks
-- [ ] A restore drill, recorded — per-tenant backup proven, not assumed
+- [x] A restore drill, recorded — 180 tables, 7,779 rows, identical (log 300)
 - [ ] Follow-up register: due, overdue, recall, reported
 - [ ] Referral in and out as journeys, with a packaged record
 - [ ] Dispense against a prescription at the counter
