@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Receipt, Search, Tags, TriangleAlert } from "lucide-react";
+import { Plus, Receipt, Search, Tags, TriangleAlert } from "lucide-react";
 
 import { useSession } from "@/hooks/useSession";
 import api, { ApiError } from "@/lib/api";
@@ -40,14 +40,13 @@ import {
   Input,
   Label,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import {
+  DataView,
+  type Column,
+  type FilterSpec,
+} from "@/components/ui/dataview";
 
 const CATEGORIES = ["consultation", "registration", "procedure", "laboratory",
                     "radiology", "pharmacy", "consumable", "bed", "nursing",
@@ -78,6 +77,85 @@ const npr = (value: string | number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+
+const SERVICE_COLUMNS: Column<ServiceItem>[] = [
+  {
+    key: "code",
+    header: "Code",
+    value: (service) => service.code,
+    cell: (service) => (
+      <span className="whitespace-nowrap font-mono text-xs">{service.code}</span>
+    ),
+  },
+  {
+    key: "name",
+    header: "Service",
+    value: (service) => service.name,
+    cell: (service) => (
+      <>
+        <span className="font-medium">{service.name}</span>
+        {!service.is_active ? (
+          <Badge variant="secondary" className="ml-1.5 text-[10px]">
+            inactive
+          </Badge>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    key: "category",
+    header: "Category",
+    value: (service) => label(service.category),
+    cell: (service) => (
+      <span className="text-xs capitalize">{label(service.category)}</span>
+    ),
+  },
+  {
+    key: "price",
+    header: "Default price",
+    numeric: true,
+    value: (service) => Number(service.default_price) || null,
+    /*
+      A service with no price is not free, it is unpriced -- and a bill that
+      silently charges nothing is worse than one that refuses.
+    */
+    cell: (service) =>
+      Number(service.default_price) > 0 ? (
+        npr(service.default_price)
+      ) : (
+        <span className="text-xs text-muted-foreground">not priced</span>
+      ),
+  },
+  {
+    key: "tax",
+    header: "Tax",
+    secondary: true,
+    value: (service) => label(service.tax_treatment),
+    cell: (service) => <span className="text-xs">{label(service.tax_treatment)}</span>,
+  },
+];
+
+/**
+ * What a catalogue is actually asked.
+ *
+ * "Which of these has nobody priced" is the question behind a bill that comes
+ * out wrong, and until now the only way to answer it was to read four hundred
+ * rows. It is a facet because it is a property of the row, not a search term.
+ */
+const SERVICE_FILTERS: FilterSpec<ServiceItem>[] = [
+  {
+    key: "priced",
+    label: "Priced",
+    value: (service) =>
+      Number(service.default_price) > 0 ? "Priced" : "Not priced yet",
+  },
+  {
+    key: "status",
+    label: "Status",
+    value: (service) => (service.is_active ? "Active" : "Inactive"),
+  },
+  { key: "tax", label: "Tax", value: (service) => label(service.tax_treatment) },
+];
 
 export default function ServicesPage() {
   const { can } = useSession();
@@ -204,106 +282,104 @@ export default function ServicesPage() {
               category of patient or a named payer.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-[12rem] flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={term}
-                  onChange={(event) => setTerm(event.target.value)}
-                  placeholder="Name or code"
-                  className="h-9 pl-8"
-                />
-              </div>
-              <Select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className="h-9 w-auto"
-                aria-label="Category"
-              >
-                <option value="">All categories</option>
-                {CATEGORIES.map((value) => (
-                  <option key={value} value={value}>
-                    {label(value)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            {loading ? (
-              <p className="py-6 text-sm text-muted-foreground">
-                <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                Loading services…
-              </p>
-            ) : services.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-sm font-medium">
-                  {term || category ? "Nothing matches that." : "No services yet."}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {term || category
+          <CardContent>
+            <DataView
+              rows={services}
+              columns={SERVICE_COLUMNS}
+              rowKey={(service) => service.uuid}
+              storageKey="services.catalogue"
+              // Both the box and the category are server queries -- they reach
+              // the whole catalogue, not the page on screen -- so they stay,
+              // and the component's own search is switched off.
+              search={{ enabled: false }}
+              toolbar={
+                <>
+                  <div className="relative min-w-[12rem]">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={term}
+                      onChange={(event) => setTerm(event.target.value)}
+                      placeholder="Name or code"
+                      className="h-9 pl-8"
+                    />
+                  </div>
+                  <Select
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    className="h-9 w-auto"
+                    aria-label="Category"
+                  >
+                    <option value="">All categories</option>
+                    {CATEGORIES.map((value) => (
+                      <option key={value} value={value}>
+                        {label(value)}
+                      </option>
+                    ))}
+                  </Select>
+                </>
+              }
+              filters={SERVICE_FILTERS}
+              loading={loading}
+              onOpen={(service) => {
+                setOpen(service);
+                setDraft(null);
+              }}
+              actions={(service) => [
+                {
+                  label: "Open it",
+                  icon: "view",
+                  onSelect: () => {
+                    setOpen(service);
+                    setDraft(null);
+                  },
+                },
+                {
+                  label: "Change the price",
+                  icon: "price",
+                  disabled: !mayEdit,
+                  reason: "You do not have catalogue permission.",
+                  onSelect: () => {
+                    setOpen(service);
+                    setDraft(toDraft(service));
+                  },
+                },
+                {
+                  label: "Copy the code",
+                  icon: "copy",
+                  onSelect: () => void navigator.clipboard?.writeText(service.code),
+                },
+              ]}
+              card={{
+                title: (service) => service.name,
+                subtitle: (service) => service.code,
+                badge: (service) =>
+                  service.is_active ? null : (
+                    <Badge variant="secondary" className="text-[10px]">
+                      inactive
+                    </Badge>
+                  ),
+                facts: (service) => [
+                  { label: "Category", value: label(service.category) },
+                  {
+                    label: "Default price",
+                    value:
+                      Number(service.default_price) > 0
+                        ? npr(service.default_price)
+                        : "not priced",
+                  },
+                  { label: "Tax", value: label(service.tax_treatment) },
+                ],
+              }}
+              empty={{
+                title: term || category ? "Nothing matches that" : "No services yet",
+                description:
+                  term || category
                     ? "Try a different category, or clear the search."
                     : mayEdit
                       ? "Add a consultation fee to start charging for anything."
-                      : "Somebody with catalogue permission needs to add them."}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Code</TableHead>
-                      <TableHead>Service</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Default price</TableHead>
-                      <TableHead>Tax</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {services.map((service) => (
-                      <TableRow
-                        key={service.uuid}
-                        onClick={() => { setOpen(service); setDraft(null); }}
-                        className="cursor-pointer hover:bg-muted/50"
-                      >
-                        <TableCell className="font-mono text-xs">
-                          {service.code}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {service.name}
-                          {!service.is_active ? (
-                            <Badge variant="secondary" className="ml-1.5 text-[10px]">
-                              inactive
-                            </Badge>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-xs capitalize">
-                          {label(service.category)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {/*
-                            A service with no price is not free, it is unpriced
-                            -- and a bill that silently charges nothing is worse
-                            than one that refuses.
-                          */}
-                          {Number(service.default_price) > 0
-                            ? npr(service.default_price)
-                            : (
-                              <span className="text-xs text-muted-foreground">
-                                not priced
-                              </span>
-                            )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {label(service.tax_treatment)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+                      : "Somebody with catalogue permission needs to add them.",
+              }}
+            />
           </CardContent>
         </Card>
 

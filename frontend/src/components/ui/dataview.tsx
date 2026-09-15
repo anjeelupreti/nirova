@@ -422,6 +422,10 @@ export function DataView<T>({
                 ) : null}
               </div>
             ) : null}
+            {/* The screen's own controls first: where a page supplies a
+                server search, it is the wider of the two and reads as the
+                start of the row. */}
+            {toolbar}
             {facetOptions.map(({ facet, options }) => (
               <FilterMenu
                 key={facet.key}
@@ -443,7 +447,6 @@ export function DataView<T>({
                 Clear {activeCount === 1 ? "filter" : `${activeCount} filters`}
               </button>
             ) : null}
-            {toolbar}
           </div>
 
           <div className="flex shrink-0 items-center gap-3">

@@ -82,6 +82,11 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import {
+  DataView,
+  type Column,
+  type FilterSpec,
+} from "@/components/ui/dataview";
 
 type Tab = "overview" | "directory" | "positions";
 
@@ -503,6 +508,93 @@ function Stat({
 /* Directory                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The staff directory, on `DataView`.
+ *
+ * The search box stays where it is because it is a *server* search -- it
+ * reaches everybody, not the page on screen -- and `DataView`'s own box is
+ * switched off rather than offering two that mean different things. What the
+ * component adds is what the screen never had: narrowing by department,
+ * position, type and status; paging, so a hospital of four hundred is not one
+ * scroll; and something to do with a row besides open it.
+ */
+const PEOPLE_COLUMNS: Column<EmployeeSummary>[] = [
+  {
+    key: "name",
+    header: "Name",
+    value: (row) => row.full_name,
+    cell: (row) => (
+      <>
+        <span className="font-medium">{row.full_name}</span>
+        <span className="block text-xs text-muted-foreground">
+          {row.employee_code}
+          {row.phone && ` · ${row.phone}`}
+        </span>
+      </>
+    ),
+  },
+  {
+    key: "position",
+    header: "Position",
+    value: (row) => row.position_title,
+    cell: (row) => (
+      <>
+        {row.position_title || "—"}
+        {row.is_provider && (
+          <Badge variant="secondary" className="ml-2">
+            Provider
+          </Badge>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "department",
+    header: "Department",
+    value: (row) => row.department_name,
+    cell: (row) => row.department_name || "—",
+  },
+  {
+    key: "type",
+    header: "Type",
+    secondary: true,
+    value: (row) => humanise(row.employment_type),
+    cell: (row) => <span className="capitalize">{humanise(row.employment_type)}</span>,
+  },
+  {
+    key: "since",
+    header: "Since",
+    secondary: true,
+    value: (row) => row.joined_on,
+    cell: (row) => <span className="tabular-nums">{row.joined_on}</span>,
+  },
+  {
+    key: "status",
+    header: "Status",
+    value: (row) => humanise(row.status),
+    cell: (row) => (
+      <Badge
+        variant={
+          row.status === "active"
+            ? "secondary"
+            : row.status === "separated" || row.status === "suspended"
+              ? "destructive"
+              : "outline"
+        }
+      >
+        {humanise(row.status)}
+      </Badge>
+    ),
+  },
+];
+
+const PEOPLE_FILTERS: FilterSpec<EmployeeSummary>[] = [
+  { key: "department", label: "Department", value: (row) => row.department_name },
+  { key: "position", label: "Position", value: (row) => row.position_title },
+  { key: "type", label: "Type", value: (row) => humanise(row.employment_type) },
+  { key: "status", label: "Status", value: (row) => humanise(row.status) },
+];
+
 function Directory({
   facility,
   onOpen,
@@ -565,81 +657,57 @@ function Directory({
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Position</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Since</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={row.uuid}
-                  className="cursor-pointer"
-                  onClick={() => onOpen(row.employee_code)}
-                >
-                  <TableCell>
-                    <span className="font-medium">{row.full_name}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {row.employee_code}
-                      {row.phone && ` · ${row.phone}`}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.position_title || "—"}
-                    {row.is_provider && (
-                      <Badge variant="secondary" className="ml-2">
-                        Provider
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>{row.department_name || "—"}</TableCell>
-                  <TableCell className="capitalize">
-                    {humanise(row.employment_type)}
-                  </TableCell>
-                  <TableCell className="tabular-nums">{row.joined_on}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        row.status === "active"
-                          ? "secondary"
-                          : row.status === "separated" ||
-                              row.status === "suspended"
-                            ? "destructive"
-                            : "outline"
-                      }
-                    >
-                      {humanise(row.status)}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 && !loading && (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Nobody matches.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          {loading && (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              <Loader2 className="inline h-4 w-4 animate-spin" />
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <DataView
+        rows={rows}
+        columns={PEOPLE_COLUMNS}
+        rowKey={(row) => row.uuid}
+        storageKey="people.directory"
+        // The box above is a server search; a second one meaning "of the
+        // rows already here" would look like the same thing and not be.
+        search={{ enabled: false }}
+        filters={PEOPLE_FILTERS}
+        loading={loading}
+        onOpen={(row) => onOpen(row.employee_code)}
+        actions={(row) => [
+          {
+            label: "Open the record",
+            icon: "staff",
+            onSelect: () => onOpen(row.employee_code),
+          },
+          {
+            label: "Copy the employee code",
+            icon: "copy",
+            onSelect: () => void navigator.clipboard?.writeText(row.employee_code),
+          },
+          {
+            label: "Copy the telephone number",
+            icon: "copy",
+            disabled: !row.phone,
+            reason: "No telephone number is on file for this person.",
+            onSelect: () => void navigator.clipboard?.writeText(row.phone),
+          },
+        ]}
+        card={{
+          title: (row) => row.full_name,
+          subtitle: (row) => row.position_title || row.employee_code,
+          badge: (row) => (
+            <Badge variant={row.status === "active" ? "secondary" : "outline"}>
+              {humanise(row.status)}
+            </Badge>
+          ),
+          facts: (row) => [
+            { label: "Department", value: row.department_name || "—" },
+            { label: "Type", value: humanise(row.employment_type) },
+            { label: "Since", value: row.joined_on },
+            { label: "Telephone", value: row.phone || "—" },
+          ],
+        }}
+        empty={{
+          title: "Nobody matches",
+          description:
+            "Try fewer letters, or tick “Include people who have left”.",
+        }}
+      />
 
       {hiring && (
         <HireDialog
