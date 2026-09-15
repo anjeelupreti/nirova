@@ -19,6 +19,7 @@
  */
 
 import * as React from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
 import { cn } from "@/lib/utils";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -49,6 +50,46 @@ export interface Column<T> {
 }
 
 export type ViewMode = "table" | "cards" | "board";
+
+/**
+ * A facet the reader can narrow the list by.
+ *
+ * The screen says which field a facet reads and, optionally, the order its
+ * values should appear in; everything else — the options, their counts, the
+ * cross-filtering — is derived from the rows themselves. A filter that has to
+ * be told its own options goes stale the first time somebody adds a
+ * department, and a list whose filter offers a value that matches nothing is
+ * worse than a list with no filter.
+ */
+export interface FilterSpec<T> {
+  key: string;
+  label: string;
+  /** The row's value(s) for this facet. An array means a row can match many. */
+  value: (row: T) => string | string[] | null | undefined;
+  /** Fixed options, when the order or the wording matters (a severity ladder,
+   *  a status the customer knows by a different name). Omit to derive them. */
+  options?: { value: string; label: string }[];
+  icon?: IconName;
+}
+
+/**
+ * Something the reader can do to one row without leaving the list.
+ *
+ * **The complaint this answers is "not much actions available for items".** A
+ * list where every row does exactly one thing — open — forces a round trip
+ * through a detail page to cancel an appointment or reprint a receipt, and
+ * people stop using the list.
+ */
+export interface RowAction {
+  label: string;
+  icon?: IconName;
+  onSelect: () => void;
+  /** Destructive or irreversible: rendered in the danger colour, last. */
+  danger?: boolean;
+  disabled?: boolean;
+  /** Why it is unavailable. Shown as the item's title when disabled. */
+  reason?: string;
+}
 
 export interface CardSpec<T> {
   title: (row: T) => React.ReactNode;
@@ -108,6 +149,37 @@ function useViewMode(storageKey: string, available: ViewMode[], initial?: ViewMo
   return [mode, change] as const;
 }
 
+/** How many rows this person wants at a time, on this screen. */
+function usePageSize(storageKey: string, fallback: number) {
+  const [size, setSize] = React.useState<number>(() => {
+    try {
+      const stored = window.localStorage.getItem(`nirova.rows.${storageKey}`);
+      const parsed = stored ? Number(stored) : NaN;
+      if (PAGE_SIZES.includes(parsed)) return parsed;
+    } catch {
+      /* A locked-down profile throws rather than returning null. */
+    }
+    return fallback;
+  });
+
+  const change = React.useCallback(
+    (next: number) => {
+      setSize(next);
+      try {
+        window.localStorage.setItem(`nirova.rows.${storageKey}`, String(next));
+      } catch {
+        /* Not worth surfacing. */
+      }
+    },
+    [storageKey],
+  );
+
+  return [size, change] as const;
+}
+
+/** `0` is "all of them" — the option somebody printing a handover needs. */
+const PAGE_SIZES = [25, 50, 100, 0];
+
 /* -------------------------------------------------------------------------- */
 /* DataView                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -125,6 +197,24 @@ export interface DataViewProps<T> {
   /** Shown when `rows` is empty *and* nothing is filtered out. */
   empty?: { title: string; description?: string; action?: React.ReactNode; icon?: IconName };
   search?: { placeholder?: string; enabled?: boolean };
+  /** Facets shown as narrowing menus above the list. */
+  filters?: FilterSpec<T>[];
+  /**
+   * What the reader can do to a single row.
+   *
+   * A function of the row, not a fixed list: whether an invoice can be
+   * cancelled depends on the invoice. Return an action with `disabled` and a
+   * `reason` rather than omitting it — a menu whose contents change shape row
+   * by row is one people stop trusting.
+   */
+  actions?: (row: T) => RowAction[];
+  /**
+   * Rows per page. `0` shows every row.
+   *
+   * On by default at 50. Two hundred rows in one scroll is not a feature: it
+   * is why people say a screen "hangs", and it is how a row gets missed.
+   */
+  pageSize?: number;
   /** Controls that belong above the list: filters, a date range, an action. */
   toolbar?: React.ReactNode;
   initialView?: ViewMode;
@@ -156,6 +246,9 @@ export function DataView<T>({
   loading,
   empty,
   search = { enabled: true },
+  filters,
+  actions,
+  pageSize = 50,
   toolbar,
   initialView,
   exportable = true,
@@ -169,6 +262,12 @@ export function DataView<T>({
   const [mode, setMode] = useViewMode(storageKey, available, initialView);
   const [term, setTerm] = React.useState("");
   const [sort, setSort] = React.useState<{ key: string; direction: "asc" | "desc" } | null>(null);
+  const [chosen, setChosen] = React.useState<Record<string, string[]>>({});
+  const [size, setSize] = usePageSize(storageKey, pageSize);
+  const [page, setPage] = React.useState(1);
+
+  const facets = React.useMemo(() => filters ?? [], [filters]);
+  const activeCount = Object.values(chosen).reduce((sum, list) => sum + list.length, 0);
 
   /*
     Search over the columns' own `value` accessors rather than over the
@@ -177,7 +276,7 @@ export function DataView<T>({
     inside an SVG title. `value` is the column author saying what the cell
     *means*, which is also what sorting needs.
   */
-  const filtered = React.useMemo(() => {
+  const searched = React.useMemo(() => {
     if (!term.trim()) return rows;
     const needle = term.trim().toLowerCase();
     return rows.filter((row) =>
@@ -187,6 +286,52 @@ export function DataView<T>({
       }),
     );
   }, [rows, columns, term]);
+
+  /*
+    Facets narrow what the search left, and their own option lists are counted
+    against every *other* facet's choices. Cross-filtering matters more than it
+    sounds: a status filter that still offers "Denied (0)" after somebody picks
+    a facility is a filter that sends people looking for rows that are not
+    there.
+  */
+  const filtered = React.useMemo(
+    () =>
+      activeCount === 0
+        ? searched
+        : searched.filter((row) =>
+            facets.every((facet) => matchesFacet(facet, row, chosen[facet.key] ?? [])),
+          ),
+    [searched, facets, chosen, activeCount],
+  );
+
+  const facetOptions = React.useMemo(
+    () =>
+      facets.map((facet) => {
+        const others = searched.filter((row) =>
+          facets.every(
+            (other) =>
+              other.key === facet.key ||
+              matchesFacet(other, row, chosen[other.key] ?? []),
+          ),
+        );
+        const counts = new Map<string, number>();
+        for (const row of others) {
+          for (const value of facetValues(facet, row)) {
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+          }
+        }
+        const options = facet.options
+          ? facet.options.map((option) => ({
+              ...option,
+              count: counts.get(option.value) ?? 0,
+            }))
+          : [...counts.keys()]
+              .sort((a, b) => a.localeCompare(b))
+              .map((value) => ({ value, label: value, count: counts.get(value) ?? 0 }));
+        return { facet, options };
+      }),
+    [facets, searched, chosen],
+  );
 
   const sorted = React.useMemo(() => {
     if (!sort) return filtered;
@@ -230,6 +375,21 @@ export function DataView<T>({
     [columns],
   );
 
+  /*
+    Paging is a property of the list as read, so anything that changes what is
+    in it puts the reader back on page one. Landing on an empty page 7 after
+    typing into the search box looks exactly like a list that lost its rows.
+  */
+  const fingerprint = `${term}|${size}|${JSON.stringify(chosen)}|${rows.length}`;
+  React.useEffect(() => setPage(1), [fingerprint]);
+
+  // A board is already divided into columns; cutting it into pages as well
+  // would hide the pile the board exists to show.
+  const paged = mode !== "board" && size > 0;
+  const pageCount = paged ? Math.max(1, Math.ceil(sorted.length / size)) : 1;
+  const current = Math.min(page, pageCount);
+  const visible = paged ? sorted.slice((current - 1) * size, current * size) : sorted;
+
   const filteredAway = rows.length > 0 && sorted.length === 0;
 
   return (
@@ -262,6 +422,27 @@ export function DataView<T>({
                 ) : null}
               </div>
             ) : null}
+            {facetOptions.map(({ facet, options }) => (
+              <FilterMenu
+                key={facet.key}
+                facet={facet}
+                options={options}
+                chosen={chosen[facet.key] ?? []}
+                onChange={(next) =>
+                  setChosen((previous) => ({ ...previous, [facet.key]: next }))
+                }
+              />
+            ))}
+            {activeCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setChosen({})}
+                className="inline-flex h-9 items-center gap-1 rounded-md px-2 type-caption hover:text-foreground"
+              >
+                <Icon name="close" size="xs" />
+                Clear {activeCount === 1 ? "filter" : `${activeCount} filters`}
+              </button>
+            ) : null}
             {toolbar}
           </div>
 
@@ -270,7 +451,7 @@ export function DataView<T>({
                 a filtered list and a short one, and a list that does not say
                 which reads as data loss. */}
             <span className="type-caption tabular-nums">
-              {term && sorted.length !== rows.length
+              {sorted.length !== rows.length
                 ? `${sorted.length} of ${rows.length}`
                 : `${rows.length}`}
             </span>
@@ -284,8 +465,10 @@ export function DataView<T>({
                 columns={exportColumns}
                 name={storageKey}
                 note={
-                  term && sorted.length !== rows.length
-                    ? `Filtered to "${term}" — ${rows.length - sorted.length} rows excluded.`
+                  sorted.length !== rows.length
+                    ? `Filtered${term ? ` to "${term}"` : ""} — ${
+                        rows.length - sorted.length
+                      } of ${rows.length} rows excluded.`
                     : undefined
                 }
               />
@@ -318,7 +501,23 @@ export function DataView<T>({
       ) : filteredAway ? (
         <EmptyState
           title="Nothing matches that"
-          description={`No row in this list contains “${term}”. Clearing the search brings back all ${rows.length}.`}
+          description={
+            term
+              ? `No row in this list contains “${term}”. Clearing the search brings back all ${rows.length}.`
+              : `No row matches those filters. Clearing them brings back all ${rows.length}.`
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                setTerm("");
+                setChosen({});
+              }}
+              className="type-caption underline underline-offset-4 hover:text-foreground"
+            >
+              Clear the search and filters
+            </button>
+          }
         />
       ) : sorted.length === 0 ? (
         <EmptyState
@@ -328,19 +527,307 @@ export function DataView<T>({
         />
       ) : mode === "table" ? (
         <TableView
-          rows={sorted}
+          rows={visible}
           columns={columns}
           rowKey={rowKey}
           onOpen={onOpen}
+          actions={actions}
           sort={sort}
           onSort={setSort}
         />
       ) : mode === "cards" && card ? (
-        <CardsView rows={sorted} rowKey={rowKey} spec={card} onOpen={onOpen} />
+        <CardsView
+          rows={visible}
+          rowKey={rowKey}
+          spec={card}
+          onOpen={onOpen}
+          actions={actions}
+        />
       ) : board ? (
-        <BoardView rows={sorted} rowKey={rowKey} spec={board} onOpen={onOpen} />
+        <BoardView
+          rows={sorted}
+          rowKey={rowKey}
+          spec={board}
+          onOpen={onOpen}
+          actions={actions}
+        />
+      ) : null}
+
+      {!loading && sorted.length > 0 && mode !== "board" ? (
+        <Pager
+          total={sorted.length}
+          page={current}
+          pageCount={pageCount}
+          size={size}
+          onPage={setPage}
+          onSize={setSize}
+        />
       ) : null}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Facets                                                                      */
+/* -------------------------------------------------------------------------- */
+
+function facetValues<T>(facet: FilterSpec<T>, row: T): string[] {
+  const raw = facet.value(row);
+  if (raw == null) return [];
+  return (Array.isArray(raw) ? raw : [raw])
+    .filter((value) => value != null && String(value).length > 0)
+    .map(String);
+}
+
+/** Nothing chosen means everything matches — an empty filter is not a filter. */
+function matchesFacet<T>(facet: FilterSpec<T>, row: T, chosen: string[]) {
+  if (chosen.length === 0) return true;
+  const values = facetValues(facet, row);
+  return chosen.some((value) => values.includes(value));
+}
+
+const MENU_ITEM = cn(
+  "flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5",
+  "text-sm outline-none transition-colors duration-quick",
+  "focus:bg-accent focus:text-accent-foreground",
+  "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+);
+
+const MENU_CONTENT = cn(
+  "z-50 max-h-80 overflow-y-auto rounded-lg border bg-popover p-1.5 shadow-floating",
+  "animate-in fade-in-0 zoom-in-95 duration-quick",
+);
+
+function FilterMenu<T>({
+  facet,
+  options,
+  chosen,
+  onChange,
+}: {
+  facet: FilterSpec<T>;
+  options: { value: string; label: string; count: number }[];
+  chosen: string[];
+  onChange: (next: string[]) => void;
+}) {
+  // A facet with one value cannot narrow anything; showing it is furniture.
+  if (options.length < 2) return null;
+
+  const toggle = (value: string) =>
+    onChange(
+      chosen.includes(value)
+        ? chosen.filter((entry) => entry !== value)
+        : [...chosen, value],
+    );
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        className={cn(
+          "inline-flex h-9 items-center gap-1.5 rounded-md border border-input bg-card px-2.5 text-sm",
+          "transition-colors duration-quick hover:border-border-strong",
+          chosen.length > 0 && "border-primary/50 bg-primary/5 text-foreground",
+        )}
+      >
+        <Icon name={facet.icon ?? "configuration"} size="sm" />
+        <span>{facet.label}</span>
+        {chosen.length > 0 ? (
+          <span className="rounded-full bg-primary px-1.5 text-[0.625rem] font-semibold tabular-nums text-primary-foreground">
+            {chosen.length}
+          </span>
+        ) : null}
+        <Icon name="chevronDown" size="xs" className="text-muted-foreground" />
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="start" sideOffset={6} className={cn(MENU_CONTENT, "w-64")}>
+          {options.map((option) => (
+            <DropdownMenu.CheckboxItem
+              key={option.value}
+              checked={chosen.includes(option.value)}
+              // Radix closes on select; a facet people tick three of should
+              // not need re-opening twice.
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={() => toggle(option.value)}
+              className={MENU_ITEM}
+            >
+              <span
+                className={cn(
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                  chosen.includes(option.value)
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input",
+                )}
+              >
+                {chosen.includes(option.value) ? <Icon name="confirm" size="xs" /> : null}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              <span className="type-caption tabular-nums">{option.count}</span>
+            </DropdownMenu.CheckboxItem>
+          ))}
+          {chosen.length > 0 ? (
+            <>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item className={MENU_ITEM} onSelect={() => onChange([])}>
+                <Icon name="close" size="sm" />
+                Clear {facet.label.toLowerCase()}
+              </DropdownMenu.Item>
+            </>
+          ) : null}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Row actions                                                                 */
+/* -------------------------------------------------------------------------- */
+
+function RowActions({ actions }: { actions: RowAction[] }) {
+  if (actions.length === 0) return null;
+  const ordered = [...actions].sort(
+    (a, b) => Number(Boolean(a.danger)) - Number(Boolean(b.danger)),
+  );
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger
+        aria-label="Actions for this row"
+        // The row itself usually opens something; the menu must not.
+        onClick={(event) => event.stopPropagation()}
+        className={cn(
+          "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground",
+          "transition-colors duration-quick hover:bg-accent hover:text-foreground",
+        )}
+      >
+        <Icon name="more" size="sm" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={4}
+          onClick={(event) => event.stopPropagation()}
+          className={cn(MENU_CONTENT, "w-56")}
+        >
+          {ordered.map((action, index) => (
+            <React.Fragment key={action.label}>
+              {action.danger && index > 0 && !ordered[index - 1]?.danger ? (
+                <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              ) : null}
+              <DropdownMenu.Item
+                disabled={action.disabled}
+                title={action.disabled ? action.reason : undefined}
+                onSelect={() => action.onSelect()}
+                className={cn(MENU_ITEM, action.danger && "text-destructive")}
+              >
+                {action.icon ? <Icon name={action.icon} size="sm" /> : null}
+                {action.label}
+              </DropdownMenu.Item>
+            </React.Fragment>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pager                                                                       */
+/* -------------------------------------------------------------------------- */
+
+function Pager({
+  total,
+  page,
+  pageCount,
+  size,
+  onPage,
+  onSize,
+}: {
+  total: number;
+  page: number;
+  pageCount: number;
+  size: number;
+  onPage: (next: number) => void;
+  onSize: (next: number) => void;
+}) {
+  const first = size > 0 ? (page - 1) * size + 1 : 1;
+  const last = size > 0 ? Math.min(page * size, total) : total;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      {/* Which rows these are, in words. "Page 2" alone does not tell somebody
+          reading a ledger whether they have seen row 51 yet. */}
+      <span className="type-caption tabular-nums">
+        {size > 0 && total > size
+          ? `Showing ${first}–${last} of ${total}`
+          : `${total} ${total === 1 ? "row" : "rows"}`}
+      </span>
+
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-1.5 type-caption">
+          <span className="hidden sm:inline">Rows</span>
+          <select
+            value={size}
+            onChange={(event) => onSize(Number(event.target.value))}
+            className="h-8 rounded-md border border-input bg-card px-1.5 text-sm"
+          >
+            {PAGE_SIZES.map((option) => (
+              <option key={option} value={option}>
+                {option === 0 ? "All" : option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {pageCount > 1 ? (
+          <div className="flex items-center gap-1">
+            <PageButton
+              label="Previous page"
+              icon="chevronLeft"
+              disabled={page <= 1}
+              onClick={() => onPage(page - 1)}
+            />
+            <span className="type-caption tabular-nums">
+              {page} / {pageCount}
+            </span>
+            <PageButton
+              label="Next page"
+              icon="chevronRight"
+              disabled={page >= pageCount}
+              onClick={() => onPage(page + 1)}
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PageButton({
+  label,
+  icon,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: IconName;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-card",
+        "transition-colors duration-quick hover:border-border-strong",
+        "disabled:cursor-not-allowed disabled:opacity-40",
+      )}
+    >
+      <Icon name={icon} size="sm" />
+    </button>
   );
 }
 
@@ -353,6 +840,7 @@ function TableView<T>({
   columns,
   rowKey,
   onOpen,
+  actions,
   sort,
   onSort,
 }: {
@@ -360,6 +848,7 @@ function TableView<T>({
   columns: Column<T>[];
   rowKey: (row: T) => string;
   onOpen?: (row: T) => void;
+  actions?: (row: T) => RowAction[];
   sort: { key: string; direction: "asc" | "desc" } | null;
   onSort: (next: { key: string; direction: "asc" | "desc" } | null) => void;
 }) {
@@ -421,6 +910,11 @@ function TableView<T>({
                 </th>
               );
             })}
+            {actions ? (
+              <th scope="col" className="row-density w-10">
+                <span className="sr-only">Actions</span>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -447,6 +941,11 @@ function TableView<T>({
                   {column.cell(row)}
                 </td>
               ))}
+              {actions ? (
+                <td className="row-density text-right align-middle">
+                  <RowActions actions={actions(row)} />
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>
@@ -463,23 +962,42 @@ function RowCard<T>({
   row,
   spec,
   onOpen,
+  actions,
 }: {
   row: T;
   spec: CardSpec<T>;
   onOpen?: (row: T) => void;
+  actions?: (row: T) => RowAction[];
 }) {
   const accent = spec.accent?.(row);
   const facts = spec.facts?.(row) ?? [];
-  const Element = onOpen ? "button" : "div";
 
+  /*
+    A div with a button role rather than a `<button>`: the card carries an
+    actions menu, and a button inside a button is invalid markup that browsers
+    resolve by dropping one of them. Keyboard behaviour is supplied by hand
+    instead of inherited.
+  */
   return (
-    <Element
-      type={onOpen ? "button" : undefined}
+    <div
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
       onClick={onOpen ? () => onOpen(row) : undefined}
+      onKeyDown={
+        onOpen
+          ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen(row);
+              }
+            }
+          : undefined
+      }
       className={cn(
         "relative flex w-full flex-col gap-3 overflow-hidden rounded-lg border bg-card p-4 text-left shadow-raised",
         onOpen &&
-          "transition-colors duration-quick ease-smooth hover:border-border-strong hover:bg-accent/30",
+          "cursor-pointer transition-colors duration-quick ease-smooth hover:border-border-strong hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >
       {/* A 3px spine rather than a tinted card. Twelve saturated cards is a
@@ -501,6 +1019,7 @@ function RowCard<T>({
           ) : null}
         </div>
         {spec.badge?.(row)}
+        {actions ? <RowActions actions={actions(row)} /> : null}
       </div>
 
       {facts.length > 0 ? (
@@ -515,7 +1034,7 @@ function RowCard<T>({
           ))}
         </dl>
       ) : null}
-    </Element>
+    </div>
   );
 }
 
@@ -524,16 +1043,24 @@ function CardsView<T>({
   rowKey,
   spec,
   onOpen,
+  actions,
 }: {
   rows: T[];
   rowKey: (row: T) => string;
   spec: CardSpec<T>;
   onOpen?: (row: T) => void;
+  actions?: (row: T) => RowAction[];
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {rows.map((row) => (
-        <RowCard key={rowKey(row)} row={row} spec={spec} onOpen={onOpen} />
+        <RowCard
+          key={rowKey(row)}
+          row={row}
+          spec={spec}
+          onOpen={onOpen}
+          actions={actions}
+        />
       ))}
     </div>
   );
@@ -560,11 +1087,13 @@ function BoardView<T>({
   rowKey,
   spec,
   onOpen,
+  actions,
 }: {
   rows: T[];
   rowKey: (row: T) => string;
   spec: BoardSpec<T>;
   onOpen?: (row: T) => void;
+  actions?: (row: T) => RowAction[];
 }) {
   const grouped = React.useMemo(() => {
     const map = new Map<string, T[]>();
@@ -609,7 +1138,13 @@ function BoardView<T>({
                 </p>
               ) : (
                 items.map((row) => (
-                  <RowCard key={rowKey(row)} row={row} spec={spec.card} onOpen={onOpen} />
+                  <RowCard
+                    key={rowKey(row)}
+                    row={row}
+                    spec={spec.card}
+                    onOpen={onOpen}
+                    actions={actions}
+                  />
                 ))
               )}
             </div>

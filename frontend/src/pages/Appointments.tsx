@@ -27,6 +27,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
   ChevronLeft,
@@ -51,6 +52,7 @@ import type {
 import { Page as Shell, PageHeader, Section, ScrollX, StatGrid } from "@/components/ui/layout";
 import { EmptyState, TableSkeleton } from "@/components/ui/feedback";
 import { StatTile } from "@/components/ui/data";
+import { Modal, ModalColumns } from "@/components/ui/modal";
 import {
   Alert,
   AlertDescription,
@@ -130,6 +132,39 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
   const [booking, setBooking] = useState<SessionAvailability | null>(null);
+  const [params, setParams] = useSearchParams();
+  /*
+    `?patient=<uuid>`, from "Book an appointment" on the patient list.
+
+    The link cannot book anything by itself -- which session, which slot and
+    what for are still choices -- so it carries the patient and the page says
+    so, rather than dropping somebody into an empty diary with no memory of
+    who they were looking at.
+  */
+  const [bookingFor, setBookingFor] = useState<Patient | null>(null);
+
+  const forPatient = params.get("patient");
+  useEffect(() => {
+    if (!forPatient) {
+      setBookingFor(null);
+      return;
+    }
+    void api
+      .get<Patient>(`/clinical/patients/${forPatient}/`)
+      .then(setBookingFor)
+      .catch(() => setBookingFor(null));
+  }, [forPatient]);
+
+  const clearPatient = useCallback(() => {
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("patient");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setParams]);
 
   useEffect(() => {
     void api
@@ -246,6 +281,22 @@ export default function AppointmentsPage() {
 
       <DateStrip day={day} onChange={setDay} />
 
+      {bookingFor && (
+        <Alert variant="info">
+          <AlertTitle>
+            Booking for {bookingFor.full_name} ({bookingFor.mrn})
+          </AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>
+              Choose a session below; the patient is already filled in.
+            </span>
+            <Button variant="outline" size="sm" onClick={clearPatient}>
+              Book for somebody else
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {problem && (
         <Alert variant="destructive">
           <AlertTitle>That did not work</AlertTitle>
@@ -306,9 +357,11 @@ export default function AppointmentsPage() {
           session={booking}
           day={day}
           facility={facility}
+          preselected={bookingFor}
           onClose={() => setBooking(null)}
           onBooked={() => {
             setBooking(null);
+            clearPatient();
             void load();
           }}
         />
@@ -604,12 +657,15 @@ function BookDialog({
   session,
   day,
   facility,
+  preselected,
   onClose,
   onBooked,
 }: {
   session: SessionAvailability;
   day: string;
   facility: string;
+  /** Carried in from the patient list; `Change` still clears it. */
+  preselected?: Patient | null;
   onClose: () => void;
   onBooked: () => void;
 }) {
@@ -617,7 +673,7 @@ function BookDialog({
   const [slot, setSlot] = useState("");
   const [term, setTerm] = useState("");
   const [matches, setMatches] = useState<Patient[]>([]);
-  const [patient, setPatient] = useState<Patient | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(preselected ?? null);
   const [reason, setReason] = useState("");
   const [followUp, setFollowUp] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -672,28 +728,27 @@ function BookDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Book with ${session.provider_name}`}
-    >
-      <div className="mt-12 w-full max-w-lg space-y-4 rounded-xl border bg-card p-5 shadow-lg">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">
-              Book with {session.provider_name}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {readable(day)} · {session.remaining_capacity} place
-              {session.remaining_capacity === 1 ? "" : "s"} left
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" />
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={`Book with ${session.provider_name}`}
+      description={`${readable(day)} · ${session.remaining_capacity} place${
+        session.remaining_capacity === 1 ? "" : "s"
+      } left`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
           </Button>
-        </div>
-
+          <Button onClick={() => void book()} disabled={!patient || !slot || busy}>
+            <CalendarDays className="mr-2 h-4 w-4" />
+            Book
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         {problem && (
           <Alert variant="destructive">
             <AlertDescription>{problem}</AlertDescription>
@@ -756,6 +811,7 @@ function BookDialog({
           )}
         </div>
 
+        <ModalColumns>
         <div className="space-y-1.5">
           <Label htmlFor="appointment-slot">Time</Label>
           <Select
@@ -777,6 +833,16 @@ function BookDialog({
           </p>
         </div>
 
+        <label className="flex h-fit items-center gap-2 self-start rounded-md border px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            checked={followUp}
+            onChange={(event) => setFollowUp(event.target.checked)}
+          />
+          This is a follow-up
+        </label>
+        </ModalColumns>
+
         <div className="space-y-1.5">
           <Label htmlFor="appointment-reason">Reason</Label>
           <Textarea
@@ -788,25 +854,7 @@ function BookDialog({
           />
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={followUp}
-            onChange={(event) => setFollowUp(event.target.checked)}
-          />
-          This is a follow-up
-        </label>
-
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={() => void book()} disabled={!patient || !slot || busy}>
-            <CalendarDays className="mr-2 h-4 w-4" />
-            Book
-          </Button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

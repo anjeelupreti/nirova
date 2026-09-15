@@ -34,7 +34,6 @@ OVERLAY_BY_DESIGN = {
 #: Converting one means deleting its line here. When this set is empty, delete
 #: it and keep only `OVERLAY_BY_DESIGN`.
 TO_CONVERT = {
-    "pages/Appointments.tsx",
     "pages/Blood.tsx",
     "pages/Claims.tsx",
     "pages/Counter.tsx",
@@ -94,7 +93,7 @@ TABLES_TO_CONVERT = {
     "pages/Claims.tsx", "pages/Counter.tsx", "pages/DataImport.tsx",
     "pages/Diagnostics.tsx", "pages/Emergency.tsx", "pages/Facilities.tsx",
     "pages/FacilityRequests.tsx", "pages/Finance.tsx", "pages/Icu.tsx",
-    "pages/NurseWorkspace.tsx", "pages/Patients.tsx", "pages/Payroll.tsx",
+    "pages/NurseWorkspace.tsx", "pages/Payroll.tsx",
     "pages/People.tsx", "pages/Pharmacy.tsx", "pages/Platform.tsx",
     "pages/Portal.tsx", "pages/Privacy.tsx", "pages/Procurement.tsx",
     "pages/Queue.tsx", "pages/Referrals.tsx", "pages/Reports.tsx",

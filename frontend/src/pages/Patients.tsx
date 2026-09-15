@@ -6,8 +6,8 @@
  * and should not have to decide which box it belongs in before they can look.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CircleAlert,
@@ -32,14 +32,14 @@ import {
   Input,
   Label,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/ui/layout";
+import {
+  DataView,
+  type Column,
+  type FilterSpec,
+  type RowAction,
+} from "@/components/ui/dataview";
 
 interface DuplicateCandidate {
   uuid: string;
@@ -61,32 +61,76 @@ const CATEGORY_LABELS: Record<string, string> = {
   foreign: "Foreign national",
 };
 
-function PatientRow({
-  patient,
-  onOpen,
-}: {
-  patient: Patient;
-  onOpen: (patient: Patient) => void;
-}) {
-  return (
-    <TableRow
-      className="cursor-pointer"
-      onClick={() => onOpen(patient)}
-    >
-      <TableCell className="font-mono text-xs">{patient.mrn}</TableCell>
-      <TableCell className="font-medium">{patient.full_name}</TableCell>
-      <TableCell className="capitalize">{patient.gender}</TableCell>
-      <TableCell>{patient.age_years ?? "—"}</TableCell>
-      <TableCell>{patient.phone || "—"}</TableCell>
-      <TableCell>{patient.district || "—"}</TableCell>
-      <TableCell>
-        <Badge variant="secondary">
-          {CATEGORY_LABELS[patient.category] ?? patient.category}
-        </Badge>
-      </TableCell>
-    </TableRow>
-  );
-}
+const category = (patient: Patient) =>
+  CATEGORY_LABELS[patient.category] ?? patient.category;
+
+/**
+ * The columns, declared once.
+ *
+ * `value` is what the column *means* as data: it is what sorting, the facet
+ * counts and the export all read, and it is why a badge cell can be exported
+ * as the word inside it rather than as `[object Object]`.
+ */
+const COLUMNS: Column<Patient>[] = [
+  {
+    key: "mrn",
+    header: "MRN",
+    value: (p) => p.mrn,
+    cell: (p) => <span className="whitespace-nowrap font-mono text-xs">{p.mrn}</span>,
+  },
+  {
+    key: "name",
+    header: "Name",
+    value: (p) => p.full_name,
+    cell: (p) => <span className="font-medium">{p.full_name}</span>,
+  },
+  {
+    key: "gender",
+    header: "Gender",
+    value: (p) => p.gender,
+    cell: (p) => <span className="capitalize">{p.gender}</span>,
+  },
+  {
+    key: "age",
+    header: "Age",
+    numeric: true,
+    value: (p) => p.age_years,
+    cell: (p) => p.age_years ?? "—",
+  },
+  {
+    key: "phone",
+    header: "Telephone",
+    value: (p) => p.phone,
+    cell: (p) => <span className="whitespace-nowrap">{p.phone || "—"}</span>,
+  },
+  {
+    key: "district",
+    header: "District",
+    secondary: true,
+    value: (p) => p.district,
+    cell: (p) => p.district || "—",
+  },
+  {
+    key: "category",
+    header: "Category",
+    value: (p) => category(p),
+    cell: (p) => <Badge variant="secondary">{category(p)}</Badge>,
+  },
+];
+
+/**
+ * Facets, not a second search box.
+ *
+ * The server search already takes the name, the MRN, the telephone and the
+ * document number in one field; what a clerk cannot do afterwards is say "of
+ * those forty Sharmas, the insurance ones in Kaski". The options are counted
+ * from the rows, so a district nobody in the result lives in is never offered.
+ */
+const FILTERS: FilterSpec<Patient>[] = [
+  { key: "gender", label: "Gender", value: (p) => p.gender },
+  { key: "category", label: "Category", value: (p) => category(p) },
+  { key: "district", label: "District", value: (p) => p.district },
+];
 
 function PatientDetailPanel({ patient }: { patient: PatientDetail }) {
   // Allergies that block prescribing come first and loudly. A severe
@@ -217,6 +261,7 @@ function PatientDetailPanel({ patient }: { patient: PatientDetail }) {
 }
 
 export default function PatientsPage() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   //: Which `?focus=` has already been acted on. See the effect below.
   const handled = useRef<string | null>(null);
@@ -276,6 +321,52 @@ export default function PatientsPage() {
     const handle = setTimeout(() => void runSearch(term), 300);
     return () => clearTimeout(handle);
   }, [term, runSearch]);
+
+  /*
+    What the reader can do to a row without opening it.
+
+    Everything here is a thing somebody at the counter is asked for while the
+    patient is still standing in front of them: the full record, a booking, or
+    the MRN read back over the telephone. Before this the list did exactly one
+    thing -- open the panel -- and the rest was a hunt through other screens.
+  */
+  const actionsFor = useCallback(
+    (patient: Patient): RowAction[] => [
+      {
+        label: "Open the full record",
+        icon: "patient",
+        onSelect: () => navigate(`/patients/${patient.uuid}`),
+      },
+      {
+        label: "Book an appointment",
+        icon: "appointment",
+        onSelect: () => navigate(`/appointments?patient=${patient.uuid}`),
+      },
+      {
+        label: "Copy the MRN",
+        icon: "copy",
+        onSelect: () => void navigator.clipboard?.writeText(patient.mrn),
+      },
+    ],
+    [navigate],
+  );
+
+  const cardSpec = useMemo(
+    () => ({
+      title: (patient: Patient) => patient.full_name,
+      subtitle: (patient: Patient) => patient.mrn,
+      badge: (patient: Patient) => (
+        <Badge variant="secondary">{category(patient)}</Badge>
+      ),
+      facts: (patient: Patient) => [
+        { label: "Age", value: patient.age_years ?? "—" },
+        { label: "Gender", value: patient.gender },
+        { label: "Telephone", value: patient.phone || "—" },
+        { label: "District", value: patient.district || "—" },
+      ],
+    }),
+    [],
+  );
 
   async function openPatient(patient: Patient) {
     const detail = await api.get<PatientDetail>(
@@ -550,44 +641,35 @@ export default function PatientsPage() {
             />
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              {term.trim().length < 2 ? (
+          {term.trim().length < 2 ? (
+            <Card>
+              <CardContent className="pt-6">
                 <p className="text-sm text-muted-foreground">
                   Type at least two characters to search.
                 </p>
-              ) : searching ? (
-                <p className="text-sm text-muted-foreground">Searching…</p>
-              ) : results.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No patients match “{term}”.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>MRN</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Gender</TableHead>
-                      <TableHead>Age</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>District</TableHead>
-                      <TableHead>Category</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results.map((patient) => (
-                      <PatientRow
-                        key={patient.uuid}
-                        patient={patient}
-                        onOpen={(p) => void openPatient(p)}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <DataView
+              rows={results}
+              columns={COLUMNS}
+              rowKey={(patient) => patient.uuid}
+              storageKey="patients"
+              // The page already has a search box, and it is the better one:
+              // it reaches the whole register, not the forty rows on screen.
+              search={{ enabled: false }}
+              filters={FILTERS}
+              actions={actionsFor}
+              card={cardSpec}
+              loading={searching}
+              onOpen={(patient) => void openPatient(patient)}
+              empty={{
+                title: `No patients match “${term}”`,
+                description:
+                  "Try the MRN, the telephone number, or fewer letters of the name.",
+              }}
+            />
+          )}
         </div>
 
         <div className="lg:col-span-2">
