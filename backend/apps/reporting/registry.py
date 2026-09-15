@@ -133,6 +133,7 @@ def load() -> None:
     from apps.pharmacy import services as pharmacy
     from apps.referrals import services as referrals
     from apps.organization import hmis
+    from apps.scheduling import followups
     from apps.terminology import services as terminology
 
     for report in [
@@ -253,6 +254,15 @@ def load() -> None:
             parameters=("days",),
             group="Privacy",
             is_heavy=True,
+        ),
+        Report(
+            code="clinical.followups_lapsed",
+            name="Follow-ups that lapsed",
+            answers="Whose review passed with nothing booked and nobody seen?",
+            permission="report.read",
+            run=followups.lapsed_report,
+            parameters=("since", "facility"),
+            group="Clinical",
         ),
         Report(
             code="hmis.monthly",

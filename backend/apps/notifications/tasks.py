@@ -68,6 +68,16 @@ def remind_patients() -> dict:
         except Exception:  # noqa: BLE001 — one tenant must not stop the rest
             logger.exception("patient reminders failed for %s", organization.slug)
             continue
-        if any(counts.values()):
-            summary[organization.slug] = counts
+        try:
+            with tenant_context(context_for_organization(organization)):
+                # The same sweep, for the loop nobody was closing: tomorrow's
+                # follow-ups, and the ones that lapsed in the last week.
+                from apps.scheduling.followups import recall_due
+
+                recalls = recall_due()
+        except Exception:  # noqa: BLE001 -- one tenant must not stop the rest
+            logger.exception("follow-up recalls failed for %s", organization.slug)
+            recalls = {}
+        if any(counts.values()) or any(recalls.values()):
+            summary[organization.slug] = {**counts, **{f"recall_{k}": v for k, v in recalls.items()}}
     return summary

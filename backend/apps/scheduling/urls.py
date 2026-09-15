@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.scheduling.followups_api import FollowUpView
 from apps.scheduling.views import (
     AppointmentViewSet,
     AvailabilityView,
@@ -15,5 +16,7 @@ router.register("queue", QueueViewSet, basename="queue")
 
 urlpatterns = [
     path("availability/", AvailabilityView.as_view(), name="availability"),
+    path("follow-ups/", FollowUpView.as_view(), name="follow-ups"),
+    path("follow-ups/recall/", FollowUpView.as_view(), name="follow-up-recall"),
     path("", include(router.urls)),
 ]

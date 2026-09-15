@@ -45,6 +45,7 @@ class OutreachKind(models.TextChoices):
     APPOINTMENT = "appointment", "Appointment reminder"
     RESULT_READY = "result_ready", "Result ready"
     BILL_DUE = "bill_due", "Bill outstanding"
+    FOLLOW_UP = "follow_up", "Follow-up due"
 
 
 class OutreachStatus(models.TextChoices):
