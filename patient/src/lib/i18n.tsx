@@ -131,6 +131,39 @@ const STRINGS = {
   "section.sessions": { en: "Where I am signed in", ne: "म कहाँ कहाँ साइन इन छु" },
   "section.profile": { en: "My details", ne: "मेरो विवरण" },
   "section.home": { en: "Home", ne: "गृह" },
+  "section.visits": { en: "My visits", ne: "मेरा भेटघाट" },
+  "section.followups": { en: "Coming back", ne: "पुनः भेट" },
+
+  "visits.none": {
+    en: "No visit is recorded here yet.",
+    ne: "यहाँ कुनै भेटघाट अझै दर्ता भएको छैन।",
+  },
+  "visits.today": { en: "Happening now", ne: "अहिले भइरहेको" },
+  "visits.advice": { en: "What you were told", ne: "तपाईंलाई भनिएको कुरा" },
+  "visits.comeBack": { en: "Come back on {when}", ne: "{when} मा फेरि आउनुहोस्" },
+  "visits.note": {
+    en: "Findings and reports arrive under Test results and as documents, once the clinician has released them.",
+    ne: "नतिजा र रिपोर्ट चिकित्सकले जारी गरेपछि “जाँचका नतिजा” अन्तर्गत देखिन्छ।",
+  },
+  "followups.none": {
+    en: "Nothing is outstanding. You have no follow-up visit waiting.",
+    ne: "केही बाँकी छैन। तपाईंको कुनै पुनः भेट बाँकी छैन।",
+  },
+  "followups.due": { en: "Due", ne: "बाँकी" },
+  "followups.overdue": { en: "Overdue", ne: "समय नाघेको" },
+  "followups.booked": { en: "Already booked", ne: "बुक भइसकेको" },
+  "followups.by": { en: "Asked for by {who}", ne: "{who} ले भन्नुभएको" },
+  "followups.lateBy": {
+    en: "{n} days past the date you were given",
+    ne: "तपाईंलाई दिइएको मितिभन्दा {n} दिन नाघ्यो",
+  },
+  "followups.book": { en: "Book this visit", ne: "यो भेट बुक गर्नुहोस्" },
+  "home.followUpOne": { en: "A follow-up visit is due", ne: "एउटा पुनः भेट बाँकी छ" },
+  "home.followUpMany": { en: "{n} follow-up visits are due", ne: "{n} पुनः भेट बाँकी छन्" },
+  "home.followUpDetail": {
+    en: "Book a time, or ring the hospital.",
+    ne: "समय बुक गर्नुहोस्, वा अस्पताललाई फोन गर्नुहोस्।",
+  },
 
   "bills.outstanding": { en: "Outstanding", ne: "तिर्न बाँकी" },
   "bills.toPay": { en: "{amount} to pay", ne: "तिर्न बाँकी {amount}" },

@@ -70,6 +70,8 @@ import type {
   ReferralRow,
   ResultRow,
   SessionRow,
+  VisitRow,
+  FollowUps,
   SignInResult,
 } from "@/types";
 import {
@@ -91,6 +93,8 @@ import {
 type Screen =
   | "home"
   | "results"
+  | "visits"
+  | "followups"
   | "appointments"
   | "invoices"
   | "prescriptions"
@@ -186,6 +190,7 @@ export default function App() {
             screen={screen}
             record={record}
             onBack={() => setScreen("home")}
+            onBook={() => setScreen("appointments")}
           />
         )}
       </div>
@@ -538,6 +543,8 @@ const TILES: {
 }[] = [
   { screen: "results", label: "section.results", icon: FlaskConical, needs: "results" },
   { screen: "appointments", label: "section.appointments", icon: CalendarDays },
+  { screen: "visits", label: "section.visits", icon: House },
+  { screen: "followups", label: "section.followups", icon: CalendarDays },
   { screen: "prescriptions", label: "section.prescriptions", icon: Pill, needs: "results" },
   { screen: "invoices", label: "section.invoices", icon: Receipt, needs: "invoices" },
   { screen: "referrals", label: "section.referrals", icon: Send },
@@ -670,6 +677,19 @@ function Home({
       title: tr("home.toPay", { amount: rupees(data.outstanding) }),
       detail: tr("home.payHow"),
       tone: "warm",
+    });
+  }
+  if (data.follow_ups_due > 0) {
+    waiting.push({
+      key: "followups",
+      screen: "followups",
+      icon: CalendarDays,
+      title:
+        data.follow_ups_due === 1
+          ? tr("home.followUpOne")
+          : tr("home.followUpMany", { n: data.follow_ups_due }),
+      detail: tr("home.followUpDetail"),
+      tone: data.follow_up_overdue ? "warm" : "calm",
     });
   }
   if (data.unread_messages > 0) {
@@ -980,14 +1000,152 @@ const FLAG_WORDS: Record<string, string> = {
   abnormal: "Outside range",
 };
 
+/* -------------------------------------------------------------------------- */
+/* Visits and follow-ups                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where I have been.
+ *
+ * **The portal could show a patient every test they had had and never once
+ * tell them when they were last in the building.** Results, bills and
+ * medicines are all consequences of a visit, and the visit itself -- the date,
+ * the department, the person they saw, the thing they came in saying -- was
+ * the one thing the application did not hold.
+ *
+ * It carries no note and no diagnosis, deliberately, and says so at the foot
+ * rather than leaving the absence to be read as a gap: findings reach a
+ * patient through results and documents, which a clinician releases.
+ */
+function Visits({ rows }: { rows: VisitRow[] }) {
+  if (rows.length === 0) {
+    return <p className="py-10 text-center text-muted-foreground">{tr("visits.none")}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {rows.map((visit) => (
+        <Card key={visit.reference}>
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-base">{visit.kind}</CardTitle>
+                <CardDescription>
+                  {date(visit.when)}
+                  {visit.department ? ` · ${visit.department}` : ""}
+                  {visit.facility ? ` · ${visit.facility}` : ""}
+                </CardDescription>
+              </div>
+              {/* "Happening now" only if it really is today. An encounter a
+                  ward forgot to close still reads as open in the record, and
+                  a visit from last Tuesday labelled as under way on somebody's
+                  phone is the kind of thing they ring the hospital about. */}
+              {visit.in_progress && new Date(visit.when).toDateString() === new Date().toDateString() ? (
+                <Badge variant="success">{tr("visits.today")}</Badge>
+              ) : visit.outcome ? (
+                <Badge variant="secondary">{visit.outcome}</Badge>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {visit.reason && <p>{visit.reason}</p>}
+            {visit.clinician && (
+              <p className="text-muted-foreground">{visit.clinician}</p>
+            )}
+            {visit.advice && (
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="mb-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {tr("visits.advice")}
+                </p>
+                <p>{visit.advice}</p>
+              </div>
+            )}
+            {visit.follow_up_on && (
+              <p className="flex items-center gap-1.5 text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {tr("visits.comeBack", { when: date(visit.follow_up_on) })}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+      <p className="px-1 pt-1 text-xs text-muted-foreground">{tr("visits.note")}</p>
+    </div>
+  );
+}
+
+/**
+ * When I am meant to come back.
+ *
+ * The same derivation the front desk's register runs, narrowed to one person
+ * -- so a patient reading their phone and a clerk reading the register cannot
+ * be told different things about the same date. Overdue first, because that
+ * is the row this screen exists for.
+ */
+function FollowUps({ data, onBook }: { data: FollowUps; onBook: () => void }) {
+  if (data.results.length === 0) {
+    return <p className="py-10 text-center text-muted-foreground">{tr("followups.none")}</p>;
+  }
+
+  const word = {
+    due: tr("followups.due"),
+    overdue: tr("followups.overdue"),
+    booked: tr("followups.booked"),
+  };
+
+  return (
+    <div className="space-y-3">
+      {data.results.map((row) => (
+        <Card
+          key={`${row.source}-${row.due_on}`}
+          className={cn(row.status === "overdue" && "border-warning")}
+        >
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-base">{date(row.due_on)}</CardTitle>
+                {row.clinician && (
+                  <CardDescription>
+                    {tr("followups.by", { who: row.clinician })}
+                  </CardDescription>
+                )}
+              </div>
+              <Badge variant={row.status === "overdue" ? "warning" : row.status === "booked" ? "success" : "secondary"}>
+                {word[row.status]}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {row.status === "overdue" && row.days_overdue > 0 && (
+              <p className="text-muted-foreground">
+                {tr("followups.lateBy", { n: row.days_overdue })}
+              </p>
+            )}
+            {row.advice && <p>{row.advice}</p>}
+            {row.status !== "booked" && (
+              <Button size="sm" onClick={onBook}>
+                <CalendarDays className="mr-1.5 h-4 w-4" />
+                {tr("followups.book")}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function Section({
   screen,
   record,
   onBack,
+  onBook,
 }: {
   screen: Screen;
   record: string;
   onBack: () => void;
+  /** A follow-up is only useful if the next tap books it. */
+  onBook: () => void;
 }) {
   const [data, setData] = useState<unknown>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -996,9 +1154,11 @@ function Section({
   const load = useCallback(async () => {
     setProblem(null);
     try {
+      // The screen is named for the tab; the section is named for the API.
+      const section = screen === "followups" ? "follow-ups" : screen;
       setData(
         await api.get(
-          `/me/?section=${screen}${record ? `&record=${record}` : ""}`,
+          `/me/?section=${section}${record ? `&record=${record}` : ""}`,
         ),
       );
     } catch (err) {
@@ -1056,6 +1216,12 @@ function Section({
       )}
       {data !== null && screen === "appointments" && (
         <Appointments rows={data as Appointment[]} record={record} onChanged={load} />
+      )}
+      {data !== null && screen === "visits" && (
+        <Visits rows={(data as { visits: VisitRow[] }).visits} />
+      )}
+      {data !== null && screen === "followups" && (
+        <FollowUps data={data as FollowUps} onBook={onBook} />
       )}
       {data !== null && screen === "invoices" && (
         <Bills data={data as Invoices} record={record} onPrint={handlePrint} />

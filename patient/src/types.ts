@@ -36,6 +36,12 @@ export interface HomeScreen {
   results_being_discussed: number;
   outstanding: string;
   unread_messages: number;
+  /** Follow-ups the patient still owes a visit for. */
+  follow_ups_due: number;
+  follow_up_overdue: boolean;
+  next_follow_up: FollowUpRow | null;
+  /** How many visits are on record, so the tile can say. */
+  visits: number;
   can_see_results: boolean;
   can_see_invoices: boolean;
   can_book_appointments: boolean;
@@ -141,6 +147,37 @@ export interface Prescription {
   prescriber: string;
   status: string;
   lines: PrescriptionLine[];
+}
+
+/** One visit, as the person who made it experienced it. */
+export interface VisitRow {
+  reference: string;
+  when: string;
+  ended: string | null;
+  kind: string;
+  facility: string;
+  department: string;
+  clinician: string;
+  reason: string;
+  outcome: string;
+  in_progress: boolean;
+  follow_up_on: string | null;
+  advice: string;
+}
+
+export interface FollowUpRow {
+  due_on: string;
+  status: "due" | "overdue" | "booked";
+  days_overdue: number;
+  source: string;
+  clinician: string;
+  advice: string;
+}
+
+export interface FollowUps {
+  as_of: string;
+  counts: Record<string, number>;
+  results: FollowUpRow[];
 }
 
 export interface ReferralRow {

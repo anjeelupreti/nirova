@@ -684,6 +684,104 @@ def appointments_for(patient, upcoming_only: bool = False) -> list:
     ]
 
 
+#: How the record's words for a disposition read to the person it happened to.
+DISPOSITION_WORDS = {
+    "discharged": "Sent home",
+    "admitted": "Admitted to a ward",
+    "referred": "Referred to another hospital",
+    "transferred": "Transferred",
+    "observation": "Kept for observation",
+    "absconded": "Left before the visit finished",
+    "died": "",
+}
+
+VISIT_WORDS = {
+    "outpatient": "Outpatient visit",
+    "emergency": "Emergency visit",
+    "inpatient": "Hospital stay",
+    "day_care": "Day-care visit",
+    "telemedicine": "Telephone or video consultation",
+    "home_visit": "Home visit",
+    "procedure": "Procedure",
+    "follow_up": "Follow-up visit",
+    "health_camp": "Health camp",
+}
+
+
+def visits_for(patient, limit: int = 40) -> list:
+    """Every visit, as the person who made it experienced it.
+
+    **What is deliberately not here is the clinical note and the diagnosis.**
+    Results already have a hold-and-release model (`result_visibility`) for
+    exactly one reason: a finding a clinician has not yet explained should not
+    reach a phone first. A diagnosis is that argument at its strongest, so
+    this returns what the patient was there for and what they were told to do
+    -- the date, the place, the clinician, the complaint in their own words,
+    where they went afterwards, and the follow-up advice they were given on
+    paper at the door. The rest arrives through documents, which are released
+    deliberately.
+
+    A visit still in progress says so rather than being hidden: somebody
+    sitting in the waiting room should see today's visit on their phone.
+    """
+    from apps.encounters.models import Encounter, EncounterStatus, OPEN_ENCOUNTER_STATUSES
+
+    rows = (
+        Encounter.objects.filter(patient=patient)
+        .exclude(status__in=[EncounterStatus.CANCELLED, EncounterStatus.PLANNED])
+        .select_related("facility", "department")
+        .order_by("-started_at")[:limit]
+    )
+    return [
+        {
+            "reference": row.reference,
+            "when": row.started_at,
+            "ended": row.ended_at,
+            "kind": VISIT_WORDS.get(row.encounter_type, "Visit"),
+            "facility": row.facility.name if row.facility_id else "",
+            "department": row.department.name if row.department_id else "",
+            "clinician": row.provider_name,
+            "reason": row.chief_complaint,
+            "outcome": DISPOSITION_WORDS.get(row.disposition, ""),
+            "in_progress": row.status in OPEN_ENCOUNTER_STATUSES,
+            "follow_up_on": row.follow_up_date,
+            "advice": row.follow_up_instructions,
+        }
+        for row in rows
+    ]
+
+
+def follow_ups_for(patient) -> dict:
+    """What the patient still owes the hospital, or it owes them.
+
+    Derived by the same function the front desk's register uses, narrowed to
+    one person -- see `apps.scheduling.followups.register`. The window is
+    wider than the desk's because a patient looking at their own phone wants
+    last year's discharge review as well as next week's.
+    """
+    from apps.scheduling.followups import register
+
+    found = register(ahead=365, behind=365, patient=patient)
+    rows = [row for row in found["results"] if row["status"] in {"due", "overdue", "booked"}]
+    return {
+        "as_of": found["as_of"],
+        "counts": found["counts"],
+        "results": [
+            {
+                "due_on": row["due_on"],
+                "status": row["status"],
+                "days_overdue": row["days_overdue"],
+                "source": row["source"],
+                "clinician": row["clinician"],
+                # The advice the clinician wrote for the patient, which the
+                # patient was given on paper anyway.
+                "advice": row["instructions"],
+            }
+            for row in rows
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Booking from the portal
 # ---------------------------------------------------------------------------
@@ -1017,6 +1115,8 @@ def home(account: PortalAccount, patient=None) -> dict:
                     "prn_for": line.prn_indication if line.is_prn else "",
                 })
     hospital = _hospital_contact()
+    follow_ups = follow_ups_for(patient)
+    visits = visits_for(patient, limit=200)
 
     return {
         "patient": patient.full_name,
@@ -1040,6 +1140,20 @@ def home(account: PortalAccount, patient=None) -> dict:
         "results_ready": len([row for row in results if row["visible"]]),
         "results_being_discussed": len(held),
         "outstanding": money["outstanding"],
+        # A follow-up nobody chased was the loop this system left open. The
+        # patient is the one participant who always knows whether they went.
+        "follow_ups_due": len(
+            [
+                row
+                for row in follow_ups["results"]
+                if row["status"] in {"due", "overdue"}
+            ]
+        ),
+        "follow_up_overdue": any(
+            row["status"] == "overdue" for row in follow_ups["results"]
+        ),
+        "next_follow_up": follow_ups["results"][0] if follow_ups["results"] else None,
+        "visits": len(visits),
         "unread_messages": PortalMessage.objects.filter(
             patient=patient,
             direction=MessageDirection.TO_PATIENT,

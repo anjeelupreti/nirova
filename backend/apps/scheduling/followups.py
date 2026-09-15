@@ -31,12 +31,14 @@ BEHIND_DAYS = 90
 GRACE_DAYS = 3
 
 
-def _rows(facility, start, end):
+def _rows(facility, start, end, patient=None):
     """Every follow-up somebody wrote, from both places they are written."""
     from apps.encounters.models import Encounter
     from apps.inpatient.models import Admission
 
     at = {"facility": facility} if facility is not None else {}
+    if patient is not None:
+        at["patient"] = patient
 
     encounters = (
         Encounter.objects.filter(
@@ -79,14 +81,27 @@ def _rows(facility, start, end):
         }
 
 
-def register(facility=None, ahead: int = AHEAD_DAYS, behind: int = BEHIND_DAYS, today=None) -> dict:
-    """Who is due back, who did not come, and who already has."""
+def register(
+    facility=None,
+    ahead: int = AHEAD_DAYS,
+    behind: int = BEHIND_DAYS,
+    today=None,
+    patient=None,
+) -> dict:
+    """Who is due back, who did not come, and who already has.
+
+    `patient` narrows the same derivation to one person, which is what the
+    portal shows them about themselves. It is the same function deliberately:
+    a patient told on their phone that nothing is outstanding, while the front
+    desk's register says they are three weeks overdue, is the disagreement
+    this whole feature exists to prevent.
+    """
     from apps.encounters.models import Encounter
     from apps.scheduling.models import OCCUPIES_SLOT, Appointment
 
     today = today or timezone.localdate()
     start, end = today - timedelta(days=behind), today + timedelta(days=ahead)
-    rows = list(_rows(facility, start, end))
+    rows = list(_rows(facility, start, end, patient=patient))
     patient_ids = {row["patient_id"] for row in rows}
 
     # Two bulk reads rather than two per row: a busy month is a few hundred

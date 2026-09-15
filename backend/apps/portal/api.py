@@ -54,6 +54,7 @@ from apps.portal.services import (
     adoption,
     appointments_for,
     book_online,
+    follow_ups_for,
     booking_options,
     cancel_online,
     authenticate,
@@ -73,6 +74,7 @@ from apps.portal.services import (
     register,
     reply_to_message,
     request_patient_correction,
+    visits_for,
     results_for,
     revoke_all_sessions,
     revoke_proxy,
@@ -374,6 +376,14 @@ class MeView(APIView):
             note_access(account, patient, "appointments", ip=ip)
             return Response(appointments_for(patient))
 
+        if section == "visits":
+            note_access(account, patient, "visits", ip=ip)
+            return Response({"visits": visits_for(patient)})
+
+        if section == "follow-ups":
+            note_access(account, patient, "follow-ups", ip=ip)
+            return Response(follow_ups_for(patient))
+
         if section == "invoices":
             if not row["can_see_invoices"]:
                 raise PortalError(
@@ -460,9 +470,9 @@ class MeView(APIView):
         return Response(
             {"detail": f"Unknown section '{section}'.",
              "available": [
-                 "home", "results", "appointments", "invoices",
-                 "prescriptions", "referrals", "messages", "sessions",
-                 "profile", "document", "access",
+                 "home", "results", "appointments", "visits", "follow-ups",
+                 "invoices", "prescriptions", "referrals", "messages",
+                 "sessions", "profile", "document", "access",
              ]},
             status=status.HTTP_400_BAD_REQUEST,
         )
